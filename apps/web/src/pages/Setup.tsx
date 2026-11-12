@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Button, Field, Input, Toggle } from '@office-imp/ui';
-import { api, errMsg } from '../lib/api';
+import { api, ApiError, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useSession } from '../lib/session';
 import { AuthShell, ErrorNote } from './Shell';
@@ -51,9 +51,16 @@ export function Setup() {
     setError('');
     try {
       await api.post('/api/setup', { token: token.trim(), owners: two ? [a, b] : [a] });
-      await refresh();
-      nav('/', { replace: true });
+      useSession.setState({ needsSetup: false });
+      const me = await refresh();
+      nav(me ? '/' : '/login', { replace: true });
     } catch (err) {
+      // as contas já existem (por exemplo, um segundo clique): segue para o login
+      if (err instanceof ApiError && err.code === 'setup_done') {
+        useSession.setState({ needsSetup: false });
+        nav('/login', { replace: true });
+        return;
+      }
       setError(errMsg(err));
     } finally {
       setBusy(false);
