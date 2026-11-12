@@ -31,7 +31,13 @@ export default defineConfig({
     permissions: ['camera', 'microphone'],
     launchOptions: {
       executablePath: process.env.CHROME_PATH || undefined,
-      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+      args: [
+        '--use-fake-device-for-media-stream',
+        '--use-fake-ui-for-media-stream',
+        '--autoplay-policy=no-user-gesture-required',
+        // com E2E_FAKE_AUDIO, o microfone falso toca um arquivo de fala (para conferir a transcrição)
+        ...(process.env.E2E_FAKE_AUDIO ? [`--use-file-for-fake-audio-capture=${process.env.E2E_FAKE_AUDIO}`] : []),
+      ],
     },
   },
   webServer: {
@@ -53,6 +59,9 @@ export default defineConfig({
       LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY ?? 'devkey',
       LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET ?? 'secret',
       LOG_LEVEL: 'warn',
+      // notas de reunião com Egress e Whisper reais (CI)
+      ...(process.env.EGRESS_OUT_DIR ? { EGRESS_OUT_DIR: process.env.EGRESS_OUT_DIR } : {}),
+      ...(process.env.WHISPER_URL ? { WHISPER_URL: process.env.WHISPER_URL, WHISPER_LANGUAGE: process.env.WHISPER_LANGUAGE ?? 'pt' } : {}),
     },
   },
 });

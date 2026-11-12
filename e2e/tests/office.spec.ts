@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { execSync } from 'node:child_process';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import { game, myId, online, peerIds, send, totp } from './helpers';
+import { game, myId, online, peerIds, send, smtpSink, totp } from './helpers';
 
 const LIVEKIT = process.env.E2E_LIVEKIT === '1';
+/** Com o LiveKit Egress no ar: grava de verdade o áudio da reunião. */
+const EGRESS = LIVEKIT && process.env.E2E_EGRESS === '1';
+/** Com o Whisper no ar e um arquivo de fala no microfone falso: confere a transcrição. */
+const WHISPER = EGRESS && process.env.E2E_WHISPER === '1';
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 
 test.describe.configure({ mode: 'serial' });
@@ -217,6 +222,67 @@ test('sala privada: quem está fora não participa; quem entra, sim', async () =
   }
 });
 
+test('notas de reunião: grava, transcreve, envia por e-mail e guarda no painel do ADM', async () => {
+  // um servidor SMTP de mentira recebe o e-mail das notas
+  const smtp = await smtpSink();
+  try {
+    await api(owner, 'put', '/api/admin/settings/smtp', { host: '127.0.0.1', port: smtp.port, secure: false, user: '', pass: '', from: 'Office Impera <notas@office-imp.test>' });
+    await api(owner, 'patch', `/api/offices/${officeId}`, { settings: { notesRecipients: ['socios@office-imp.test'] } });
+
+    // os dois estão na sala de reunião (teste anterior); com LiveKit, o microfone do Dono está aberto
+    await owner.getByTestId('notes-toggle').click();
+    await expect(owner.getByTestId('rec-indicator')).toBeVisible();
+    await expect(emp.getByTestId('rec-indicator')).toBeVisible(); // todos na sala veem o aviso de gravação
+    const [meeting] = await api(owner, 'get', `/api/offices/${officeId}/meetings`);
+    expect(meeting.status).toBe('recording');
+
+    if (EGRESS) {
+      // a funcionária também abre o microfone: são duas pessoas falando ao mesmo tempo
+      await emp.getByTestId('btn-mic').click();
+      await expect.poll(() => game(emp, 'av.mic'), { timeout: 30_000 }).toBe(true);
+      // o servidor acha as faixas de áudio e manda o Egress gravar (uma faixa por pessoa, sem vídeo)
+      await expect.poll(async () => (await api(owner, 'get', `/api/meetings/${meeting.id}`)).tracks.length, { timeout: 60_000, intervals: [2000] }).toBe(2);
+      await owner.waitForTimeout(WHISPER ? 26_000 : 10_000);
+      try {
+        console.log(`[notas] uso do Egress com 2 faixas: ${execSync('docker stats --no-stream --format "{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}"').toString().split('\n').filter((l) => /egress|livekit|whisper/.test(l)).join(' | ')}`);
+      } catch {}
+    } else await owner.waitForTimeout(1500);
+    await owner.getByTestId('notes-toggle').click();
+    await expect(emp.getByTestId('rec-indicator')).toBeHidden();
+
+    // ao final: a nota fica salva no painel do ADM e segue por e-mail
+    await expect.poll(async () => (await api(owner, 'get', `/api/meetings/${meeting.id}`)).meeting.status, { timeout: 170_000, intervals: [3000] }).toBe('done');
+    const detail = await api(owner, 'get', `/api/meetings/${meeting.id}`);
+    if (EGRESS) console.log(`[notas] ${JSON.stringify({ erro: detail.meeting.error, faixas: detail.tracks, email: detail.note?.emailError })}\n${detail.note?.transcript}`);
+    expect(detail.note.transcript).toContain('## Transcrição');
+    expect(detail.note.transcript).toContain('Marcelo');
+    expect(detail.note.emailError).toBeNull();
+    expect(detail.note.sentTo).toEqual(['socios@office-imp.test']);
+    expect(smtp.mails).toHaveLength(1);
+    expect(smtp.mails[0]).toMatch(/^To: socios@office-imp\.test/m);
+    expect(smtp.mails[0]).toMatch(/filename="?notas-[a-z0-9-]+\.md/);
+
+    if (EGRESS) {
+      expect(detail.tracks.map((t: any) => t.subjectName).sort()).toEqual(['Ana Lima', 'Marcelo']);
+      for (const t of detail.tracks) {
+        expect(t.available, `áudio de ${t.subjectName}`).toBe(true);
+        const audio = await owner.request.get(`/api/meetings/${meeting.id}/audio/${t.id}`);
+        expect(audio.ok()).toBeTruthy();
+        const bytes = await audio.body();
+        expect(bytes.subarray(0, 4).toString('latin1')).toBe('OggS');
+        expect(bytes.length).toBeGreaterThan(4000);
+      }
+      await emp.getByTestId('btn-mic').click();
+      await expect.poll(() => game(emp, 'av.mic'), { timeout: 30_000 }).toBe(false);
+    }
+    // o microfone falso toca um discurso em inglês; o Whisper precisa reconhecer a fala
+    if (WHISPER) expect(detail.note.transcript).toMatch(/country|americans|ask (not|what)/i);
+  } finally {
+    await api(owner, 'put', '/api/admin/settings/smtp', null).catch(() => {});
+    await smtp.close();
+  }
+});
+
 test('status: menu, atalhos e Não incomodar bloqueando a conexão', async () => {
   await emp.getByTestId('status-button').click();
   await expect(emp.getByTestId('status-menu')).toContainText('Ninguém poderá falar com você. Use esta opção quando estiver em outra ligação.');
@@ -305,7 +371,10 @@ test('revogar o link desconecta o convidado na hora', async () => {
 
 test('expansão: aprovar cria uma ala nova sem mexer no que existe', async () => {
   const before = await api(owner, 'get', `/api/offices/${officeId}/admin`);
-  const mapBefore = await game<{ width: number; floor: number[] }>(emp, '({ width: g.map.width, floor: g.map.layers.floor })');
+  const mapBefore = await game<{ width: number; floor: number[]; walls: number[]; objects: { id: string; type: string; x: number; y: number }[]; areas: string[] }>(
+    emp,
+    '({ width: g.map.width, floor: g.map.layers.floor, walls: g.map.layers.walls, objects: g.map.objects.map((o) => ({ id: o.id, type: o.type, x: o.x, y: o.y })), areas: g.map.areas.map((a) => JSON.stringify(a)) })',
+  );
   await owner.goto('/admin/escritorios');
   await owner.getByTestId('exp-extra').fill('12');
   await owner.getByTestId('exp-preview').click();
@@ -315,11 +384,33 @@ test('expansão: aprovar cria uma ala nova sem mexer no que existe', async () =>
   const after = await api(owner, 'get', `/api/offices/${officeId}/admin`);
   expect(after.expansion.capacity).toBeGreaterThanOrEqual(before.expansion.capacity + 12);
 
-  // quem está online recebe o mapa novo, e a parte antiga continua idêntica
-  // (só a parede leste, por onde passa o corredor da nova ala, muda)
+  // Quem está online recebe o mapa novo, e tudo o que existia continua igual: piso dos cômodos,
+  // paredes, móveis e áreas. Só muda o que era vazio e a parede leste, por onde o corredor continua.
   await expect.poll(() => game<number>(emp, 'g.map.width')).toBeGreaterThan(mapBefore.width);
-  const same = await game<boolean>(emp, `(() => { const old = ${JSON.stringify(mapBefore.floor)}; const w0 = ${mapBefore.width}; const m = g.map; for (let i = 0; i < old.length; i++) { const x = i % w0; const y = (i / w0) | 0; if (x < w0 - 1 && m.layers.floor[y * m.width + x] !== old[i]) return false; } return true; })()`);
-  expect(same).toBe(true);
+  const same = await game<string>(
+    emp,
+    `(() => {
+      const old = ${JSON.stringify(mapBefore)};
+      const m = g.map;
+      const w0 = old.width;
+      for (let i = 0; i < old.floor.length; i++) {
+        const x = i % w0;
+        const y = (i / w0) | 0;
+        if (x >= w0 - 1) continue;
+        const j = y * m.width + x;
+        if (old.floor[i] !== 0 && old.walls[i] === 0 && (m.layers.floor[j] !== old.floor[i] || m.layers.walls[j] !== 0)) return 'piso mudou em ' + x + ',' + y;
+        if (old.walls[i] !== 0 && m.layers.walls[j] === 0) return 'parede sumiu em ' + x + ',' + y;
+      }
+      for (const o of old.objects) {
+        const n = m.objects.find((n) => n.id === o.id);
+        if (!n || n.x !== o.x || n.y !== o.y || n.type !== o.type) return 'objeto mudou: ' + o.id;
+      }
+      const areas = new Set(m.areas.map((a) => JSON.stringify(a)));
+      for (const a of old.areas) if (!areas.has(a)) return 'área mudou';
+      return 'ok';
+    })()`,
+  );
+  expect(same).toBe('ok');
 });
 
 test('painel do ADM mostra horas, status e calls de todos, inclusive do Dono', async () => {

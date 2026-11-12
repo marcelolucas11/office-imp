@@ -84,6 +84,12 @@ services:
         insecure: true
         redis:
           address: redis:6379
+        # Só gravamos áudio (uma faixa por pessoa), que quase não usa CPU. Com o custo padrão
+        # (2 CPUs por faixa) o Egress recusaria gravar mais de uma pessoa ao mesmo tempo.
+        cpu_cost:
+          max_cpu_utilization: 0.9
+          track_composite_cpu_cost: 0.1
+          track_cpu_cost: 0.1
         logging:
           level: info
     volumes:
@@ -93,7 +99,7 @@ services:
       livekit: { condition: service_started }
     deploy:
       resources:
-        limits: { cpus: "${EGRESS_CPUS:-1.5}", memory: 1G }
+        limits: { cpus: "${EGRESS_CPUS:-1.5}", memory: "${EGRESS_MEMORY:-1536M}" }
 
   # Transcrição local (whisper.cpp). O modelo é baixado na primeira execução.
   whisper:

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import net from 'node:net';
 import { createHmac } from 'node:crypto';
 import { expect, type Page } from '@playwright/test';
 
@@ -35,3 +36,43 @@ export function send(page: Page, type: string, data?: unknown) {
 
 export const peerIds = (page: Page) => game<string[]>(page, 'g.av.peers.map((p) => p.id)');
 export const myId = (page: Page) => game<string>(page, 'g.meId');
+
+/** Servidor SMTP mínimo, só para os testes: aceita tudo e guarda as mensagens recebidas. */
+export async function smtpSink(): Promise<{ port: number; mails: string[]; close: () => Promise<void> }> {
+  const mails: string[] = [];
+  const server = net.createServer((sock) => {
+    let inData = false;
+    let buf = '';
+    sock.on('error', () => {});
+    sock.write('220 office-imp-e2e ESMTP\r\n');
+    sock.on('data', (chunk) => {
+      buf += chunk.toString('utf8');
+      for (;;) {
+        if (inData) {
+          const end = buf.indexOf('\r\n.\r\n');
+          if (end < 0) return;
+          mails.push(buf.slice(0, end));
+          buf = buf.slice(end + 5);
+          inData = false;
+          sock.write('250 OK\r\n');
+          continue;
+        }
+        const nl = buf.indexOf('\r\n');
+        if (nl < 0) return;
+        const cmd = buf.slice(0, nl).slice(0, 4).toUpperCase();
+        buf = buf.slice(nl + 2);
+        if (cmd === 'EHLO') sock.write('250-office-imp-e2e\r\n250 SIZE 10485760\r\n');
+        else if (cmd === 'DATA') {
+          inData = true;
+          sock.write('354 End data with <CR><LF>.<CR><LF>\r\n');
+        } else if (cmd === 'QUIT') {
+          sock.write('221 Bye\r\n');
+          sock.end();
+        } else sock.write('250 OK\r\n');
+      }
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as net.AddressInfo).port;
+  return { port, mails, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
+}

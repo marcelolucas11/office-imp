@@ -43,7 +43,7 @@ jobs:
   e2e:
     name: Ponta a ponta (3 pessoas, áudio e vídeo reais)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -53,11 +53,26 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @office-imp/server build && pnpm --filter @office-imp/web build
-      - name: LiveKit (servidor de áudio e vídeo)
+      - name: LiveKit, Egress e Whisper (áudio, vídeo, gravação e transcrição de verdade)
         run: |
-          docker compose -f infra/docker-compose.dev.yml up -d redis livekit
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          DATA="$RUNNER_TEMP/oi-data"
+          mkdir -p "$DATA/meetings" && chmod -R 777 "$DATA"
+          # fala de exemplo do repositório do whisper.cpp, tocada pelo microfone falso do navegador
+          curl -fsSL -o "$RUNNER_TEMP/jfk.wav" https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.7.4/samples/jfk.wav
+          ffmpeg -loglevel error -y -i "$RUNNER_TEMP/jfk.wav" -ar 48000 -ac 1 -c:a pcm_s16le "$RUNNER_TEMP/fala.wav"
+          # o LiveKit anuncia o IP da máquina (como o IP público na VPS), alcançável pelo navegador e pelo Egress
+          NODE_IP="$(hostname -I | awk '{print $1}')"
+          export NODE_IP MEETINGS_DIR="$DATA/meetings"
+          docker compose -f infra/docker-compose.dev.yml --profile notes up -d --build redis livekit egress whisper
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:7880 >/dev/null 2>&1 && break; sleep 2; done
-          docker compose -f infra/docker-compose.dev.yml ps
+          for i in $(seq 1 100); do curl -fsS -o /dev/null http://127.0.0.1:8080/ 2>/dev/null && break; sleep 3; done
+          curl -fsS -o /dev/null http://127.0.0.1:8080/
+          docker compose -f infra/docker-compose.dev.yml --profile notes ps
+          {
+            echo "E2E_DATA_DIR=$DATA"
+            echo "E2E_FAKE_AUDIO=$RUNNER_TEMP/fala.wav"
+          } >> "$GITHUB_ENV"
       - name: Navegador
         run: pnpm --filter @office-imp/e2e exec playwright install --with-deps chromium
       - name: Testes
@@ -65,10 +80,19 @@ jobs:
         env:
           CI: "1"
           E2E_LIVEKIT: "1"
+          E2E_EGRESS: "1"
+          E2E_WHISPER: "1"
           LIVEKIT_URL: ws://127.0.0.1:7880
-      - name: Logs do LiveKit (se falhar)
+          EGRESS_OUT_DIR: /out
+          WHISPER_URL: http://127.0.0.1:8080
+          WHISPER_LANGUAGE: en
+      - name: Logs do LiveKit, do Egress e do Whisper (se falhar)
         if: failure()
-        run: docker compose -f infra/docker-compose.dev.yml logs --tail 200 livekit
+        run: |
+          docker compose -f infra/docker-compose.dev.yml --profile notes logs --tail 150 livekit
+          docker compose -f infra/docker-compose.dev.yml --profile notes logs --tail 250 egress
+          docker compose -f infra/docker-compose.dev.yml --profile notes logs --tail 80 whisper
+          ls -laR "$RUNNER_TEMP/oi-data/meetings" || true
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
