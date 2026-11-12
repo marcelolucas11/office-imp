@@ -1,0 +1,16 @@
+/* Tema Impera: preto/grafite com dourado. Tokens no formato do Tailwind v4. */
+@theme {
+  --color-gold: #d7b870;
+  --color-gold-soft: #e6d2a0;
+  --color-gold-dark: #b0914b;
+  --color-ink: #0b0b0d;
+  --color-panel: #141418;
+  --color-panel-2: #1c1c22;
+  --color-panel-3: #26262e;
+  --color-line: #2c2c36;
+  --color-muted: #9b9ba8;
+  --color-ok: #34d399;
+  --color-warn: #facc15;
+  --color-danger: #ef4444;
+  --font-sans: 'Montserrat Variable', 'Montserrat', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}

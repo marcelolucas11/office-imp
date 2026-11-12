@@ -1,0 +1,62 @@
+@import 'tailwindcss';
+@import '@office-imp/ui/theme.css';
+@source '../../../packages/ui/src';
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-ink);
+  color: #f5f5f4;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+button {
+  cursor: pointer;
+}
+canvas {
+  image-rendering: pixelated;
+}
+.pixel {
+  image-rendering: pixelated;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-panel-3);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+@keyframes oi-pop {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.oi-pop {
+  animation: oi-pop 0.16s ease-out;
+}
+@keyframes oi-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.oi-pulse {
+  animation: oi-pulse 1.4s ease-in-out infinite;
+}

@@ -1,0 +1,39 @@
+{
+  "name": "@office-imp/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/copy-assets.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.0",
+    "@fontsource-variable/montserrat": "^5.1.1",
+    "@office-imp/map-engine": "workspace:*",
+    "@office-imp/shared": "workspace:*",
+    "@office-imp/ui": "workspace:*",
+    "colyseus.js": "^0.16.0",
+    "i18next": "^24.2.2",
+    "livekit-client": "^2.9.0",
+    "phaser": "^3.88.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.5",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.6",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.6",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}

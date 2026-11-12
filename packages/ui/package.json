@@ -1,0 +1,12 @@
+{
+  "name": "@office-imp/ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "exports": { ".": "./src/index.tsx", "./theme.css": "./src/theme.css" },
+  "types": "./src/index.tsx",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" },
+  "devDependencies": { "@types/react": "^19.0.8", "@types/react-dom": "^19.0.3", "react": "^19.0.0", "react-dom": "^19.0.0", "typescript": "^5.7.3" }
+}
