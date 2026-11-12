@@ -84,7 +84,7 @@ function createWindow() {
     title: branding.productName,
     autoHideMenuBar: true,
     show: false,
-    icon: isMac ? undefined : path.join(__dirname, '../assets/icon.png'),
+    icon: isMac ? undefined : path.join(__dirname, '../assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
   });
   win.once('ready-to-show', () => win?.show());
