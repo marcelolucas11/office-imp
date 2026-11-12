@@ -6,5 +6,7 @@ WORKDIR /updater
 COPY server.mjs ./
 ENV PORT=8787
 EXPOSE 8787
-CMD ["node", "server.mjs"]
+# a imagem docker:cli tem um entrypoint que trataria "node" como subcomando do docker
+ENTRYPOINT ["node", "server.mjs"]
+CMD []
 LABEL org.opencontainers.image.source="https://github.com/marcelolucas11/office-imp"

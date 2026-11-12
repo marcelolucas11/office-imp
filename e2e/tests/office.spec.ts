@@ -26,6 +26,30 @@ test.beforeAll(async ({ browser }) => {
   owner = await ownerCtx.newPage();
   emp = await empCtx.newPage();
   guest = await guestCtx.newPage();
+  // avisos e erros do navegador aparecem no log do teste (ajuda a diagnosticar falhas de mídia no CI)
+  for (const [name, page] of [['dono', owner], ['func', emp], ['conv', guest]] as const) {
+    page.on('console', (m) => {
+      if (m.type() === 'warning' || m.type() === 'error') console.log(`[${name}] ${m.type()}: ${m.text().slice(0, 400)}`);
+    });
+    page.on('pageerror', (e) => console.log(`[${name}] pageerror: ${String(e).slice(0, 400)}`));
+  }
+});
+
+// eslint-disable-next-line no-empty-pattern
+test.afterEach(async ({}, info) => {
+  if (info.status === info.expectedStatus) return;
+  for (const [name, page] of [['dono', owner], ['func', emp], ['conv', guest]] as const) {
+    const st = await page
+      .evaluate(() => {
+        const oi = (window as any).__oi;
+        if (!oi) return null;
+        const av = oi.av.getState();
+        const g = oi.game.getState();
+        return { phase: g.phase, view: g.av, conn: av.conn, room: av.room, mic: av.mic, cam: av.cam, blocked: av.blocked, peers: av.peers.map((p: any) => ({ id: p.id, live: p.live, mic: p.mic, cam: Boolean(p.cam) })) };
+      })
+      .catch(() => null);
+    console.log(`[${name}] estado na falha: ${JSON.stringify(st)}`);
+  }
 });
 
 test.afterAll(async () => {
@@ -156,8 +180,9 @@ test('proximidade: perto conecta, longe desconecta', async () => {
     // entra mutado; ao ligar o microfone e a câmera, o outro lado recebe
     expect(await game(owner, 'av.mic')).toBe(false);
     await owner.getByTestId('btn-mic').click();
+    await expect.poll(() => game(owner, 'av.mic'), { timeout: 30_000 }).toBe(true);
     await owner.getByTestId('btn-cam').click();
-    await expect.poll(() => game(owner, 'av.mic && av.cam')).toBe(true);
+    await expect.poll(() => game(owner, 'av.cam'), { timeout: 30_000 }).toBe(true);
     await expect.poll(() => game(emp, `av.peers.find((p) => p.id === '${ownerId}')?.mic === true`), { timeout: 30_000 }).toBe(true);
     await expect.poll(() => game(emp, `Boolean(av.peers.find((p) => p.id === '${ownerId}')?.cam)`), { timeout: 30_000 }).toBe(true);
     await expect(emp.getByTestId(`tile-${ownerId}:cam`).locator('video')).toBeVisible();

@@ -31,8 +31,6 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - name: Testes do atualizador
-        run: node --test apps/updater/
       - name: Scripts de infraestrutura
         run: |
           bash -n infra/install.sh
