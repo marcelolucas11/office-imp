@@ -6,6 +6,7 @@ import { autoUpdater } from 'electron-updater';
 import fs from 'node:fs';
 import path from 'node:path';
 import branding from '../branding.json';
+import { MacUpdater } from './mac-updater';
 
 declare const __MAC_SIGNED__: boolean;
 declare const __SERVER_URL__: string;
@@ -303,32 +304,55 @@ function setMini(on: boolean, notifyPage: boolean) {
 }
 
 // ---------- atualizações ----------
-// Windows (e Mac com assinatura da Apple): atualização automática pelo GitHub Releases.
-// Mac sem assinatura: o sistema não permite a troca automática do app, então só avisamos e abrimos o download.
+// Windows (e Mac com assinatura da Apple): electron-updater pelo GitHub Releases.
+// Mac sem assinatura: o Squirrel.Mac recusa apps ad-hoc, então usamos o MacUpdater (src/mac-updater.ts),
+// que baixa, confere, troca o app e apaga os arquivos da atualização sozinho.
 const canAutoUpdate = () => app.isPackaged && (!isMac || __MAC_SIGNED__);
 let downloaded = false;
 let installWhenReady = false;
+let notifiedVersion = '';
 const sendUpdate = (s: UpdateState) => win?.webContents.send('update-state', s);
 
-function newer(a: string, b: string): boolean {
-  const pa = a.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  const pb = b.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
-  return false;
+function notifyDownloaded(version: string) {
+  if (notifiedVersion === version || !Notification.isSupported()) return;
+  notifiedVersion = version;
+  new Notification({ title: branding.productName, body: `Versão ${version} baixada. Ela será instalada quando você fechar o app.` }).show();
 }
 
-async function latestRelease(): Promise<{ version: string; url: string } | null> {
-  try {
-    const res = await net.fetch(`https://api.github.com/repos/${branding.github}/releases/latest`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'office-imp-desktop' } });
-    if (!res.ok) return null;
-    const j = (await res.json()) as { tag_name: string; html_url: string };
-    return { version: String(j.tag_name).replace(/^v/, ''), url: j.html_url };
-  } catch {
-    return null;
-  }
+const macUpdater =
+  isMac && !__MAC_SIGNED__
+    ? new MacUpdater(branding.github, branding.appId, {
+        onChecking: () => sendUpdate({ status: 'procurando' }),
+        onAvailable: (version) => sendUpdate({ status: 'disponível', version }),
+        onNotAvailable: () => {
+          installWhenReady = false;
+          sendUpdate({ status: 'atualizado' });
+        },
+        onProgress: (p) => sendUpdate({ status: 'baixando', message: `${p}%` }),
+        onDownloaded: (version) => {
+          downloaded = true;
+          sendUpdate({ status: 'pronta para instalar', version });
+          if (installWhenReady) installMacNow();
+          else notifyDownloaded(version);
+        },
+        onError: (message) => {
+          installWhenReady = false;
+          sendUpdate({ status: 'erro', message });
+        },
+      })
+    : null;
+
+function installMacNow() {
+  if (!macUpdater?.install(true)) return;
+  quitting = true;
+  app.quit();
 }
 
 function setupUpdater() {
+  if (macUpdater) {
+    if (app.isPackaged) macUpdater.cleanup();
+    return;
+  }
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('checking-for-update', () => sendUpdate({ status: 'procurando' }));
   autoUpdater.on('update-available', (i) => sendUpdate({ status: 'disponível', version: i.version }));
@@ -343,9 +367,7 @@ function setupUpdater() {
     if (installWhenReady) {
       quitting = true;
       autoUpdater.quitAndInstall(true, true);
-    } else if (Notification.isSupported()) {
-      new Notification({ title: branding.productName, body: `Versão ${i.version} baixada. Ela será instalada quando você fechar o app.` }).show();
-    }
+    } else notifyDownloaded(i.version);
   });
   autoUpdater.on('error', (e) => {
     installWhenReady = false;
@@ -355,50 +377,52 @@ function setupUpdater() {
 
 async function checkUpdates(auto: boolean, interactive = false) {
   if (!app.isPackaged) return sendUpdate({ status: 'modo de desenvolvimento' });
-  if (canAutoUpdate()) {
-    autoUpdater.autoDownload = auto || interactive;
-    try {
-      await autoUpdater.checkForUpdates();
-    } catch (e) {
-      sendUpdate({ status: 'erro', message: (e as Error).message });
+  if (macUpdater) {
+    await macUpdater.check(auto || interactive);
+    if (interactive && win) {
+      const v = macUpdater.downloadedVersion;
+      if (v) {
+        const r = await dialog.showMessageBox(win, {
+          type: 'info',
+          buttons: ['Reiniciar agora', 'Ao fechar o app'],
+          defaultId: 0,
+          cancelId: 1,
+          message: `Versão ${v} pronta para instalar`,
+          detail: 'O app fecha, atualiza e abre de novo em alguns segundos.',
+        });
+        if (r.response === 0) installMacNow();
+      } else if (!downloaded) void dialog.showMessageBox(win, { type: 'info', message: 'Você já está na versão mais recente.' });
     }
     return;
   }
-  const latest = await latestRelease();
-  if (!latest || !newer(latest.version, app.getVersion())) {
-    sendUpdate({ status: 'atualizado' });
-    if (interactive && win) void dialog.showMessageBox(win, { type: 'info', message: 'Você já está na versão mais recente.' });
-    return;
+  autoUpdater.autoDownload = auto || interactive;
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (e) {
+    sendUpdate({ status: 'erro', message: (e as Error).message });
   }
-  sendUpdate({ status: 'disponível (instalação manual)', version: latest.version });
-  if (!win || (!auto && !interactive)) return;
-  const r = await dialog.showMessageBox(win, {
-    type: 'info',
-    buttons: ['Baixar', 'Depois'],
-    defaultId: 0,
-    cancelId: 1,
-    message: `Nova versão disponível: ${latest.version}`,
-    detail: 'Neste Mac a atualização é manual: baixe o instalador (.dmg), arraste o app para Aplicativos e substitua o atual.',
-  });
-  if (r.response === 0) void shell.openExternal(latest.url);
 }
 
 /** "Atualizar todos agora": recarrega o cliente na hora e, se houver, instala a nova versão do app. */
 function installUpdateNow() {
   win?.webContents.reloadIgnoringCache();
   if (!app.isPackaged) return;
-  if (canAutoUpdate()) {
-    if (downloaded) {
-      quitting = true;
-      autoUpdater.quitAndInstall(true, true);
-      return;
-    }
+  if (macUpdater) {
+    if (macUpdater.downloadedVersion) return installMacNow();
     installWhenReady = true;
-    autoUpdater.autoDownload = true;
-    autoUpdater.checkForUpdates().catch(() => {
-      installWhenReady = false;
-    });
-  } else void checkUpdates(true, false);
+    void macUpdater.check(true);
+    return;
+  }
+  if (downloaded) {
+    quitting = true;
+    autoUpdater.quitAndInstall(true, true);
+    return;
+  }
+  installWhenReady = true;
+  autoUpdater.autoDownload = true;
+  autoUpdater.checkForUpdates().catch(() => {
+    installWhenReady = false;
+  });
 }
 
 // ---------- mensagens da página ----------
@@ -459,6 +483,8 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on('before-quit', () => {
     quitting = true;
+    // Mac sem assinatura: atualização baixada é instalada ao fechar, como no Windows
+    macUpdater?.install(false);
   });
   app.on('window-all-closed', () => {
     if (!isMac) app.quit();
