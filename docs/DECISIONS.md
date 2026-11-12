@@ -54,3 +54,8 @@ Registro das decisões tomadas durante a construção: o que foi escolhido, o qu
 - **Atualizador como serviço separado**, com token, versão validada por expressão regular e lista
   fixa de serviços: é a única peça com acesso ao Docker do host.
 - **Testes de ponta a ponta com três navegadores** e mídia falsa; no CI, com um LiveKit real.
+- **Versões do LiveKit travadas em par.** O cliente (`livekit-client`, versão exata no
+  `package.json`) e o servidor (`LIVEKIT_VERSION` no compose) sobem juntos: o cliente 2.23 só conclui
+  a publicação de microfone e câmera com um servidor que devolve o identificador da oferta
+  (1.9 ou mais novo). Com o servidor 1.8 a negociação expira, e foi o teste de ponta a ponta com o
+  LiveKit real que pegou isso. Ao atualizar um dos dois, rode o E2E do CI antes de publicar.

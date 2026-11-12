@@ -74,7 +74,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14, label: "Mac universal: Apple Silicon e Intel", script: "dist:mac" }
+          - { os: macos-latest, label: "Mac universal: Apple Silicon e Intel", script: "dist:mac" }
           - { os: windows-latest, label: "Windows", script: "dist:win" }
     env:
       APP_VERSION: ${{ needs.meta.outputs.version }}

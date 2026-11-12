@@ -15,7 +15,7 @@ services:
     ports: ["127.0.0.1:6379:6379"]
 
   livekit:
-    image: livekit/livekit-server:${LIVEKIT_VERSION:-v1.8.4}
+    image: livekit/livekit-server:${LIVEKIT_VERSION:-v1.13.10}
     command: ["--node-ip", "${NODE_IP:-127.0.0.1}"]
     environment:
       LIVEKIT_CONFIG: |
@@ -40,7 +40,7 @@ services:
 
   # Gravação de áudio para as notas de reunião (perfil "notes").
   egress:
-    image: livekit/egress:${EGRESS_VERSION:-v1.9.0}
+    image: livekit/egress:${EGRESS_VERSION:-v1.15.0}
     profiles: ["notes"]
     environment:
       EGRESS_CONFIG_BODY: |

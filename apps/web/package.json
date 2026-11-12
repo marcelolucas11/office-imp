@@ -18,7 +18,7 @@
     "@office-imp/ui": "workspace:*",
     "colyseus.js": "^0.16.0",
     "i18next": "^24.2.2",
-    "livekit-client": "^2.9.0",
+    "livekit-client": "2.23.0",
     "phaser": "^3.88.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
