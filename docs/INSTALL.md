@@ -85,6 +85,63 @@ do Docker (em geral `172.17.0.1`) e os exemplos saem com esse endereço.
 
 Sempre **recarregue** (reload) o proxy, nunca reinicie, e valide a configuração antes.
 
+**Caso C — a VPS usa o Easypanel** (o Traefik dele ocupa as portas 80/443). Não cadastre nada na tela
+**Domínios** do Easypanel: ela só encaminha para serviços criados dentro dele. O instalador detecta o
+Traefik em container e faz o office-imp escutar em `172.17.0.1`. Depois de instalar:
+
+1. Confira, sem alterar nada, se o Traefik alcança o office-imp e quais nomes ele usa:
+
+   ```bash
+   C=/etc/easypanel/traefik/config
+   T=$(docker ps -q -f name=easypanel-traefik)
+   docker exec $T wget -qO- http://172.17.0.1:3080/api/health; echo     # deve mostrar {"ok":true,...}
+   grep -A3 '"entryPoints"' $C/main.yaml | grep -oE '"https?"' | sort | uniq -c   # deve listar "https"
+   grep -o 'certResolver": "[a-z]*' $C/main.yaml | sort -u                   # deve mostrar letsencrypt
+   ```
+
+2. Crie um arquivo **próprio** na pasta de configuração. Não edite o `main.yaml` (o Easypanel o
+   reescreve) nem um `custom.yaml` que já exista:
+
+   ```bash
+   C=/etc/easypanel/traefik/config
+   [ -e $C/office-imp.yaml ] && echo "já existe" || tee $C/office-imp.yaml >/dev/null <<'EOF'
+   http:
+     routers:
+       office-imp:
+         rule: Host(`office-impera.imperaservices.com`)
+         entryPoints: [https]
+         service: office-imp
+         tls: { certResolver: letsencrypt }
+       office-imp-rtc:
+         rule: Host(`rtc-office-impera.imperaservices.com`)
+         entryPoints: [https]
+         service: office-imp-rtc
+         tls: { certResolver: letsencrypt }
+     services:
+       office-imp:
+         loadBalancer:
+           servers: [{ url: "http://172.17.0.1:3080" }]
+       office-imp-rtc:
+         loadBalancer:
+           servers: [{ url: "http://172.17.0.1:7880" }]
+   EOF
+   ```
+
+3. Espere cerca de um minuto (o Traefik lê o arquivo sozinho e emite os certificados) e teste:
+
+   ```bash
+   curl -sI https://office-impera.imperaservices.com/api/health | head -1   # HTTP/2 200
+   curl -sI https://rtc-office-impera.imperaservices.com | head -1          # HTTP/2 200
+   ```
+
+   Se aparecer 404 ou erro de certificado, reinicie o Traefik pelo Easypanel num horário tranquilo
+   (os sites dele ficam fora do ar por alguns segundos).
+
+Para remover o office-imp do proxy, basta apagar o `office-imp.yaml`.
+
+Testado numa VPS Contabo com Ubuntu 24.04, Easypanel 2.37 e Traefik 3.7, ao lado de outros sistemas
+em produção.
+
 ## 4. Primeiro acesso
 
 1. Abra `https://office-impera.imperaservices.com/setup`.
