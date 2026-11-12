@@ -5,6 +5,9 @@ pixel art, cada pessoa com o seu avatar, e o áudio e o vídeo ligam sozinhos qu
 aproximam. Roda no seu próprio servidor (uma VPS comum) e tem app para **Mac (Apple Silicon e Intel)**
 e **Windows**, além do navegador.
 
+[![Baixar para Mac](https://img.shields.io/badge/Baixar_para-Mac-111111?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/marcelolucas11/office-imp/releases/latest/download/Office-Impera-Mac.dmg)
+[![Baixar para Windows](https://img.shields.io/badge/Baixar_para-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/marcelolucas11/office-imp/releases/latest/download/Office-Impera-Windows.exe)
+
 > Interface em português do Brasil. Licença [AGPL-3.0](LICENSE). Marcas: veja [TRADEMARKS.md](TRADEMARKS.md).
 
 ## O que tem
@@ -40,10 +43,17 @@ Passo a passo completo (DNS, HTTPS, SMTP, Google Calendar, app do Mac): [docs/IN
 
 ## App para Mac e Windows
 
-Baixe o instalador na página de [Releases](https://github.com/marcelolucas11/office-imp/releases):
+[![Baixar para Mac](https://img.shields.io/badge/Baixar_para-Mac-111111?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/marcelolucas11/office-imp/releases/latest/download/Office-Impera-Mac.dmg)
+[![Baixar para Windows](https://img.shields.io/badge/Baixar_para-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/marcelolucas11/office-imp/releases/latest/download/Office-Impera-Windows.exe)
 
-- **Mac** (M1 em diante e Intel): `office-imp-X.Y.Z-mac-universal.dmg`
-- **Windows**: `office-imp-X.Y.Z-win-x64.exe`
+Os botões sempre baixam a versão mais recente.
+
+- **Mac** (M1 em diante e Intel): abra o arquivo baixado e arraste o **Office Impera** para a pasta
+  **Aplicativos**. Na primeira abertura o macOS bloqueia o app, porque ele não tem a assinatura paga
+  da Apple: vá em **Ajustes do Sistema → Privacidade e Segurança**, role até o fim e clique em
+  **Abrir Mesmo Assim**. Isso só é pedido uma vez.
+- **Windows**: abra o arquivo baixado. Ele instala e abre sozinho, sem perguntas. Se o Windows avisar
+  "editor desconhecido", clique em **Mais informações → Executar assim mesmo**.
 
 O app já abre conectado ao servidor definido em [`apps/desktop/branding.json`](apps/desktop/branding.json)
 e dá para trocar o endereço em Ajuda → Trocar servidor.
