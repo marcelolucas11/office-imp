@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { z, type ZodTypeAny } from 'zod';
 import { badRequest } from './errors';
 

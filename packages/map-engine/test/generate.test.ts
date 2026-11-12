@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
 import { buildCollision, floodFill, mapDesks, MAX_MAP_SIZE, type WizardInput } from '@office-imp/shared';
 import { expandOffice, generateOffice, modulesForInput, renderAscii, reserveBlankWing, toTiled, validateOffice } from '../src';

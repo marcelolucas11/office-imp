@@ -1,0 +1,13 @@
+# office-imp — proxy com HTTPS automático (Let's Encrypt). Usado só no perfil "caddy".
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
+
+{$RTC_DOMAIN} {
+	reverse_proxy livekit:7880
+}

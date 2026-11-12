@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { FastifyInstance } from 'fastify';
 import { and, eq, inArray } from 'drizzle-orm';
 import { DEFAULT_AVATAR, canAssignOffice, canAssignRole, canManageUser, mapDesks, type OfficeMap } from '@office-imp/shared';

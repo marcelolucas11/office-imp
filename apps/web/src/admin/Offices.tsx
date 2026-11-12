@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { can, type DeskInfo, type OfficeMap, type OfficeSettings, type Rect, type WizardInput } from '@office-imp/shared';
@@ -45,7 +46,7 @@ function Wizard({ onClose, onCreated }: { onClose: () => void; onCreated: (slug:
         .catch((e) => setError(errMsg(e)));
     }, 250);
     return () => clearTimeout(id);
-  }, [input.size, input.customCount, input.partners, input.partnersShareRoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [input.size, input.customCount, input.partners, input.partnersShareRoom]);
 
   const create = async () => {
     setBusy(true);
@@ -85,7 +86,7 @@ function Wizard({ onClose, onCreated }: { onClose: () => void; onCreated: (slug:
         <Field label={t('wiz.name', '1. Nome do escritório')}>
           <Input name="officeName" value={input.name} onChange={(e) => setInput({ ...input, name: e.target.value })} maxLength={60} autoFocus />
         </Field>
-        <Field label={t('wiz.size', '2. Tamanho')}>
+        <Field group label={t('wiz.size', '2. Tamanho')}>
           <div className="flex gap-2">
             {sizeBtn('small', t('wiz.small', '1 a 10 funcionários'), t('wiz.smallHint', 'mesas, 1 sala de reunião, copa e recepção'))}
             {sizeBtn('medium', t('wiz.medium', '11 a 21 funcionários'), t('wiz.mediumHint', '2 salas de reunião e auditório com palco'))}
@@ -102,7 +103,7 @@ function Wizard({ onClose, onCreated }: { onClose: () => void; onCreated: (slug:
             <Input name="partners" type="number" min={0} max={10} value={input.partners} onChange={(e) => setInput({ ...input, partners: Math.max(0, Math.min(10, Number(e.target.value) || 0)) })} className="w-32" />
           </Field>
           {input.partners > 1 ? (
-            <Field label={t('wiz.share', '4. Os sócios vão ficar na mesma sala?')}>
+            <Field group label={t('wiz.share', '4. Os sócios vão ficar na mesma sala?')}>
               <Toggle checked={input.partnersShareRoom} onChange={(v) => setInput({ ...input, partnersShareRoom: v })} label={input.partnersShareRoom ? t('wiz.shareYes', 'Sim: uma Sala dos Sócios compartilhada') : t('wiz.shareNo', 'Não: uma sala individual para cada sócio')} />
             </Field>
           ) : null}

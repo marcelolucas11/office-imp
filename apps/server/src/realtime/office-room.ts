@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { Room, type Client } from '@colyseus/core';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {

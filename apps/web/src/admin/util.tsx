@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { OfficeMap, Rect } from '@office-imp/shared';
 import { Select, Spinner } from '@office-imp/ui';
@@ -22,7 +23,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
       })
       .catch((e) => id === seq.current && setError(errMsg(e)))
       .finally(() => id === seq.current && setLoading(false));
-  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+  }, deps);
   useEffect(reload, [reload]);
   return { data, error, loading, reload, setData };
 }

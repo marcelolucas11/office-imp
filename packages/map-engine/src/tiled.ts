@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { TILE, objSize, type OfficeMap } from '@office-imp/shared';
 
 /** Exporta o mapa no formato JSON do Tiled (tilelayers + objectgroups). */

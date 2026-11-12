@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { areaCenter, isAdminRole, type Status } from '@office-imp/shared';
@@ -12,7 +13,7 @@ import { av, useAv } from './av';
 import { BottomBar, MiniMap, SidePanel, VideoBar } from './Hud';
 import { AvatarModal, CalendarModal, CustomStatusModal, DeskModal, MyDeskModal, ObjectModal, ProfileModal, SettingsModal } from './Modals';
 import { RadioDock, RadioModal } from './Radio';
-import { createGame, isTyping } from './scene';
+import { createGame } from './scene';
 import { playSound } from './sounds';
 
 const Mapmaker = lazy(() => import('./Mapmaker'));
@@ -257,15 +258,6 @@ export default function OfficePage() {
     if (area) net.send('teleport', areaCenter(area));
     if (new URLSearchParams(location.search).get('mapmaker') === '1' && canAdmin) useGame.setState({ modal: { kind: 'mapmaker' } });
   }, [phase, areaId, canAdmin]);
-
-  useEffect(() => {
-    const block = (e: KeyboardEvent) => {
-      // as setas não devem rolar a página enquanto a pessoa anda pelo mapa
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key) && !isTyping()) e.preventDefault();
-    };
-    window.addEventListener('keydown', block);
-    return () => window.removeEventListener('keydown', block);
-  }, []);
 
   if (phase === 'error' || phase === 'kicked') {
     return (

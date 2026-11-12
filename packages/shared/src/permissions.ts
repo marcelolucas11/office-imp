@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Papéis e matriz de permissões. Fonte única de verdade: o servidor verifica
 // tudo aqui; o cliente usa as mesmas funções apenas para esconder botões.
 

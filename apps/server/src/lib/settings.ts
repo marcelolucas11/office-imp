@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { eq } from 'drizzle-orm';
 import { DEFAULT_OFFICE_SETTINGS, type OfficeSettings } from '@office-imp/shared';
 import { db, schema } from '../db';

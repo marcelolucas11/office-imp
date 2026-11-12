@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { OBJECT_DEFS, objSize, type MapArea, type OfficeMap, type Rect } from '@office-imp/shared';
 import { objectSprite, objectTall } from './objects';
 import { FLOOR_COLOR, T, WALL_COLOR, drawStatic, makeCanvas, type Ctx } from './tiles';

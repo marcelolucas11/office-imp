@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Pixel art 32×32 desenhada por código (sem arquivos de imagem de terceiros).
 import { Floor, Wall, type OfficeMap } from '@office-imp/shared';
 

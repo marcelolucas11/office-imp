@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Formato do mapa do escritório. Estrutura inspirada no Tiled (camadas de
 // tiles + grupos de objetos), com tiles de 32×32.
 

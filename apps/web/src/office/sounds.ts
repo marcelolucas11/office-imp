@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Sons curtos gerados por código (sem arquivos de áudio).
 let ctx: AudioContext | null = null;
 

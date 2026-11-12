@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 type Handler = (payload: any) => void;
 
 /** Barramento de eventos entre a rede, a cena do Phaser e a interface React. */

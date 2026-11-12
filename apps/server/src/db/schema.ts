@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { bigint, boolean, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { AvatarConfig, OfficeMap, OfficeSettings, Profile, Role } from '@office-imp/shared';
 

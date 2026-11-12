@@ -1,0 +1,27 @@
+{
+  "name": "@office-imp/desktop",
+  "productName": "Office Impera",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App desktop do office-imp (Mac e Windows)",
+  "author": "Impera Services",
+  "homepage": "https://github.com/marcelolucas11/office-imp",
+  "license": "AGPL-3.0-only",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "node scripts/build.mjs && electron .",
+    "dist:mac": "node scripts/build.mjs && electron-builder --config electron-builder.config.cjs --mac --publish never",
+    "dist:win": "node scripts/build.mjs && electron-builder --config electron-builder.config.cjs --win --publish never",
+    "dist:linux": "node scripts/build.mjs && electron-builder --config electron-builder.config.cjs --linux --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-updater": "^6.3.9",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { GITHUB_REPO } from '@office-imp/shared';

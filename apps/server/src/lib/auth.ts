@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { can, canAdminOffice, requiresTwoFactor, type Actor, type Permission, type Role } from '@office-imp/shared';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';

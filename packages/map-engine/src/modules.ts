@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { Floor, Wall, type MapArea, type MapObject, type Point, type Dir } from '@office-imp/shared';
 
 export const ROOM_H = 9; // altura de um cômodo, incluindo paredes

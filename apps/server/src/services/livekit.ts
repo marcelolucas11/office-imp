@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { AccessToken, EgressClient, RoomServiceClient } from 'livekit-server-sdk';
 import { config } from '../config';
 

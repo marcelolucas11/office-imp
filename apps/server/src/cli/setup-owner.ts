@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Cria uma conta de Dono pela linha de comando (alternativa à tela /setup).
 // Uso: pnpm setup:owner <usuario> "<Nome de exibição>" <senha>
 import path from 'node:path';

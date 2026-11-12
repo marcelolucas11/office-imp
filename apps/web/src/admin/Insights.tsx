@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useMemo, useState } from 'react';
 import { ROLE_LABEL, STATUS_COLOR, STATUS_LABEL, addDays, formatDuration, localDate, type PersonRow, type Role } from '@office-imp/shared';
 import { Badge, Button, Card, Empty, Input, Modal, Select, Spinner } from '@office-imp/ui';
@@ -141,7 +142,7 @@ export function Analytics() {
       .get<AnalyticsData>(`/api/offices/${officeId}/analytics?from=${range.from}&to=${range.to}`)
       .then(setData)
       .catch((e) => setError(errMsg(e)));
-  }, [officeId, live, range?.from, range?.to]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [officeId, live, range?.from, range?.to]);
 
   useEffect(() => {
     if (!date && data) setDate(localDate(data.now, data.timezone));
@@ -257,7 +258,7 @@ export function Analytics() {
           <p className="text-[11px] text-muted">
             {t(
               'an.legend',
-              'Verde: disponível · amarelo: ocupado · vermelho: não incomodar · cinza: ausente. “Ativo” = online menos ausente. “Em call” = na mesma sala privada que outra pessoa, ou conversando por proximidade com o microfone ligado. Clique em uma pessoa para ver a linha do tempo do dia.',
+              'Verde: disponível · amarelo: ocupado · vermelho: não incomodar · cinza: ausente. “Ativo” = online menos ausente. “Em call” = conectado em áudio e vídeo com pelo menos uma pessoa (por proximidade ou na mesma sala privada). Clique em uma pessoa para ver a linha do tempo do dia.',
             )}
           </p>
         </>

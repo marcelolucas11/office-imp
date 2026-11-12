@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /** Deslocamento (ms) do fuso `tz` em relação ao UTC no instante `ts`. */
 export function tzOffsetMs(ts: number, tz: string): number {
   const dtf = new Intl.DateTimeFormat('en-US', {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { and, desc, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
 import { mapDesks, type DeskInfo, type OfficeMap } from '@office-imp/shared';
 import { validateOffice } from '@office-imp/map-engine';

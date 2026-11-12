@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { OfficeRoom } from './office-room';
 
 /** Registro das salas ativas (uma por escritório) para a API conversar com o tempo real. */

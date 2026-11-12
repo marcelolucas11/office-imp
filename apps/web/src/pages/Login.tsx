@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Button, Field, Input } from '@office-imp/ui';

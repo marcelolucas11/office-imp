@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { AddressInfo } from 'node:net';
 import { Client, type Room } from 'colyseus.js';
 import { attachRealtime, buildApp } from '../src/app';

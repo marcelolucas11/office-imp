@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { and, eq, gt, isNull, lt, or } from 'drizzle-orm';
 import { aggregateAnalytics, dayRange, localDate, type PersonRow } from '@office-imp/shared';
 import { db, schema } from '../db';
@@ -80,5 +81,5 @@ export function analyticsCsv(rows: PersonRow[]): string {
       .map(esc)
       .join(';'),
   );
-  return `﻿${head.join(';')}\n${lines.join('\n')}\n`;
+  return `\uFEFF${head.join(';')}\n${lines.join('\n')}\n`;
 }

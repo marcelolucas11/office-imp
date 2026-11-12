@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
@@ -7,6 +8,7 @@ import { closeDb, db, initDb, schema } from './db';
 import { enqueue, startQueue, stopQueue } from './lib/queue';
 import { closeDanglingIntervals, heartbeat } from './realtime/tracker';
 import { registerMeetingJobs } from './services/meetings';
+import { autoUpdateServerIfEnabled } from './services/updates';
 
 async function main() {
   fs.mkdirSync(config.meetingsDir, { recursive: true });
@@ -39,6 +41,7 @@ async function main() {
   // limpeza diária (retenção de áudio, chat e sessões)
   setInterval(() => void enqueue('cleanup', {}), 24 * 3600_000).unref();
   setTimeout(() => void enqueue('cleanup', {}), 60_000).unref();
+  setInterval(() => void autoUpdateServerIfEnabled().catch((e) => console.warn('[office-imp] atualização automática falhou:', (e as Error).message)), 3600_000).unref();
 
   const [{ n }] = await db().select({ n: sql<number>`count(*)::int` }).from(schema.users);
   console.log(`[office-imp] v${config.version} em http://${config.host}:${config.port} — endereço público: ${config.publicUrl}`);

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import '@fontsource-variable/montserrat';
 import './index.css';
 import './lib/i18n';

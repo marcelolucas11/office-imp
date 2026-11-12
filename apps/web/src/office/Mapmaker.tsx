@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DIRS,
@@ -161,7 +162,7 @@ export default function Mapmaker() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selObj, dir]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selObj, dir]);
 
   // ---------- ferramentas ----------
   const tileOf = (e: React.MouseEvent): Point => {
@@ -370,7 +371,7 @@ export default function Mapmaker() {
   };
   useEffect(() => {
     if (tab === 'versions' && !versions) void loadVersions();
-  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   const closeAsk = () => {
     if (dirty && !confirm(t('mm.discardAsk', 'Sair sem publicar? As alterações serão perdidas.'))) return;
@@ -411,7 +412,7 @@ export default function Mapmaker() {
                 {toolBtn('select', t('mm.select', '🖱 Selecionar'), t('mm.selectTip', 'Clique em um objeto para editar; arraste para mover'))}
                 {toolBtn('erase', t('mm.erase', '🧽 Apagar'), t('mm.eraseTip', 'Apaga objetos e paredes do tile'))}
               </div>
-              <Field label={t('mm.dir', 'Direção (tecla R gira)')}>
+              <Field group label={t('mm.dir', 'Direção (tecla R gira)')}>
                 <div className="flex gap-1">
                   {DIRS.map((d) => (
                     <Button key={d} small variant={dir === d ? 'primary' : 'subtle'} onClick={() => setDir(d)}>
@@ -453,10 +454,10 @@ export default function Mapmaker() {
                 {toolBtn('erase', t('mm.erase', '🧽 Apagar'), t('mm.eraseTip', 'Apaga objetos e paredes do tile'))}
                 {toolBtn('spawn', t('mm.spawn', '⬤ Entrada'), t('mm.spawnTip', 'Marca/desmarca os pontos onde as pessoas aparecem ao entrar'))}
               </div>
-              <Field label={t('mm.floors', 'Chão')}>
+              <Field group label={t('mm.floors', 'Chão')}>
                 <div className="flex flex-wrap gap-1.5">{Object.entries(FLOOR_LABEL).map(([id, label]) => swatch(floorTiles, Number(id), floorId === Number(id), label, () => (setFloorId(Number(id)), tool !== 'fill' && setTool('floor'))))}</div>
               </Field>
-              <Field label={t('mm.walls', 'Paredes')}>
+              <Field group label={t('mm.walls', 'Paredes')}>
                 <div className="flex flex-wrap gap-1.5">{Object.entries(WALL_LABEL).map(([id, label]) => swatch(wallTiles, Number(id), wallId === Number(id), label, () => (setWallId(Number(id)), setTool('wall'))))}</div>
               </Field>
               <Toggle checked={eraseFloor} onChange={setEraseFloor} label={t('mm.eraseFloor', 'A borracha também apaga o chão')} />

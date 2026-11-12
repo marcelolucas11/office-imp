@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { Room, RoomEvent, Track, VideoPresets, type RemoteParticipant, type RemoteTrackPublication } from 'livekit-client';
 import { create } from 'zustand';
 import { volumeForDistance, type AvView } from '@office-imp/shared';

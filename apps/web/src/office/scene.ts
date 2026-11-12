@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import * as Phaser from 'phaser';
 import {
   DIRS,
@@ -192,7 +193,7 @@ export class OfficeScene extends Phaser.Scene {
     this.updateHint();
   }
 
-  private text(x: number, y: number, s: string, color: string, size = 11) {
+  private text(x: number, y: number, s: string, color: string, size = 10) {
     const tx = this.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: '600', color, stroke: '#0b0b0d', strokeThickness: 3, resolution: this.effZoom }).setOrigin(0.5, 1);
     return tx;
   }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { create } from 'zustand';
 import type { AvatarConfig, OfficeSummary, Profile, Role } from '@office-imp/shared';
 import { api, ApiError } from './api';

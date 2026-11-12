@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Button, Field, Input } from '@office-imp/ui';

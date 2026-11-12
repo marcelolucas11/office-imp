@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useRef, useState } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
@@ -48,7 +49,7 @@ export default function Whiteboard({ objectId }: { objectId: string }) {
       flush();
       net.send('wb:close', { objectId });
     };
-  }, [objectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [objectId]);
 
   const flush = () => {
     if (timer.current) clearTimeout(timer.current);

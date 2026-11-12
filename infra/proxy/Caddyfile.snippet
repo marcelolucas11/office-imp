@@ -1,0 +1,10 @@
+# office-imp atrás de um Caddy que já existe na VPS: acrescente estes dois blocos ao Caddyfile
+# atual e rode:  caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+office-impera.imperaservices.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3080
+}
+
+rtc-office-impera.imperaservices.com {
+	reverse_proxy 127.0.0.1:7880
+}

@@ -1,0 +1,23 @@
+# office-imp atrás de um Traefik que já existe na VPS (provedor "file").
+# Coloque este arquivo na pasta de configuração dinâmica do Traefik. Se o Traefik roda em
+# container, instale o office-imp com BIND_ADDR igual ao IP da ponte do Docker (em geral
+# 172.17.0.1) e use esse IP abaixo no lugar de 127.0.0.1.
+http:
+  routers:
+    office-imp:
+      rule: Host(`office-impera.imperaservices.com`)
+      entryPoints: [websecure]
+      service: office-imp
+      tls: { certResolver: letsencrypt }
+    office-imp-rtc:
+      rule: Host(`rtc-office-impera.imperaservices.com`)
+      entryPoints: [websecure]
+      service: office-imp-rtc
+      tls: { certResolver: letsencrypt }
+  services:
+    office-imp:
+      loadBalancer:
+        servers: [{ url: "http://127.0.0.1:3080" }]
+    office-imp-rtc:
+      loadBalancer:
+        servers: [{ url: "http://127.0.0.1:7880" }]

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs';
 import path from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -93,7 +94,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   if (config.webDist && fs.existsSync(path.join(config.webDist, 'index.html'))) {
     await app.register(fastifyStatic, { root: path.resolve(config.webDist), wildcard: false, maxAge: '1h' });
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith('/api/') || req.url.startsWith('/rt/')) return reply.code(404).send({ error: 'not_found', message: 'Não encontrado.' });
+      const pathname = req.url.split('?')[0];
+      // API, tempo real e arquivos (com extensão) que não existem respondem 404; o resto é rota do app (SPA)
+      if (pathname.startsWith('/api/') || pathname.startsWith('/rt/') || /\.[a-z0-9]{2,5}$/i.test(pathname)) return reply.code(404).send({ error: 'not_found', message: 'Não encontrado.' });
       return reply.header('cache-control', 'no-cache').sendFile('index.html');
     });
   } else {

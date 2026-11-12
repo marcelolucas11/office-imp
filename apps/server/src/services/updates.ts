@@ -1,5 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { config } from '../config';
 import { badRequest } from '../lib/errors';
+import { getGlobalSettings } from '../lib/settings';
 
 interface Release {
   tag: string;
@@ -52,3 +54,18 @@ async function callUpdater(pathname: string, method: 'GET' | 'POST', body?: unkn
 
 export const updaterStatus = () => callUpdater('/status', 'GET');
 export const triggerServerUpdate = (version: string) => callUpdater('/update', 'POST', { version });
+
+/**
+ * "Atualizar o servidor sozinho": uma vez por hora confere a opção e, de madrugada
+ * (por volta das 4h no horário de Brasília), aciona o atualizador se houver versão nova.
+ */
+export async function autoUpdateServerIfEnabled(now = new Date()): Promise<boolean> {
+  if (now.getUTCHours() !== 7 || !updaterAvailable()) return false;
+  const settings = await getGlobalSettings();
+  if (!settings.autoUpdateServer) return false;
+  const latest = await latestRelease(true);
+  if (!latest || compareVersions(latest.version, config.version) <= 0) return false;
+  console.log(`[office-imp] atualização automática do servidor: ${config.version} -> ${latest.version}`);
+  await triggerServerUpdate(latest.version);
+  return true;
+}

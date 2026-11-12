@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Toggle } from '@office-imp/ui';
 import { api } from '../lib/api';
@@ -38,7 +39,7 @@ function SmtpCard({ data, reload }: { data: SettingsData; reload: () => void }) 
         <Field label={t('smtp.port', 'Porta')}>
           <Input name="smtpPort" type="number" value={f.port} onChange={(e) => setF({ ...f, port: Number(e.target.value), secure: Number(e.target.value) === 465 })} />
         </Field>
-        <Field label={t('smtp.secure', 'Conexão')}>
+        <Field group label={t('smtp.secure', 'Conexão')}>
           <Toggle checked={f.secure} onChange={(v) => setF({ ...f, secure: v })} label={f.secure ? t('smtp.ssl', 'SSL/TLS direto (porta 465)') : t('smtp.starttls', 'STARTTLS (porta 587)')} />
         </Field>
         <Field label={t('smtp.user', 'Usuário')}>
@@ -163,7 +164,7 @@ export function Updates() {
     if (!running) return;
     const id = window.setInterval(s.reload, 4000);
     return () => clearInterval(id);
-  }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [running]);
 
   const setGlobal = (patch: Partial<UpdateStatus['global']>) => act(() => api.patch('/api/admin/settings/global', patch)).then(s.reload);
   const updateServer = async () => {

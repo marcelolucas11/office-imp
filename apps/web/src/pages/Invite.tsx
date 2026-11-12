@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Field, Input, Spinner } from '@office-imp/ui';
 import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useSession } from '../lib/session';
+import { ChangePasswordGate, MonitoringGate, TotpGate } from './Gates';
 import { AuthShell, ErrorNote } from './Shell';
 
 interface InviteInfo {
@@ -45,7 +47,7 @@ export function Invite() {
       nav(`/login?next=${encodeURIComponent(`/convite/${token}`)}`, { replace: true });
       return;
     }
-    if (me.kind !== 'user' || me.mustChangePassword || me.mustSetupTotp) return;
+    if (me.kind !== 'user' || me.mustChangePassword || me.mustSetupTotp || !me.monitoringAccepted) return;
     api
       .post(`/api/invites/${token}/accept`)
       .then(async (r) => {
@@ -53,12 +55,12 @@ export function Invite() {
         nav(`/o/${r.slug}`, { replace: true });
       })
       .catch((e) => setError(errMsg(e)));
-  }, [info, me, token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [info, me, token]);
 
   // quem já é da equipe e abre um link de convidado do próprio escritório entra direto
   useEffect(() => {
     if (info?.kind === 'GUEST' && me?.kind === 'user' && me.offices.some((o) => o.slug === info.office.slug && o.activated)) nav(`/o/${info.office.slug}`, { replace: true });
-  }, [info, me]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [info, me]);
 
   const enterGuest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +98,12 @@ export function Invite() {
   }
 
   if (info.kind === 'EMPLOYEE') {
+    // primeiro acesso pelo link: conclui as etapas obrigatórias antes de ativar o escritório
+    if (me?.kind === 'user') {
+      if (me.mustChangePassword) return <ChangePasswordGate />;
+      if (me.mustSetupTotp) return <TotpGate />;
+      if (!me.monitoringAccepted) return <MonitoringGate />;
+    }
     return (
       <AuthShell title={info.office.name} subtitle={t('invite.employee', 'Convite da equipe')}>
         {error ? <ErrorNote>{error}</ErrorNote> : <Spinner />}

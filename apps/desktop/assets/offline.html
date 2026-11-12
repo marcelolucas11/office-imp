@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Office</title>
+    <style>
+      body { margin: 0; height: 100vh; display: grid; place-items: center; background: #0b0b0d; color: #f5f5f4; font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      main { width: min(460px, 90vw); border: 1px solid #2a2a33; border-radius: 16px; background: #141418; padding: 28px; }
+      h1 { margin: 0 0 6px; font-size: 20px; color: #d7b870; }
+      p { margin: 0 0 16px; color: #a8a29e; font-size: 13px; }
+      label { display: block; font-size: 12px; color: #d6d3d1; margin-bottom: 4px; }
+      input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid #2a2a33; background: #1c1c22; color: #f5f5f4; font-size: 14px; }
+      .row { display: flex; gap: 8px; margin-top: 14px; }
+      button { padding: 10px 16px; border-radius: 10px; border: 1px solid #2a2a33; background: #1c1c22; color: #f5f5f4; font-weight: 600; cursor: pointer; }
+      button.primary { background: #d7b870; color: #0b0b0d; border-color: #d7b870; }
+      small { display: block; margin-top: 12px; color: #78716c; font-size: 11px; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="title"></h1>
+      <p id="text"></p>
+      <label for="url">Endereço do servidor</label>
+      <input id="url" spellcheck="false" autocomplete="off" />
+      <div class="row">
+        <button class="primary" id="save">Conectar</button>
+        <button id="retry">Tentar de novo</button>
+      </div>
+      <small id="detail"></small>
+    </main>
+    <script>
+      const q = new URLSearchParams(location.search);
+      const change = q.get('reason') === 'change';
+      document.title = q.get('name') || 'Office';
+      document.getElementById('title').textContent = change ? 'Trocar servidor' : 'Sem conexão com o escritório';
+      document.getElementById('text').textContent = change
+        ? 'Informe o endereço do servidor do office-imp ao qual este app deve se conectar.'
+        : 'Não foi possível abrir o servidor. Confira a sua internet ou se o endereço abaixo está certo.';
+      document.getElementById('detail').textContent = q.get('detail') || '';
+      const input = document.getElementById('url');
+      input.value = q.get('url') || '';
+      document.getElementById('save').onclick = () => window.officeImpLocal.setServer(input.value);
+      document.getElementById('retry').onclick = () => window.officeImpLocal.retry();
+      input.addEventListener('keydown', (e) => e.key === 'Enter' && window.officeImpLocal.setServer(input.value));
+      if (!change) setTimeout(() => window.officeImpLocal.retry(), 15000);
+    </script>
+  </body>
+</html>

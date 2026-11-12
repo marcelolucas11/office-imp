@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useRef, useState } from 'react';
 import { can, isAdminRole, musicPosition, parseYouTubeUrl, type MusicChannel } from '@office-imp/shared';
 import { Badge, Button, Empty, Field, Input, Modal, cx } from '@office-imp/ui';
@@ -157,13 +158,13 @@ export function RadioDock() {
       } catch {}
       player.current = null;
     };
-  }, [ch?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ch?.id]);
 
   useEffect(() => {
     sync();
     const id = window.setInterval(sync, 2000);
     return () => clearInterval(id);
-  }, [ch?.id, ch?.index, ch?.playing, ch?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ch?.id, ch?.index, ch?.playing, ch?.updatedAt]);
 
   // volume local, com redução automática durante conversas ("ducking")
   useEffect(() => {

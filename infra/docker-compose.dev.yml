@@ -1,0 +1,66 @@
+# Serviços de apoio para desenvolvimento e para os testes de ponta a ponta (CI).
+#   docker compose -f infra/docker-compose.dev.yml up -d
+# O servidor e o cliente web rodam fora do Docker (pnpm dev). Sem DATABASE_URL o servidor usa PGlite.
+name: office-imp-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment: { POSTGRES_USER: officeimp, POSTGRES_PASSWORD: officeimp, POSTGRES_DB: officeimp }
+    ports: ["127.0.0.1:5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6379:6379"]
+
+  livekit:
+    image: livekit/livekit-server:${LIVEKIT_VERSION:-v1.8.4}
+    command: ["--node-ip", "${NODE_IP:-127.0.0.1}"]
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: false
+        redis:
+          address: redis:6379
+        keys:
+          devkey: secret
+        room:
+          auto_create: true
+        logging:
+          level: info
+    ports:
+      - "7880:7880"
+      - "7881:7881/tcp"
+      - "7882:7882/udp"
+    depends_on: [redis]
+
+  # Gravação de áudio para as notas de reunião (perfil "notes").
+  egress:
+    image: livekit/egress:${EGRESS_VERSION:-v1.9.0}
+    profiles: ["notes"]
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: devkey
+        api_secret: secret
+        ws_url: ws://livekit:7880
+        insecure: true
+        redis:
+          address: redis:6379
+    volumes:
+      - ${MEETINGS_DIR:-../apps/server/data/meetings}:/out
+    cap_add: [SYS_ADMIN]
+    depends_on: [livekit]
+
+  whisper:
+    build: ./whisper
+    profiles: ["notes"]
+    environment: { WHISPER_MODEL: "${WHISPER_MODEL:-tiny}" }
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: [whisper_models:/models]
+
+volumes:
+  whisper_models:

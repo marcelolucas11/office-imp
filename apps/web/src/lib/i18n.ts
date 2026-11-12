@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import i18next from 'i18next';
 import ptBR from '../locales/pt-BR.json';
 
@@ -8,6 +9,9 @@ void i18next.init({
   lng: 'pt-BR',
   fallbackLng: 'pt-BR',
   resources: { 'pt-BR': { translation: ptBR } },
+  // as chaves são planas ("login.title"), não objetos aninhados
+  keySeparator: false,
+  nsSeparator: false,
   interpolation: { escapeValue: false },
   returnNull: false,
 });

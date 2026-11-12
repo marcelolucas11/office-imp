@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { OBJECT_DEFS, objSize, type Dir, type MapObject } from '@office-imp/shared';
 import { T, makeCanvas, noise, r, shade, type Ctx } from './tiles';
 
@@ -5,11 +6,6 @@ const WOOD = '#9c6b43';
 const GOLD = '#d7b870';
 
 type Painter = (ctx: Ctx, w: number, h: number, top: number, o: MapObject) => void;
-
-function legs(ctx: Ctx, x: number, y: number, w: number, c: string) {
-  r(ctx, x + 2, y, 3, 4, c);
-  r(ctx, x + w - 5, y, 3, 4, c);
-}
 
 function sofaLike(ctx: Ctx, w: number, top: number, dir: Dir | undefined) {
   const base = '#3f4350';

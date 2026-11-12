@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { TrackedStatus } from '@office-imp/shared';
 import { db, schema } from '../db';

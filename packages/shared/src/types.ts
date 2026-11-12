@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { Role } from './permissions';
 import type { Dir } from './map';
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { Client, type Room } from 'colyseus.js';
 import { DIRS, type AvView, type ChatMessage, type DeskItem, type MapObject, type PlayerState, type Status } from '@office-imp/shared';
 import { api, ApiError, errMsg } from '../lib/api';

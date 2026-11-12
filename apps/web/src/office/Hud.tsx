@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Track } from 'livekit-client';
@@ -378,7 +379,7 @@ export function MiniMap() {
   const show = useGame((s) => s.minimap && !s.simplified && !s.mini);
   const ref = useRef<HTMLCanvasElement>(null);
   const px = map ? Math.max(1, Math.min(4, Math.floor(232 / map.width))) : 2;
-  const base = useMemo(() => (map ? renderMini(map, px) : null), [mapRev, px]); // eslint-disable-line react-hooks/exhaustive-deps
+  const base = useMemo(() => (map ? renderMini(map, px) : null), [mapRev, px]);
 
   useEffect(() => {
     if (!show || !base) return;
@@ -542,7 +543,7 @@ function PeoplePanel() {
       .get<Member[]>(`/api/offices/${office.id}/members`)
       .then(setMembers)
       .catch((e) => console.warn(errMsg(e)));
-  }, [office?.id, isGuest]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [office?.id, isGuest]);
 
   const online = Object.values(players)
     .filter((p) => p.name.toLowerCase().includes(q.toLowerCase()))

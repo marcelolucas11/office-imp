@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   AVATAR_OPTIONS,
@@ -457,12 +458,12 @@ export function AvatarModal() {
       <div className="flex gap-5">
         <img src={avatarPortrait(cfg, 4)} alt="" className="pixel h-48 shrink-0 rounded-xl bg-panel-2 p-2" />
         <div className="space-y-3">
-          <Field label={t('avatar.skin', 'Pele')}>{swatches('skin', AVATAR_OPTIONS.skin)}</Field>
-          <Field label={t('avatar.hair', 'Cabelo')}>{names('hair', AVATAR_OPTIONS.hairStyles)}</Field>
-          <Field label={t('avatar.hairColor', 'Cor do cabelo')}>{swatches('hairColor', AVATAR_OPTIONS.hairColor)}</Field>
-          <Field label={t('avatar.shirt', 'Camisa')}>{swatches('shirt', AVATAR_OPTIONS.shirt)}</Field>
-          <Field label={t('avatar.pants', 'Calça')}>{swatches('pants', AVATAR_OPTIONS.pants)}</Field>
-          <Field label={t('avatar.accessory', 'Acessório')}>{names('accessory', AVATAR_OPTIONS.accessories)}</Field>
+          <Field group label={t('avatar.skin', 'Pele')}>{swatches('skin', AVATAR_OPTIONS.skin)}</Field>
+          <Field group label={t('avatar.hair', 'Cabelo')}>{names('hair', AVATAR_OPTIONS.hairStyles)}</Field>
+          <Field group label={t('avatar.hairColor', 'Cor do cabelo')}>{swatches('hairColor', AVATAR_OPTIONS.hairColor)}</Field>
+          <Field group label={t('avatar.shirt', 'Camisa')}>{swatches('shirt', AVATAR_OPTIONS.shirt)}</Field>
+          <Field group label={t('avatar.pants', 'Calça')}>{swatches('pants', AVATAR_OPTIONS.pants)}</Field>
+          <Field group label={t('avatar.accessory', 'Acessório')}>{names('accessory', AVATAR_OPTIONS.accessories)}</Field>
         </div>
       </div>
     </Modal>

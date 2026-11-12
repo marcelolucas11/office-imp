@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -57,13 +58,15 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
   );
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({ label, hint, children, group }: { label: string; hint?: string; children: ReactNode; group?: boolean }) {
+  // "group": vários controles sob um mesmo rótulo (não usa <label>, que ativaria só o primeiro)
+  const Tag = group ? 'div' : 'label';
   return (
-    <label className="block space-y-1">
-      <span className="text-xs font-medium text-stone-300">{label}</span>
+    <Tag className="block space-y-1">
+      <span className="block text-xs font-medium text-stone-300">{label}</span>
       {children}
-      {hint ? <span className="block text-[11px] text-muted">{hint}</span> : null}
-    </label>
+      {hint ? <span className="block text-[11px] leading-snug text-muted">{hint}</span> : null}
+    </Tag>
   );
 }
 

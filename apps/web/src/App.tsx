@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { isAdminRole } from '@office-imp/shared';
@@ -86,7 +87,7 @@ export function App() {
       }
     }
     desktop?.checkUpdates(me.autoUpdateOnOpen);
-  }, [me?.version, me?.autoUpdateOnOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [me?.version, me?.autoUpdateOnOpen]);
 
   if (loading) return <Loading />;
   return (

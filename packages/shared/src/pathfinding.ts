@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { Point } from './map';
 
 /** A* em grade de 4 direções. `grid[y*width+x] === 1` significa bloqueado. */

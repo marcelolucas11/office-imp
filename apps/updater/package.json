@@ -1,0 +1,12 @@
+{
+  "name": "@office-imp/updater",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "Serviço mínimo que atualiza as imagens Docker do office-imp (acionado pelo painel do Dono)",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

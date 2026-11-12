@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { create } from 'zustand';
 import type { AvView, ChatMessage, DeskInfo, DeskItem, MapObject, MusicChannel, OfficeMap, PlayerState } from '@office-imp/shared';
 

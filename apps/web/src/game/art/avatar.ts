@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { AVATAR_OPTIONS, DIRS, type AvatarConfig, type Dir } from '@office-imp/shared';
 import { makeCanvas, r, shade, type Ctx } from './tiles';
 

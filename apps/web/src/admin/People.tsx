@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { useState } from 'react';
 import { ROLE_LABEL, type Role } from '@office-imp/shared';
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Tabs } from '@office-imp/ui';
@@ -92,7 +93,7 @@ function UserForm({ user, onClose, onSaved }: { user: UserRow | null; onClose: (
             {isOwner ? <option value="OWNER">{ROLE_LABEL.OWNER}</option> : null}
           </Select>
         </Field>
-        <Field label={t('users.offices', 'Escritórios')} hint={role === 'OWNER' ? t('users.ownerAll', 'O Dono enxerga todos os escritórios.') : t('users.officesHint', 'Funcionários entram pela primeira vez com o link de convite do escritório.')}>
+        <Field group label={t('users.offices', 'Escritórios')} hint={role === 'OWNER' ? t('users.ownerAll', 'O Dono enxerga todos os escritórios.') : t('users.officesHint', 'Funcionários entram pela primeira vez com o link de convite do escritório.')}>
           <div className="flex flex-wrap gap-2">
             {offices.map((o) => (
               <label key={o.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm">
