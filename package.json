@@ -1,0 +1,31 @@
+{
+  "name": "office-imp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Escritório virtual open source com vídeo por proximidade (estilo Gather 1.0)",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "eslint . --max-warnings=0",
+    "e2e": "pnpm --filter @office-imp/e2e exec playwright test",
+    "i18n:extract": "node scripts/i18n-extract.mjs",
+    "spdx": "node scripts/spdx-headers.mjs",
+    "db:generate": "pnpm --filter @office-imp/server db:generate",
+    "setup:owner": "pnpm --filter @office-imp/server setup:owner"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.20.0",
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "electron", "@parcel/watcher", "msgpackr-extract"]
+  }
+}

@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.turbo
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+apps/desktop/release
+apps/server/data
+e2e/test-results
+e2e/playwright-report
+coverage
+.pglite
