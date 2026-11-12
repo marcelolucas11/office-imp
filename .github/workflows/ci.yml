@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  test:
+    name: Lint, tipos, testes e build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm spdx --check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Testes do atualizador
+        run: node --test apps/updater/
+      - name: Scripts de infraestrutura
+        run: |
+          bash -n infra/install.sh
+          shellcheck -S error infra/install.sh infra/scripts/*.sh infra/whisper/entrypoint.sh
+          docker compose -f infra/docker-compose.dev.yml config -q
+          cp infra/.env.example /tmp/.env && sed -i 's/^\(POSTGRES_PASSWORD\|APP_SECRET\|APP_ENCRYPTION_KEY\|LIVEKIT_API_KEY\|LIVEKIT_API_SECRET\|UPDATER_TOKEN\)=$/\1=valor-de-teste-para-validar-o-compose/' /tmp/.env
+          docker compose -f infra/docker-compose.prod.yml --env-file /tmp/.env --profile caddy config -q
+      - run: pnpm build
+
+  e2e:
+    name: Ponta a ponta (3 pessoas, áudio e vídeo reais)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @office-imp/server build && pnpm --filter @office-imp/web build
+      - name: LiveKit (servidor de áudio e vídeo)
+        run: |
+          docker compose -f infra/docker-compose.dev.yml up -d redis livekit
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:7880 >/dev/null 2>&1 && break; sleep 2; done
+          docker compose -f infra/docker-compose.dev.yml ps
+      - name: Navegador
+        run: pnpm --filter @office-imp/e2e exec playwright install --with-deps chromium
+      - name: Testes
+        run: pnpm e2e
+        env:
+          CI: "1"
+          E2E_LIVEKIT: "1"
+          LIVEKIT_URL: ws://127.0.0.1:7880
+      - name: Logs do LiveKit (se falhar)
+        if: failure()
+        run: docker compose -f infra/docker-compose.dev.yml logs --tail 200 livekit
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  docker:
+    name: Imagens Docker e instalação de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Imagem do app
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: office-imp:ci
+          build-args: APP_VERSION=0.0.0-ci
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,scope=app,mode=max
+      - name: Imagem do Whisper
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/whisper
+          load: true
+          tags: office-imp-whisper:ci
+          cache-from: type=gha,scope=whisper
+          cache-to: type=gha,scope=whisper,mode=max
+      - name: Imagem do atualizador
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/updater
+          load: true
+          tags: office-imp-updater:ci
+      - name: Instala como em produção (install.sh)
+        run: |
+          sudo env OFFICE_IMP_NONINTERACTIVE=1 DOMAIN=localhost RTC_DOMAIN=rtc.localhost PUBLIC_IP=127.0.0.1 \
+            PROXY_MODE=none PUBLIC_URL=http://127.0.0.1:3080 LIVEKIT_PUBLIC_URL=ws://127.0.0.1:7880 COOKIE_SECURE=false \
+            OFFICE_IMP_VERSION=ci OFFICE_IMP_IMAGE=office-imp WHISPER_IMAGE=office-imp-whisper UPDATER_IMAGE=office-imp-updater \
+            OFFICE_IMP_SKIP_PULL=1 WHISPER_MODEL=tiny SETUP_TOKEN=token-de-instalacao-do-ci \
+            bash infra/install.sh
+      - name: Teste de fumaça
+        run: bash infra/scripts/smoke.sh
+      - name: Logs (se falhar)
+        if: failure()
+        run: cd /opt/office-imp && sudo docker compose ps && sudo docker compose logs --tail 120

@@ -1,0 +1,154 @@
+name: Release
+
+# Publicar uma versão:  git tag v1.2.3 && git push origin v1.2.3
+# Gera as imagens Docker (GHCR), os instaladores de Mac e Windows e a GitHub Release.
+# Um push em um branch "release-test/**" faz tudo isso em modo de ensaio (sem publicar a release).
+on:
+  push:
+    tags: ["v*.*.*"]
+    branches: ["release-test/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(node -p "require('./apps/desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  images:
+    name: Imagens Docker
+    needs: meta
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - { name: office-imp, context: ., scope: app }
+          - { name: office-imp-whisper, context: infra/whisper, scope: whisper }
+          - { name: office-imp-updater, context: apps/updater, scope: updater }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ needs.meta.outputs.publish == 'true' }}
+          platforms: linux/amd64
+          build-args: APP_VERSION=${{ needs.meta.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ needs.meta.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.scope }}
+          cache-to: type=gha,scope=${{ matrix.scope }},mode=max
+
+  desktop:
+    name: Instalador (${{ matrix.label }})
+    needs: meta
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, label: "Mac universal: Apple Silicon e Intel", script: "dist:mac" }
+          - { os: windows-latest, label: "Windows", script: "dist:win" }
+    env:
+      APP_VERSION: ${{ needs.meta.outputs.version }}
+      # Assinatura da Apple (opcional): com estes secrets o app do Mac sai assinado, notarizado e com atualização automática.
+      CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @office-imp/desktop
+      - name: Assinatura da Apple disponível?
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if [ -n "$CSC_LINK" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "MAC_SIGNED=1" >> "$GITHUB_ENV"
+          else
+            echo "MAC_SIGNED=0" >> "$GITHUB_ENV"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "Sem certificado: o app do Mac sai com assinatura ad-hoc (abre com aviso do Gatekeeper)."
+          fi
+      - run: pnpm --filter @office-imp/desktop typecheck
+      - run: pnpm --filter @office-imp/desktop ${{ matrix.script }}
+      - name: Confere a assinatura (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          APP="$(ls -d apps/desktop/release/mac-universal/*.app | head -1)"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          lipo -archs "$APP/Contents/MacOS/"* | head -1
+          /usr/libexec/PlistBuddy -c "Print :NSMicrophoneUsageDescription" "$APP/Contents/Info.plist"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ runner.os }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+
+  release:
+    name: GitHub Release
+    needs: [meta, images, desktop]
+    if: needs.meta.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - run: ls -la artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: office-imp ${{ needs.meta.outputs.version }}
+          generate_release_notes: true
+          files: artifacts/*
+          body: |
+            ## Instaladores
+            - **Mac (Apple Silicon M1 em diante e Intel):** `office-imp-${{ needs.meta.outputs.version }}-mac-universal.dmg`
+            - **Windows:** `office-imp-${{ needs.meta.outputs.version }}-win-x64.exe`
+
+            O app já abre conectado ao servidor configurado em `apps/desktop/branding.json`.
+            No Mac, sem assinatura da Apple, o primeiro uso pede uma liberação manual: veja `docs/INSTALL.md`.
+
+            ## Servidor
+            No Painel do ADM → Atualizações → **Atualizar servidor**, ou na VPS: `cd /opt/office-imp && ./update.sh`
