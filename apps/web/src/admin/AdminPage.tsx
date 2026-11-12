@@ -19,14 +19,14 @@ const Updates = lazy(() => import('./System').then((m) => ({ default: m.Updates 
 export default function AdminPage() {
   const me = useSession((s) => s.me);
   const nav = [
-    { to: 'painel', icon: '📊', label: t('admin.navPanel', 'Painel em tempo real') },
-    { to: 'escritorios', icon: '🏢', label: t('admin.navOffices', 'Escritórios') },
-    { to: 'pessoas', icon: '👥', label: t('admin.navPeople', 'Pessoas') },
-    { to: 'convites', icon: '🔗', label: t('admin.navInvites', 'Links de convite') },
-    { to: 'notas', icon: '📝', label: t('admin.navNotes', 'Notas de reunião') },
-    { to: 'configuracoes', icon: '⚙️', label: t('admin.navSettings', 'Configurações') },
-    { to: 'atualizacoes', icon: '⬆️', label: t('admin.navUpdates', 'Atualizações') },
-    { to: 'auditoria', icon: '🧾', label: t('admin.navAudit', 'Auditoria') },
+    { to: '/admin/painel', icon: '📊', label: t('admin.navPanel', 'Painel em tempo real') },
+    { to: '/admin/escritorios', icon: '🏢', label: t('admin.navOffices', 'Escritórios') },
+    { to: '/admin/pessoas', icon: '👥', label: t('admin.navPeople', 'Pessoas') },
+    { to: '/admin/convites', icon: '🔗', label: t('admin.navInvites', 'Links de convite') },
+    { to: '/admin/notas', icon: '📝', label: t('admin.navNotes', 'Notas de reunião') },
+    { to: '/admin/configuracoes', icon: '⚙️', label: t('admin.navSettings', 'Configurações') },
+    { to: '/admin/atualizacoes', icon: '⬆️', label: t('admin.navUpdates', 'Atualizações') },
+    { to: '/admin/auditoria', icon: '🧾', label: t('admin.navAudit', 'Auditoria') },
   ];
   return (
     <div className="flex h-full" data-testid="admin">
@@ -62,7 +62,7 @@ export default function AdminPage() {
           }
         >
           <Routes>
-            <Route index element={<Navigate to="painel" replace />} />
+            <Route index element={<Navigate to="/admin/painel" replace />} />
             <Route path="painel" element={<Analytics />} />
             <Route path="escritorios" element={<Offices />} />
             <Route path="pessoas" element={<Users />} />
@@ -71,7 +71,7 @@ export default function AdminPage() {
             <Route path="configuracoes" element={<Settings />} />
             <Route path="atualizacoes" element={<Updates />} />
             <Route path="auditoria" element={<Audit />} />
-            <Route path="*" element={<Navigate to="painel" replace />} />
+            <Route path="*" element={<Navigate to="/admin/painel" replace />} />
           </Routes>
         </Suspense>
       </main>

@@ -425,6 +425,14 @@ test('painel do ADM mostra horas, status e calls de todos, inclusive do Dono', a
   expect(ana.status.BUSY + ana.status.DND).toBeGreaterThan(0);
   expect(ana.callMs).toBeGreaterThan(0); // esteve na sala de reunião com o Dono
   expect(ana.callWith.some((c: any) => c.name === 'Marcelo')).toBe(true);
+  // o menu lateral leva a cada página pelo endereço certo, sem empilhar caminhos
+  await owner.getByRole('link', { name: /Atualizações/ }).click();
+  await expect(owner).toHaveURL(/\/admin\/atualizacoes$/);
+  await expect(owner.getByTestId('server-version')).toBeVisible();
+  await owner.getByRole('link', { name: /Painel em tempo real/ }).click();
+  await expect(owner).toHaveURL(/\/admin\/painel$/);
+  await owner.goto('/admin/painel/qualquer/coisa');
+  await expect(owner).toHaveURL(/\/admin\/painel$/);
   // funcionário não acessa o painel
   const denied = await emp.request.get(`/api/offices/${officeId}/analytics`);
   expect(denied.status()).toBe(403);
