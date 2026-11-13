@@ -16,6 +16,7 @@
     "@office-imp/map-engine": "workspace:*",
     "@office-imp/shared": "workspace:*",
     "@office-imp/ui": "workspace:*",
+    "@sapphi-red/web-noise-suppressor": "^0.4.1",
     "colyseus.js": "^0.16.0",
     "i18next": "^24.2.2",
     "livekit-client": "2.23.0",

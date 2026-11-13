@@ -8,6 +8,7 @@ import { useGame } from '../game/store';
 import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { toast } from '../lib/session';
+import { MicMeter, NoiseReducer } from './micAudio';
 
 export interface PeerMedia {
   id: string;
@@ -28,6 +29,8 @@ interface Prefs {
   micId: string;
   camId: string;
   outId: string;
+  /** Redução de ruído forte (RNNoise) no microfone. */
+  noiseReduce: boolean;
 }
 
 interface AvState extends Prefs {
@@ -42,11 +45,13 @@ interface AvState extends Prefs {
   /** O navegador bloqueou o áudio até a pessoa clicar na página. */
   blocked: boolean;
   focus: string | null;
+  /** Você está falando agora (medido no seu próprio microfone). */
+  meSpeaking: boolean;
 }
 
 const PREF_KEY = 'oi-av';
 function loadPrefs(): Prefs {
-  const base: Prefs = { hearNearby: true, hd: false, micId: '', camId: '', outId: '' };
+  const base: Prefs = { hearNearby: true, hd: false, micId: '', camId: '', outId: '', noiseReduce: true };
   try {
     return { ...base, ...JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') };
   } catch {
@@ -54,12 +59,12 @@ function loadPrefs(): Prefs {
   }
 }
 
-export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room: 'none', mic: false, cam: false, screen: false, localCam: null, localScreen: null, peers: [], blocked: false, focus: null }));
+export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room: 'none', mic: false, cam: false, screen: false, localCam: null, localScreen: null, peers: [], blocked: false, focus: null, meSpeaking: false }));
 
 function savePrefs() {
   const s = useAv.getState();
   try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ hearNearby: s.hearNearby, hd: s.hd, micId: s.micId, camId: s.camId, outId: s.outId }));
+    localStorage.setItem(PREF_KEY, JSON.stringify({ hearNearby: s.hearNearby, hd: s.hd, micId: s.micId, camId: s.camId, outId: s.outId, noiseReduce: s.noiseReduce }));
   } catch {}
 }
 
@@ -78,6 +83,8 @@ class AvManager {
   private current = '';
   private view: AvView = NO_VIEW;
   private active = false;
+  private meter = new MicMeter((v) => useAv.setState({ meSpeaking: v }));
+  private nrBusy = false;
   private chain: Promise<void> = Promise.resolve();
   private want = { mic: false, cam: false };
   private offs: (() => void)[] = [];
@@ -216,6 +223,7 @@ class AvManager {
     const room = this.main;
     this.main = null;
     if (room) await room.disconnect().catch(() => {});
+    this.meter.watch(null);
     for (const el of this.audioEls) el.remove();
     this.audioEls.clear();
     useAv.setState({ focus: null });
@@ -262,7 +270,10 @@ class AvManager {
       .on(RoomEvent.ParticipantConnected, again)
       .on(RoomEvent.ParticipantDisconnected, again)
       .on(RoomEvent.ActiveSpeakersChanged, () => this.refresh())
-      .on(RoomEvent.LocalTrackPublished, () => this.pushLocal())
+      .on(RoomEvent.LocalTrackPublished, (pub) => {
+        if (pub.source === Track.Source.Microphone) void this.applyNoise();
+        this.pushLocal();
+      })
       .on(RoomEvent.LocalTrackUnpublished, () => this.pushLocal())
       .on(RoomEvent.AudioPlaybackStatusChanged, () => useAv.setState({ blocked: !room.canPlaybackAudio }))
       .on(RoomEvent.Disconnected, () => {
@@ -351,6 +362,8 @@ class AvManager {
     const scr = lp?.getTrackPublication(Track.Source.ScreenShare);
     const st = { mic: Boolean(lp?.isMicrophoneEnabled), cam: Boolean(lp?.isCameraEnabled), screen: Boolean(lp?.isScreenShareEnabled) };
     useAv.setState({ ...st, localCam: cam?.track && !cam.isMuted ? cam.track : null, localScreen: scr?.track ?? null });
+    const mic = lp?.getTrackPublication(Track.Source.Microphone);
+    this.meter.watch(st.mic && mic?.track && !mic.isMuted ? mic.track.mediaStreamTrack : null);
     const key = JSON.stringify(st);
     if (key !== this.lastMedia) {
       this.lastMedia = key;
@@ -413,6 +426,39 @@ class AvManager {
     useAv.setState(kind === 'audioinput' ? { micId: id } : kind === 'videoinput' ? { camId: id } : { outId: id });
     savePrefs();
     await this.main?.switchActiveDevice(kind, id).catch(() => {});
+    this.pushLocal();
+  }
+
+  /** Liga ou desliga a redução de ruído forte na faixa do microfone já publicada. */
+  private async applyNoise() {
+    if (this.nrBusy) return;
+    const track = this.main?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
+    if (!track) return;
+    const want = useAv.getState().noiseReduce;
+    const has = track.getProcessor()?.name === 'oi-rnnoise';
+    if (want === has) return;
+    this.nrBusy = true;
+    let failed = false;
+    try {
+      if (want) await track.setProcessor(new NoiseReducer());
+      else await track.stopProcessor();
+    } catch (e) {
+      console.warn('[av] redução de ruído', e);
+      failed = true;
+      await track.stopProcessor().catch(() => {});
+      if (want) toast(t('av.noiseError', 'Não foi possível ligar a redução de ruído neste navegador. O microfone segue com o filtro padrão.'), 'info');
+    } finally {
+      this.nrBusy = false;
+    }
+    this.pushLocal();
+    // a preferência pode ter mudado enquanto aplicava
+    if (!failed && useAv.getState().noiseReduce !== (track.getProcessor()?.name === 'oi-rnnoise')) void this.applyNoise();
+  }
+
+  async setNoiseReduce(on: boolean) {
+    useAv.setState({ noiseReduce: on });
+    savePrefs();
+    await this.applyNoise();
   }
 
   async setPrefs(p: Partial<Pick<Prefs, 'hearNearby' | 'hd'>>) {

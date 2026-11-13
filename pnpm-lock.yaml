@@ -152,6 +152,9 @@ importers:
       '@office-imp/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@sapphi-red/web-noise-suppressor':
+        specifier: ^0.4.1
+        version: 0.4.1
       colyseus.js:
         specifier: ^0.16.0
         version: 0.16.22
@@ -1869,6 +1872,9 @@ packages:
     resolution: {integrity: sha512-ee+c14ggUiM7lg4PtCjSBYU9O9dHp4FFespRnd5yj7SilUBJCL3x3aHlB+sIqbGjcPo3pEyODASnfKJuZ26YBw==}
     cpu: [x64]
     os: [win32]
+
+  '@sapphi-red/web-noise-suppressor@0.4.1':
+    resolution: {integrity: sha512-hy2GnF079+zi4n9BZUf+GGIQ1IofApAk6rgGMyMQ3soHfz/GKu1pcCsmePyIHVvUuv1LrFudw9BmmBqoOKay5w==}
 
   '@sindresorhus/is@4.6.0':
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
@@ -6817,6 +6823,8 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.68.2':
     optional: true
+
+  '@sapphi-red/web-noise-suppressor@0.4.1': {}
 
   '@sindresorhus/is@4.6.0': {}
 

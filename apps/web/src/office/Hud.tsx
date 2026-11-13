@@ -70,7 +70,7 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
 
 /** Vídeos de quem está conectado com você. No modo simplificado ocupa a tela inteira. */
 export function VideoBar() {
-  const { peers, localCam, localScreen, focus, cam, mic, conn } = useAv();
+  const { peers, localCam, localScreen, focus, cam, mic, conn, meSpeaking } = useAv();
   const simplified = useGame((s) => s.simplified || (s.mini && !s.miniExt));
   const mini = useGame((s) => s.mini && !s.miniExt);
   const players = useGame((s) => s.players);
@@ -89,7 +89,7 @@ export function VideoBar() {
   }
   const showSelf = cam || simplified || peers.length > 0;
   if (localScreen) tiles.unshift(<Tile key="me:screen" id="me" name={t('video.yourScreen', 'Sua tela')} track={localScreen} kind="screen" big={simplified} />);
-  if (showSelf && me) tiles.unshift(<Tile key="me:cam" id="me" name={t('video.you', 'Você')} track={localCam} kind="cam" mic={mic} mirror big={simplified} avatar={portraits[meId]} />);
+  if (showSelf && me) tiles.unshift(<Tile key="me:cam" id="me" name={t('video.you', 'Você')} track={localCam} kind="cam" mic={mic} speaking={mic && meSpeaking} mirror big={simplified} avatar={portraits[meId]} />);
 
   const focused = focus ? findFocus(focus, peers, localCam, localScreen) : null;
 

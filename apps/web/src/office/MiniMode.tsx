@@ -124,7 +124,7 @@ export function MiniMode() {
 }
 
 function MiniContent({ target }: { target: Target }) {
-  const { peers, localCam, mic, cam } = useAv();
+  const { peers, localCam, mic, cam, meSpeaking } = useAv();
   const players = useGame((s) => s.players);
   const meId = useGame((s) => s.meId);
   const me = players[meId];
@@ -162,7 +162,7 @@ function MiniContent({ target }: { target: Target }) {
   const dnd = me.status === 'DND';
 
   const tiles: { key: string; name: string; track: Track | null; mic?: boolean; speaking?: boolean; mirror?: boolean; avatar?: string; screen?: boolean }[] = [];
-  tiles.push({ key: 'me', name: t('video.you', 'Você'), track: cam ? localCam : null, mic, mirror: true, avatar: portraits[meId] });
+  tiles.push({ key: 'me', name: t('video.you', 'Você'), track: cam ? localCam : null, mic, speaking: mic && meSpeaking, mirror: true, avatar: portraits[meId] });
   for (const p of peers) {
     tiles.push({ key: `${p.id}:cam`, name: p.name, track: p.cam, mic: p.mic, speaking: p.speaking, avatar: portraits[p.id] });
     if (p.screen) tiles.push({ key: `${p.id}:screen`, name: p.name, track: p.screen, screen: true });

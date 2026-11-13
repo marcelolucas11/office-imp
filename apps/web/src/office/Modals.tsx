@@ -562,6 +562,7 @@ export function SettingsModal() {
     <Modal title={t('settings.title', 'Áudio, vídeo e preferências')} onClose={close}>
       <div className="space-y-4">
         {dev(t('settings.mic', 'Microfone'), mics, s.micId, 'audioinput')}
+        <Toggle checked={s.noiseReduce} onChange={(v) => void av.setNoiseReduce(v)} label={t('settings.noise', 'Reduzir ruído (tira teclado, ventilador e barulho de fundo)')} />
         {dev(t('settings.cam', 'Câmera'), cams, s.camId, 'videoinput')}
         {dev(t('settings.out', 'Saída de som'), outs, s.outId, 'audiooutput')}
         <Toggle checked={s.hd} onChange={(v) => void av.setPrefs({ hd: v })} label={t('settings.hd', 'Vídeo em HD (usa mais internet)')} />
