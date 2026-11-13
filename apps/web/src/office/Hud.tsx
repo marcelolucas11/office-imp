@@ -303,7 +303,7 @@ export function BottomBar() {
           <Emo e="👁" size={20} />
         </IconButton>
         <IconButton label={t('bar.more', 'Mais opções')} active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? null : 'more')}>
-          ⋯
+          <Emo e="⋯" size={20} />
         </IconButton>
         {menu === 'more' ? (
           <div className="oi-pop absolute bottom-14 right-0 w-64 rounded-2xl border border-line bg-panel p-2 text-sm shadow-2xl" onClick={() => setMenu(null)}>
@@ -373,7 +373,7 @@ export function BottomBar() {
 
 function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-panel-3">
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-stone-100 hover:bg-panel-3">
       {children}
     </button>
   );

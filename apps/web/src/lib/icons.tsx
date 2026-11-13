@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Ícones 2D de traço branco sobre fundo preto, no lugar dos emojis 3D do sistema.
+// Ícones 2D de traço (linhas, sem fundo), no lugar dos emojis 3D do sistema — mesmo estilo
+// dos ícones de microfone, câmera e tela: herdam a cor do texto (branco; escuro no botão ativo).
 // Desenhos da biblioteca Lucide (licença ISC, ver assets/LICENSES.md).
 import { Fragment, type ReactNode } from 'react';
 import {
@@ -13,6 +14,7 @@ import {
   ChartBar,
   CircleArrowUp,
   CircleDot,
+  Ellipsis,
   Coffee,
   DoorOpen,
   Eraser,
@@ -134,6 +136,7 @@ const BY_EMOJI: Record<string, IconNode> = {
   '✏': Pencil,
   '🔴': CircleDot,
   '⬆': CircleArrowUp,
+  '⋯': Ellipsis,
 };
 
 /** O aceno é a mão inclinada (o "✋" de levantar a mão fica reta). */
@@ -152,15 +155,15 @@ export function hasIcon(emoji: string): boolean {
 const KEYS = Object.keys(BY_EMOJI).sort((a, b) => b.length - a.length);
 const SPLIT = new RegExp(`(${KEYS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})[\uFE0E\uFE0F]?`, 'gu');
 
-function Svg({ node, size, tilt }: { node: IconNode; size: number; tilt?: number }) {
+function Svg({ node, size, tilt, stroke }: { node: IconNode; size: number; tilt?: number; stroke: number }) {
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#ffffff"
-      strokeWidth={2}
+      stroke="currentColor"
+      strokeWidth={stroke}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -176,22 +179,23 @@ function Svg({ node, size, tilt }: { node: IconNode; size: number; tilt?: number
 }
 
 /**
- * Um emoji como ícone 2D: traço branco, fundo preto arredondado.
- * `size` é o tamanho total da caixa em px. Emojis sem desenho caem para o próprio caractere.
+ * Um emoji como ícone 2D de linhas (sem fundo), no mesmo traço dos botões de microfone e câmera.
+ * `size` é o tamanho do ícone em px. Emojis sem desenho caem para o próprio caractere.
  */
 export function Emo({ e, size = 18, title, className }: { e: string; size?: number; title?: string; className?: string }) {
   const node = iconFor(e);
   if (!node) return <span className={className}>{e}</span>;
-  const inner = Math.round(size * 0.68);
+  // traço de 2 px nos tamanhos de botão; mais fino nos ícones grandes para manter o detalhe
+  const stroke = size >= 40 ? 1.25 : size >= 26 ? 1.5 : size <= 14 ? 2.25 : 2;
   return (
     <span
       role="img"
       aria-label={title ?? e}
       title={title}
-      className={`oi-emo inline-grid shrink-0 place-items-center rounded-[28%] bg-black align-[-0.2em] ring-1 ring-white/15 ${className ?? ''}`}
+      className={`oi-emo inline-grid shrink-0 place-items-center align-[-0.2em] ${className ?? ''}`}
       style={{ width: size, height: size }}
     >
-      <Svg node={node} size={inner} tilt={TILT[strip(e)]} />
+      <Svg node={node} size={size} tilt={TILT[strip(e)]} stroke={stroke} />
     </span>
   );
 }
@@ -208,7 +212,7 @@ export function EmoText({ text, size = 16 }: { text: string; size?: number }): R
   );
 }
 
-/** Ícone desenhado num canvas (para o mapa do Phaser): caixa preta arredondada com traço branco. */
+/** Ícone desenhado num canvas (para o mapa do Phaser): só as linhas brancas, com um halo escuro discreto para ler sobre o piso. */
 export function emojiCanvas(emoji: string, px: number): HTMLCanvasElement | null {
   const node = iconFor(emoji);
   if (!node) return null;
@@ -216,15 +220,7 @@ export function emojiCanvas(emoji: string, px: number): HTMLCanvasElement | null
   c.width = px;
   c.height = px;
   const ctx = c.getContext('2d')!;
-  const rad = px * 0.28;
-  ctx.fillStyle = '#000000';
-  ctx.beginPath();
-  ctx.roundRect(0.5, 0.5, px - 1, px - 1, rad);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.lineWidth = Math.max(1, px / 32);
-  ctx.stroke();
-  const inner = px * 0.66;
+  const inner = px * 0.86;
   const s = inner / 24;
   ctx.save();
   ctx.translate(px / 2, px / 2);
@@ -232,10 +228,9 @@ export function emojiCanvas(emoji: string, px: number): HTMLCanvasElement | null
   if (tilt) ctx.rotate((tilt * Math.PI) / 180);
   ctx.translate(-inner / 2, -inner / 2);
   ctx.scale(s, s);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  const paths: Path2D[] = [];
   for (const [tag, a] of node) {
     const n = (k: string) => Number((a as Record<string, unknown>)[k] ?? 0);
     const p = new Path2D();
@@ -254,8 +249,14 @@ export function emojiCanvas(emoji: string, px: number): HTMLCanvasElement | null
       for (let i = 0; i + 1 < pts.length; i += 2) (i === 0 ? p.moveTo : p.lineTo).call(p, pts[i], pts[i + 1]);
       if (tag === 'polygon') p.closePath();
     }
-    ctx.stroke(p);
+    paths.push(p);
   }
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = 4;
+  for (const p of paths) ctx.stroke(p);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  for (const p of paths) ctx.stroke(p);
   ctx.restore();
   return c;
 }

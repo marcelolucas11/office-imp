@@ -17,5 +17,6 @@ export default defineConfig({
       '/rt': { target: api, ws: true, changeOrigin: false },
     },
   },
-  build: { target: 'es2022', chunkSizeWarningLimit: 4000, sourcemap: false },
+  // os worklets de áudio saem como arquivo (a CSP não aceita script em data: URL)
+  build: { target: 'es2022', chunkSizeWarningLimit: 4000, sourcemap: false, assetsInlineLimit: (file) => (/worklet/i.test(file) ? false : undefined) },
 });

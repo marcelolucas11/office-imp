@@ -8,7 +8,7 @@ import { useGame } from '../game/store';
 import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { toast } from '../lib/session';
-import { MicMeter, NoiseReducer } from './micAudio';
+import { AudioNotStarted, MicMeter, NoiseReducer, type MicFilter } from './micAudio';
 
 export interface PeerMedia {
   id: string;
@@ -29,8 +29,10 @@ interface Prefs {
   micId: string;
   camId: string;
   outId: string;
-  /** Redução de ruído forte (RNNoise) no microfone. */
+  /** Filtro de voz forte no microfone (corte de graves + rede neural + portão de voz). */
   noiseReduce: boolean;
+  /** Quanto o portão de voz corta o que não está perto do microfone. */
+  micFilter: MicFilter;
 }
 
 interface AvState extends Prefs {
@@ -49,9 +51,21 @@ interface AvState extends Prefs {
   meSpeaking: boolean;
 }
 
+/** Restrições do microfone. Com o filtro forte: sem ganho automático e mono. */
+function micConstraints(st: Pick<Prefs, 'micId' | 'noiseReduce'>) {
+  return {
+    deviceId: st.micId || undefined,
+    echoCancellation: true, // tira o som que sai das suas caixas (as vozes da call e o que o app toca)
+    noiseSuppression: true,
+    autoGainControl: !st.noiseReduce,
+    voiceIsolation: st.noiseReduce, // isolamento de voz do sistema, onde o navegador suporta
+    channelCount: 1,
+  };
+}
+
 const PREF_KEY = 'oi-av';
 function loadPrefs(): Prefs {
-  const base: Prefs = { hearNearby: true, hd: false, micId: '', camId: '', outId: '', noiseReduce: true };
+  const base: Prefs = { hearNearby: true, hd: false, micId: '', camId: '', outId: '', noiseReduce: true, micFilter: 'normal' };
   try {
     return { ...base, ...JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') };
   } catch {
@@ -64,7 +78,7 @@ export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room:
 function savePrefs() {
   const s = useAv.getState();
   try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ hearNearby: s.hearNearby, hd: s.hd, micId: s.micId, camId: s.camId, outId: s.outId, noiseReduce: s.noiseReduce }));
+    localStorage.setItem(PREF_KEY, JSON.stringify({ hearNearby: s.hearNearby, hd: s.hd, micId: s.micId, camId: s.camId, outId: s.outId, noiseReduce: s.noiseReduce, micFilter: s.micFilter }));
   } catch {}
 }
 
@@ -223,7 +237,7 @@ class AvManager {
     return new Room({
       adaptiveStream: true,
       dynacast: true,
-      audioCaptureDefaults: { deviceId: st.micId || undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audioCaptureDefaults: micConstraints(st),
       videoCaptureDefaults: { deviceId: st.camId || undefined, resolution: (st.hd ? VideoPresets.h720 : VideoPresets.h360).resolution },
       ...(st.outId ? { audioOutput: { deviceId: st.outId } } : {}),
     });
@@ -495,24 +509,29 @@ class AvManager {
     this.pushLocal();
   }
 
-  /** Liga ou desliga a redução de ruído forte na faixa do microfone já publicada. */
+  /** Liga ou desliga o filtro de voz forte na faixa do microfone já publicada. */
   private async applyNoise() {
     if (this.nrBusy) return;
     const track = this.main?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
     if (!track) return;
-    const want = useAv.getState().noiseReduce;
+    const st = useAv.getState();
+    const want = st.noiseReduce;
     const has = track.getProcessor()?.name === 'oi-rnnoise';
     if (want === has) return;
     this.nrBusy = true;
     let failed = false;
     try {
-      if (want) await track.setProcessor(new NoiseReducer());
+      // com o filtro forte, o ganho automático do navegador fica desligado: ele aumentava
+      // o microfone quando a pessoa se afastava e trazia o barulho distante junto
+      await track.restartTrack(micConstraints(st)).catch((e) => console.warn('[av] restartTrack', e));
+      if (want) await track.setProcessor(new NoiseReducer(st.micFilter));
       else await track.stopProcessor();
     } catch (e) {
       console.warn('[av] redução de ruído', e);
       failed = true;
       await track.stopProcessor().catch(() => {});
-      if (want) toast(t('av.noiseError', 'Não foi possível ligar a redução de ruído neste navegador. O microfone segue com o filtro padrão.'), 'info');
+      if (want && e instanceof AudioNotStarted) this.retryNoiseOnGesture();
+      else if (want) toast(t('av.noiseError', 'Não foi possível ligar a redução de ruído neste navegador. O microfone segue com o filtro padrão.'), 'info');
     } finally {
       this.nrBusy = false;
     }
@@ -525,6 +544,29 @@ class AvManager {
     useAv.setState({ noiseReduce: on });
     savePrefs();
     await this.applyNoise();
+  }
+
+  /** Intensidade do filtro: muda na hora, sem reiniciar o microfone. */
+  setMicFilter(f: MicFilter) {
+    useAv.setState({ micFilter: f });
+    savePrefs();
+    const proc = this.main?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack?.getProcessor();
+    if (proc instanceof NoiseReducer) proc.setFilter(f);
+  }
+
+  /** O navegador só deixa o áudio iniciar depois de um clique/tecla: tenta de novo nesse momento. */
+  private gestureRetry = false;
+  private retryNoiseOnGesture() {
+    if (this.gestureRetry) return;
+    this.gestureRetry = true;
+    const go = () => {
+      window.removeEventListener('pointerdown', go, true);
+      window.removeEventListener('keydown', go, true);
+      this.gestureRetry = false;
+      void this.applyNoise();
+    };
+    window.addEventListener('pointerdown', go, true);
+    window.addEventListener('keydown', go, true);
   }
 
   async setPrefs(p: Partial<Pick<Prefs, 'hearNearby' | 'hd'>>) {
