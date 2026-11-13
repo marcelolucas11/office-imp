@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // App desktop do office-imp: uma janela Chromium que abre o escritório hospedado no servidor
 // (a VPS), com atalhos de status, Modo Mini sempre no topo, bandeja, notificações e atualização.
-import { BrowserWindow, Menu, Notification, Tray, app, desktopCapturer, dialog, ipcMain, nativeImage, net, screen, session, shell, systemPreferences, type IpcMainEvent, type MenuItemConstructorOptions } from 'electron';
+import { BrowserWindow, Menu, Notification, Tray, app, desktopCapturer, dialog, ipcMain, screen, session, shell, systemPreferences, type IpcMainEvent, type MenuItemConstructorOptions } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import fs from 'node:fs';
 import path from 'node:path';
 import branding from '../branding.json';
 import { MacUpdater } from './mac-updater';
+import { trayIcon } from './tray-icon';
 
 declare const __MAC_SIGNED__: boolean;
 declare const __SERVER_URL__: string;
@@ -30,7 +31,16 @@ let status: Status = 'AVAILABLE';
 let mini = false;
 let normalBounds: Electron.Rectangle | null = null;
 let quitting = false;
-const cfg = { serverUrl: DEFAULT_URL };
+/** Nome do escritório aberto (null = fora de um escritório). Informado pela página. */
+let inOffice: string | null = null;
+/** A página sabe abrir o Modo Mini como janela flutuante transparente (cliente web novo). */
+let pageMiniWindow = false;
+let miniWin: BrowserWindow | null = null;
+let trayWin: BrowserWindow | null = null;
+let trayHiddenAt = 0;
+let autoMiniTimer: NodeJS.Timeout | undefined;
+const MINI_FRAME = 'oi-mini';
+const cfg: { serverUrl: string; autoMini: boolean; miniCorner: { right: number; bottom: number } | null } = { serverUrl: DEFAULT_URL, autoMini: true, miniCorner: null };
 
 // ---------- configuração local (endereço do servidor) ----------
 const configFile = () => path.join(app.getPath('userData'), 'config.json');
@@ -38,6 +48,8 @@ function loadConfig() {
   try {
     const saved = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
     if (typeof saved.serverUrl === 'string' && saved.serverUrl) cfg.serverUrl = saved.serverUrl;
+    if (typeof saved.autoMini === 'boolean') cfg.autoMini = saved.autoMini;
+    if (saved.miniCorner && Number.isFinite(saved.miniCorner.right) && Number.isFinite(saved.miniCorner.bottom)) cfg.miniCorner = { right: saved.miniCorner.right, bottom: saved.miniCorner.bottom };
   } catch {}
 }
 function saveConfig() {
@@ -89,9 +101,33 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
   });
   win.once('ready-to-show', () => win?.show());
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    // Modo Mini: a página abre uma janela em branco (mesma origem) e desenha as câmeras nela
+    if (frameName === MINI_FRAME && (url === 'about:blank' || url === '') && isOurs(win?.webContents.getURL() ?? '')) {
+      return { action: 'allow', overrideBrowserWindowOptions: miniWindowOptions() };
+    }
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
+  });
+  win.webContents.on('did-create-window', (child, details) => {
+    if (details.frameName === MINI_FRAME) setupMiniWindow(child);
+    else child.close();
+  });
+  // Modo Mini automático: ao minimizar ou ir para outro app, só as câmeras ficam flutuando
+  win.on('blur', scheduleAutoMini);
+  win.on('focus', () => clearTimeout(autoMiniTimer));
+  win.on('minimize', () => {
+    if (autoMiniReady()) setMini(true, true);
+  });
+  win.webContents.on('did-start-navigation', (_e, _url, _inPlace, isMainFrame) => {
+    // página nova (recarga, troca de servidor): ela avisa de novo se está num escritório
+    if (isMainFrame && !_inPlace) {
+      if (miniWin && !miniWin.isDestroyed()) miniWin.close(); // o "closed" sai do Modo Mini e mostra a janela
+      else if (mini) setMini(false, false);
+      inOffice = null;
+      pageMiniWindow = false;
+      buildMenu();
+    }
   });
   win.webContents.on('will-navigate', (e, url) => {
     if (isOurs(url) || url.startsWith('file:')) return;
@@ -105,7 +141,8 @@ function createWindow() {
     // no Mac, fechar a janela mantém o app (e a conversa) rodando; Cmd+Q encerra
     if (!quitting && isMac) {
       e.preventDefault();
-      win?.hide();
+      if (autoMiniReady()) setMini(true, true);
+      else win?.hide();
     }
   });
   win.on('closed', () => {
@@ -122,6 +159,7 @@ function showLocal(reason: 'offline' | 'change', detail = '') {
 }
 function showWindow() {
   if (!win) return createWindow();
+  if (mini && miniWin) return setMini(false, true);
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
@@ -191,26 +229,8 @@ function pickSource(sources: Electron.DesktopCapturerSource[]): Promise<Electron
 }
 
 // ---------- status, menu e bandeja ----------
-function dot([r, g, b]: [number, number, number]): Electron.NativeImage {
-  const size = 32;
-  const buf = Buffer.alloc(size * size * 4);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const d = Math.hypot(x - 15.5, y - 15.5);
-      const a = d <= 10 ? 255 : d <= 11.5 ? Math.round(255 * (11.5 - d)) : 0;
-      const i = (y * size + x) * 4;
-      // BGRA pré-multiplicado
-      buf[i] = Math.round((b * a) / 255);
-      buf[i + 1] = Math.round((g * a) / 255);
-      buf[i + 2] = Math.round((r * a) / 255);
-      buf[i + 3] = a;
-    }
-  }
-  return nativeImage.createFromBitmap(buf, { width: size, height: size, scaleFactor: 2 });
-}
-
 function sendStatus(s: Status) {
-  showWindow();
+  // não traz a janela para frente: dá para trocar o status pela barra de menus sem sair do que está fazendo
   win?.webContents.send('status-shortcut', s);
 }
 
@@ -238,7 +258,8 @@ function buildMenu() {
     {
       label: 'Exibir',
       submenu: [
-        { label: 'Modo Mini', type: 'checkbox', checked: mini, accelerator: 'CmdOrCtrl+Shift+M', click: () => setMini(!mini, true) },
+        { label: 'Modo Mini', type: 'checkbox', checked: mini, enabled: Boolean(inOffice) || mini, accelerator: 'CmdOrCtrl+Shift+M', click: () => setMini(!mini, true) },
+        { label: 'Modo Mini automático', type: 'checkbox', checked: cfg.autoMini, click: () => setAutoMini(!cfg.autoMini) },
         { type: 'separator' },
         { role: 'reload', label: 'Recarregar' },
         { role: 'togglefullscreen', label: 'Tela cheia' },
@@ -262,31 +283,111 @@ function buildMenu() {
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
-  if (tray) {
-    tray.setImage(dot(STATUS_RGB[status]));
-    tray.setToolTip(`${branding.productName} — ${STATUS_LABEL[status]}`);
-    tray.setContextMenu(
-      Menu.buildFromTemplate([
-        ...statusItems().map((i) => ({ ...i, accelerator: undefined })),
-        { type: 'separator' },
-        { label: 'Abrir', click: showWindow },
-        {
-          label: 'Sair',
-          click: () => {
-            quitting = true;
-            app.quit();
-          },
-        },
-      ]),
-    );
+  refreshTray();
+}
+
+// ---------- Modo Mini ----------
+// Cliente web novo: a página abre uma janela própria, sem moldura e transparente, e desenha nela só as
+// câmeras (React portal na mesma página, então a conexão de áudio e vídeo é a mesma). A janela principal
+// fica escondida até a pessoa clicar numa câmera.
+// Cliente web antigo: a própria janela encolhe e fica sempre no topo (comportamento da 1.0).
+const MINI_MARGIN = 20;
+
+function miniWindowOptions(): Electron.BrowserWindowConstructorOptions {
+  return {
+    width: 260,
+    height: 210,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    title: `${branding.productName} — Modo Mini`,
+    ...(isMac ? { type: 'panel' as const } : {}),
+    webPreferences: { backgroundThrottling: false },
+  };
+}
+
+function miniArea(): Electron.Rectangle {
+  const ref = win ? (win.isVisible() ? win.getBounds() : normalBounds ?? win.getBounds()) : undefined;
+  return (ref ? screen.getDisplayMatching(ref) : screen.getPrimaryDisplay()).workArea;
+}
+
+/** Canto inferior direito da janela mini (ela cresce para cima e para a esquerda). */
+function miniCorner(): { right: number; bottom: number } {
+  const c = cfg.miniCorner;
+  if (c && screen.getAllDisplays().some((d) => c.right > d.workArea.x + 120 && c.right <= d.workArea.x + d.workArea.width + 1 && c.bottom > d.workArea.y + 120 && c.bottom <= d.workArea.y + d.workArea.height + 1)) return c;
+  const a = miniArea();
+  return { right: a.x + a.width - MINI_MARGIN, bottom: a.y + a.height - MINI_MARGIN };
+}
+
+function placeMini(width: number, height: number) {
+  if (!miniWin || miniWin.isDestroyed()) return;
+  const { right, bottom } = miniCorner();
+  const area = screen.getDisplayNearestPoint({ x: right - 1, y: bottom - 1 }).workArea;
+  const w = Math.max(120, Math.min(Math.round(width), 520));
+  const h = Math.max(60, Math.min(Math.round(height), area.height - 40));
+  const x = Math.max(area.x, right - w);
+  const y = Math.max(area.y, bottom - h);
+  miniWin.setBounds({ x, y, width: w, height: h });
+}
+
+function setupMiniWindow(child: BrowserWindow) {
+  if (miniWin && !miniWin.isDestroyed() && miniWin !== child) miniWin.close();
+  miniWin = child;
+  child.setAlwaysOnTop(true, 'floating');
+  child.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  const [w, h] = child.getSize();
+  placeMini(w, h);
+  child.showInactive();
+  if (win) {
+    if (win.isVisible() && !win.isMinimized()) normalBounds = win.getBounds();
+    win.hide();
   }
+  let saveTimer: NodeJS.Timeout | undefined;
+  child.on('moved', () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (child.isDestroyed()) return;
+      const b = child.getBounds();
+      cfg.miniCorner = { right: b.x + b.width, bottom: b.y + b.height };
+      saveConfig();
+    }, 300);
+  });
+  child.on('closed', () => {
+    if (miniWin === child) miniWin = null;
+    if (mini) {
+      mini = false;
+      win?.webContents.send('mini-changed', false);
+      buildMenu();
+    }
+    showWindow();
+  });
+  mini = true;
+  buildMenu();
 }
 
 function setMini(on: boolean, notifyPage: boolean) {
   if (!win || mini === on) return;
+  if (on && !inOffice && pageMiniWindow) return;
   mini = on;
-  if (on) {
+  if (pageMiniWindow) {
+    if (on) {
+      if (win.isFullScreen()) win.setFullScreen(false);
+    } else if (miniWin && !miniWin.isDestroyed()) {
+      miniWin.close(); // o "closed" mostra a janela principal de novo
+    } else {
+      showWindow();
+    }
+  } else if (on) {
     if (win.isFullScreen()) win.setFullScreen(false);
+    if (win.isMinimized()) win.restore();
     normalBounds = win.getBounds();
     const area = screen.getDisplayMatching(normalBounds).workArea;
     win.setMinimumSize(320, 300);
@@ -303,11 +404,172 @@ function setMini(on: boolean, notifyPage: boolean) {
   buildMenu();
 }
 
+function setAutoMini(on: boolean) {
+  cfg.autoMini = on;
+  saveConfig();
+  buildMenu();
+}
+
+/** Dá para entrar no Modo Mini automático agora? */
+function autoMiniReady() {
+  return Boolean(win && !mini && cfg.autoMini && inOffice && pageMiniWindow && !win.isFullScreen());
+}
+
+function scheduleAutoMini() {
+  clearTimeout(autoMiniTimer);
+  autoMiniTimer = setTimeout(() => {
+    if (!autoMiniReady() || !win?.isVisible() || win.isMinimized()) return;
+    // o foco foi para outra janela do próprio app (escolher tela, caixinha da barra de menus): não entra
+    if (BrowserWindow.getFocusedWindow()) return;
+    setMini(true, true);
+  }, 700);
+}
+
+// ---------- ícone e caixinha na barra de menus / bandeja ----------
+function trayState() {
+  return { office: inOffice, status, autoMini: cfg.autoMini, mini, version: app.getVersion(), productName: branding.productName, platform: process.platform };
+}
+
+function refreshTray() {
+  if (tray) {
+    tray.setImage(trayIcon(inOffice ? STATUS_RGB[status] : null));
+    tray.setToolTip(inOffice ? `${branding.productName} — ${inOffice} · ${STATUS_LABEL[status]}` : branding.productName);
+  }
+  if (trayWin && !trayWin.isDestroyed()) trayWin.webContents.send('tray:state', trayState());
+}
+
+const TRAY_W = 320;
+function createTrayWindow() {
+  trayWin = new BrowserWindow({
+    width: TRAY_W,
+    height: 420,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    title: branding.productName,
+    ...(isMac ? { type: 'panel' as const } : {}),
+    webPreferences: { preload: path.join(__dirname, 'tray-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  trayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  trayWin.on('blur', hideTrayWindow);
+  trayWin.on('closed', () => {
+    trayWin = null;
+  });
+  void trayWin.loadFile(path.join(__dirname, '../assets/tray.html'));
+}
+
+function hideTrayWindow() {
+  if (!trayWin || trayWin.isDestroyed() || !trayWin.isVisible()) return;
+  trayWin.hide();
+  trayHiddenAt = Date.now();
+}
+
+function placeTrayWindow() {
+  if (!tray || !trayWin) return;
+  const t = tray.getBounds();
+  const [w, h] = trayWin.getSize();
+  const display = screen.getDisplayNearestPoint({ x: Math.round(t.x + t.width / 2), y: Math.round(t.y + t.height / 2) });
+  const a = display.workArea;
+  let x = Math.round(t.x + t.width / 2 - w / 2);
+  // barra no topo (Mac) → abre para baixo; barra de tarefas embaixo (Windows) → abre para cima
+  let y = t.y < display.bounds.y + display.bounds.height / 2 ? Math.round(t.y + t.height + 2) : Math.round(t.y - h - 2);
+  if (!t.width) {
+    // alguns ambientes não informam a posição do ícone: canto da área de trabalho
+    x = a.x + a.width - w - 8;
+    y = isMac ? a.y + 4 : a.y + a.height - h - 8;
+  }
+  x = Math.max(a.x + 4, Math.min(x, a.x + a.width - w - 4));
+  y = Math.max(a.y, Math.min(y, a.y + a.height - h));
+  trayWin.setPosition(x, y);
+}
+
+function toggleTrayWindow() {
+  if (!trayWin || trayWin.isDestroyed()) createTrayWindow();
+  if (!trayWin) return;
+  if (trayWin.isVisible()) return hideTrayWindow();
+  // o clique no ícone tira o foco da caixinha (que se fecha) antes de chegar aqui: não reabre
+  if (Date.now() - trayHiddenAt < 300) return;
+  trayWin.webContents.send('tray:state', trayState());
+  placeTrayWindow();
+  trayWin.show();
+  trayWin.focus();
+}
+
+function setupTray() {
+  try {
+    tray = new Tray(trayIcon(null));
+  } catch {
+    return;
+  }
+  tray.on('click', toggleTrayWindow);
+  tray.on('right-click', toggleTrayWindow);
+  createTrayWindow();
+  ipcMain.handle('tray:state', (e) => (e.sender === trayWin?.webContents ? trayState() : null));
+  ipcMain.on('tray:action', (e, action: string, arg?: unknown) => {
+    if (!trayWin || e.sender !== trayWin.webContents) return;
+    switch (action) {
+      case 'status':
+        if (inOffice && typeof arg === 'string' && arg in STATUS_LABEL) sendStatus(arg as Status);
+        break;
+      case 'auto-mini':
+        setAutoMini(Boolean(arg));
+        break;
+      case 'mini':
+        if (inOffice || mini) setMini(Boolean(arg), true);
+        break;
+      case 'leave':
+        hideTrayWindow();
+        if (mini) setMini(false, true);
+        else showWindow();
+        win?.webContents.send('leave-office');
+        break;
+      case 'open':
+        hideTrayWindow();
+        showWindow();
+        break;
+      case 'settings':
+        hideTrayWindow();
+        showWindow();
+        win?.webContents.send('open-settings');
+        break;
+      case 'updates':
+        hideTrayWindow();
+        showWindow();
+        void checkUpdates(true, true);
+        break;
+      case 'quit':
+        quitting = true;
+        app.quit();
+        break;
+      case 'close':
+        hideTrayWindow();
+        break;
+      case 'resize': {
+        const h = Math.round(Number(arg));
+        if (!Number.isFinite(h) || h < 100 || h > 900) return;
+        const [w, cur] = trayWin.getSize();
+        if (cur === h) return;
+        trayWin.setSize(w, h);
+        if (trayWin.isVisible()) placeTrayWindow();
+        break;
+      }
+    }
+  });
+}
+
 // ---------- atualizações ----------
 // Windows (e Mac com assinatura da Apple): electron-updater pelo GitHub Releases.
 // Mac sem assinatura: o Squirrel.Mac recusa apps ad-hoc, então usamos o MacUpdater (src/mac-updater.ts),
 // que baixa, confere, troca o app e apaga os arquivos da atualização sozinho.
-const canAutoUpdate = () => app.isPackaged && (!isMac || __MAC_SIGNED__);
 let downloaded = false;
 let installWhenReady = false;
 let notifiedVersion = '';
@@ -436,6 +698,18 @@ function setupIpc() {
     buildMenu();
   });
   ipcMain.on('set-mini', (e, on: boolean) => fromApp(e) && setMini(Boolean(on), false));
+  // a página informa em que escritório está (null = saiu); só o cliente novo manda isto
+  ipcMain.on('set-office', (e, name: unknown) => {
+    if (!fromApp(e) || e.sender !== win?.webContents) return;
+    inOffice = typeof name === 'string' && name ? name.slice(0, 80) : null;
+    pageMiniWindow = true;
+    if (!inOffice && mini) setMini(false, true);
+    buildMenu();
+  });
+  ipcMain.on('mini-size', (e, w: number, h: number) => {
+    if (!fromApp(e) || e.sender !== win?.webContents || !Number.isFinite(w) || !Number.isFinite(h)) return;
+    placeMini(w, h);
+  });
   ipcMain.on('check-updates', (e, auto: boolean) => fromApp(e) && void checkUpdates(Boolean(auto)));
   ipcMain.on('install-update-now', (e) => fromApp(e) && installUpdateNow());
   ipcMain.on('notify', (e, title: string, body: string) => {
@@ -468,10 +742,7 @@ if (!app.requestSingleInstanceLock()) {
     setupPermissions();
     setupIpc();
     setupUpdater();
-    try {
-      tray = new Tray(dot(STATUS_RGB[status]));
-      tray.on('click', showWindow);
-    } catch {}
+    setupTray();
     buildMenu();
     createWindow();
     if (isMac) {
@@ -479,7 +750,7 @@ if (!app.requestSingleInstanceLock()) {
       await systemPreferences.askForMediaAccess('microphone').catch(() => false);
       await systemPreferences.askForMediaAccess('camera').catch(() => false);
     }
-    app.on('activate', showWindow);
+    app.on('activate', () => (mini ? setMini(false, true) : showWindow()));
   });
   app.on('before-quit', () => {
     quitting = true;

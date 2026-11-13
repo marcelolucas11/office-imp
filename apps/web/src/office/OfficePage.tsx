@@ -11,6 +11,7 @@ import { t } from '../lib/i18n';
 import { desktop, toast, useSession } from '../lib/session';
 import { av, useAv } from './av';
 import { BottomBar, MiniMap, SidePanel, VideoBar } from './Hud';
+import { MiniMode } from './MiniMode';
 import { AvatarModal, CalendarModal, CustomStatusModal, DeskModal, MyDeskModal, ObjectModal, ProfileModal, SettingsModal } from './Modals';
 import { RadioDock, RadioModal } from './Radio';
 import { createGame } from './scene';
@@ -124,7 +125,7 @@ function TopLeft() {
   const me = useGame((s) => s.players[s.meId]);
   const map = useGame((s) => s.map);
   const recordings = useGame((s) => s.recordings);
-  const hide = useGame((s) => s.mini);
+  const hide = useGame((s) => s.mini && !s.miniExt);
   const role = useSession((s) => s.me?.role);
   const isUser = useSession((s) => s.me?.kind === 'user');
   const [busy, setBusy] = useState(false);
@@ -174,7 +175,7 @@ function TopLeft() {
 function Hint() {
   const hint = useGame((s) => s.hint);
   const buildMode = useGame((s) => s.buildMode);
-  const hide = useGame((s) => s.simplified || s.mini || Boolean(s.modal));
+  const hide = useGame((s) => s.simplified || (s.mini && !s.miniExt) || Boolean(s.modal));
   if (hide) return null;
   if (buildMode) {
     return (
@@ -238,6 +239,24 @@ export default function OfficePage() {
   const canAdmin = useGame((s) => s.canAdmin);
   const left = useOfficeBehaviors();
   const deepLinked = useRef(false);
+  const officeName = useGame((s) => (s.phase === 'online' ? s.office?.name ?? null : null));
+
+  // app desktop: avisa em que escritório a pessoa está (ícone da barra de menus e Modo Mini automático)
+  useEffect(() => {
+    desktop?.setOffice?.(officeName);
+  }, [officeName]);
+  useEffect(() => {
+    const offLeave = desktop?.onLeaveOffice?.(() => nav('/'));
+    const offSettings = desktop?.onOpenSettings?.(() => {
+      if (useGame.getState().phase === 'online') useGame.setState({ mini: false, modal: { kind: 'settings' } });
+    });
+    return () => {
+      desktop?.setOffice?.(null);
+      useGame.setState({ mini: false, miniExt: false });
+      offLeave?.();
+      offSettings?.();
+    };
+  }, [nav]);
 
   useEffect(() => {
     void net.connect(slug);
@@ -290,6 +309,7 @@ export default function OfficePage() {
           <RadioDock />
           <BottomBar />
           <Modals />
+          <MiniMode />
         </>
       ) : null}
       {phase === 'connecting' || phase === 'reconnecting' || phase === 'idle' ? (

@@ -71,8 +71,8 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
 /** Vídeos de quem está conectado com você. No modo simplificado ocupa a tela inteira. */
 export function VideoBar() {
   const { peers, localCam, localScreen, focus, cam, mic, conn } = useAv();
-  const simplified = useGame((s) => s.simplified || s.mini);
-  const mini = useGame((s) => s.mini);
+  const simplified = useGame((s) => s.simplified || (s.mini && !s.miniExt));
+  const mini = useGame((s) => s.mini && !s.miniExt);
   const players = useGame((s) => s.players);
   const meId = useGame((s) => s.meId);
   const me = players[meId];
@@ -195,7 +195,7 @@ export function BottomBar() {
   const panel = useGame((s) => s.panel);
   const unread = useGame((s) => s.unread);
   const simplified = useGame((s) => s.simplified);
-  const mini = useGame((s) => s.mini);
+  const mini = useGame((s) => s.mini && !s.miniExt);
   const minimap = useGame((s) => s.minimap);
   const canAdmin = useGame((s) => s.canAdmin);
   const music = useGame((s) => s.music);
@@ -376,7 +376,7 @@ function MenuItem({ onClick, children }: { onClick: () => void; children: React.
 export function MiniMap() {
   const map = useGame((s) => s.map);
   const mapRev = useGame((s) => s.mapRev);
-  const show = useGame((s) => s.minimap && !s.simplified && !s.mini);
+  const show = useGame((s) => s.minimap && !s.simplified && !(s.mini && !s.miniExt));
   const ref = useRef<HTMLCanvasElement>(null);
   const px = map ? Math.max(1, Math.min(4, Math.floor(232 / map.width))) : 2;
   const base = useMemo(() => (map ? renderMini(map, px) : null), [mapRev, px]);
@@ -428,7 +428,7 @@ export function MiniMap() {
 // ---------- painel lateral: chat e participantes ----------
 export function SidePanel() {
   const panel = useGame((s) => s.panel);
-  const hide = useGame((s) => s.mini);
+  const hide = useGame((s) => s.mini && !s.miniExt);
   if (!panel || hide) return null;
   return (
     <aside className="absolute bottom-20 right-3 top-3 z-30 flex w-80 flex-col overflow-hidden rounded-2xl border border-line bg-panel/97 shadow-2xl" data-testid={`panel-${panel}`}>

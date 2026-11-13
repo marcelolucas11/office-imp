@@ -15,7 +15,7 @@ e **Windows**, além do navegador.
 | Área | Recursos |
 |---|---|
 | **Mapa e avatar** | Movimento por setas, WASD ou clique duplo (com desvio de obstáculos), tecla **X** para interagir, seguir e liderar pessoas, mini-mapa, avatar personalizável |
-| **Áudio e vídeo** | Conexão por proximidade (raio de 1 a 10 passos, volume cai com a distância), **salas privadas** isoladas de verdade, palco (**Spotlight**) que fala para todos, compartilhamento de tela por várias pessoas, entrada sempre com o microfone mudo, Visualização Simplificada e **Modo Mini** |
+| **Áudio e vídeo** | Conexão por proximidade (raio de 1 a 10 passos, volume cai com a distância), **salas privadas** isoladas de verdade, palco (**Spotlight**) que fala para todos, compartilhamento de tela por várias pessoas, entrada sempre com o microfone mudo, Visualização Simplificada e **Modo Mini** (só as câmeras flutuando, sem moldura; no app desktop entra sozinho ao minimizar ou trocar de app, e o ícone na barra de menus tem a chave para ligar ou desligar isso) |
 | **Status** | Disponível, Ocupado e **Não incomodar** (⌘/Ctrl + O / I / U), ausência automática, status personalizado com emoji |
 | **Comunicação** | Chat (perto de mim, todos, direta), reações, aceno, levantar a mão, lista de participantes, perfil |
 | **Mesas** | Cada pessoa tem a sua mesa, decora com a Build Tool e recebe recados e presentes mesmo offline |

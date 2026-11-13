@@ -52,6 +52,8 @@ export interface GameState {
   dmWith: string | null;
   simplified: boolean;
   mini: boolean;
+  /** O Modo Mini está numa janela à parte (app desktop ou Picture-in-Picture do navegador). */
+  miniExt: boolean;
   minimap: boolean;
   buildMode: string | null;
   buildProps: Record<string, any> | null;
@@ -90,6 +92,7 @@ export const useGame = create<GameState>((set, get) => ({
   dmWith: null,
   simplified: false,
   mini: false,
+  miniExt: false,
   minimap: true,
   buildMode: null,
   buildProps: null,

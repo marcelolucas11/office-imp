@@ -26,7 +26,7 @@
 | `packages/ui` | Componentes e tema (preto, dourado `#d7b870`, Montserrat). |
 | `apps/server` | Fastify (API), Colyseus (tempo real), BullMQ (tarefas), Drizzle (PostgreSQL). |
 | `apps/web` | React + Phaser 3. A pixel art é gerada por código (`src/game/art`). |
-| `apps/desktop` | Electron: carrega o cliente web do servidor e acrescenta bandeja, atalhos, Modo Mini e atualização. |
+| `apps/desktop` | Electron: carrega o cliente web do servidor e acrescenta a caixinha da barra de menus/bandeja (`assets/tray.html`), atalhos, Modo Mini e atualização. O Modo Mini é uma janela transparente aberta pela própria página (`window.open` com o nome `oi-mini`), onde o cliente web desenha as câmeras por React portal (`apps/web/src/office/MiniMode.tsx`): a conexão de áudio e vídeo é a mesma da janela principal, que fica escondida. No navegador, o mesmo componente usa o Document Picture-in-Picture quando existe. |
 | `apps/updater` | Serviço HTTP mínimo com acesso ao Docker; só aceita `X.Y.Z` e só age nos serviços do office-imp. |
 
 ## Tempo real (servidor autoritativo)

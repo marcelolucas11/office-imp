@@ -17,6 +17,12 @@ contextBridge.exposeInMainWorld('officeImp', {
   version: info.version,
   setStatus: (status: string) => ipcRenderer.send('set-status', status),
   setMini: (on_: boolean) => ipcRenderer.send('set-mini', on_),
+  /** O Modo Mini abre como janela flutuante transparente (só as câmeras). */
+  miniWindow: true,
+  setOffice: (name: string | null) => ipcRenderer.send('set-office', name),
+  setMiniSize: (width: number, height: number) => ipcRenderer.send('mini-size', width, height),
+  onLeaveOffice: (cb: () => void) => on('leave-office', cb),
+  onOpenSettings: (cb: () => void) => on('open-settings', cb),
   onStatusShortcut: (cb: (status: string) => void) => on('status-shortcut', cb),
   onMiniChanged: (cb: (on_: boolean) => void) => on('mini-changed', cb),
   checkUpdates: (auto: boolean) => ipcRenderer.send('check-updates', auto),

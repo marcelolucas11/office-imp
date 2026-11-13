@@ -21,3 +21,4 @@ const common = {
 await build({ ...common, entryPoints: ['src/main.ts'], outfile: 'dist/main.js' });
 await build({ ...common, entryPoints: ['src/preload.ts'], outfile: 'dist/preload.js' });
 await build({ ...common, entryPoints: ['src/picker-preload.ts'], outfile: 'dist/picker-preload.js' });
+await build({ ...common, entryPoints: ['src/tray-preload.ts'], outfile: 'dist/tray-preload.js' });

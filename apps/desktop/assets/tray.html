@@ -1,0 +1,172 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- Caixinha que abre ao clicar no ícone do office-imp na barra de menus (Mac) ou na bandeja (Windows). -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Office Impera</title>
+    <style>
+      :root {
+        --gold: #d7b870;
+        --gold-soft: #e6d2a0;
+        --ink: #0b0b0d;
+        --panel: #17171c;
+        --panel-2: #202028;
+        --panel-3: #2a2a34;
+        --line: #30303b;
+        --text: #f5f5f4;
+        --muted: #9b9ba8;
+        --ok: #34d399;
+        --warn: #fbbf24;
+        --danger: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: transparent; color: var(--text); font: 13px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden; }
+      #wrap { padding: 10px; }
+      .card {
+        background: linear-gradient(180deg, #1b1b22 0%, var(--panel) 100%);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+        padding: 12px;
+        animation: pop 0.14s ease-out;
+      }
+      @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+      header { display: flex; align-items: center; gap: 10px; padding: 2px 2px 12px; }
+      .logo { width: 30px; height: 30px; border-radius: 9px; background: var(--ink); border: 1px solid #3a3322; display: grid; place-items: center; flex: none; }
+      .title { flex: 1; min-width: 0; }
+      .title b { display: block; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .title small { display: block; color: var(--muted); font-size: 11px; }
+      button { font: inherit; color: inherit; cursor: pointer; }
+      .x { all: unset; cursor: pointer; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
+      .x:hover { background: var(--panel-3); color: var(--text); }
+      .leave {
+        width: 100%; border: 0; border-radius: 12px; padding: 11px 12px; display: flex; align-items: center; justify-content: center; gap: 10px;
+        background: linear-gradient(180deg, #d7b870, #b99a55); color: #15120a; font-weight: 700; font-size: 14px;
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 6px 16px rgba(215, 184, 112, 0.18);
+      }
+      .leave:hover { filter: brightness(1.06); }
+      .leave:disabled { background: var(--panel-3); color: var(--muted); box-shadow: none; cursor: default; }
+      .sep { height: 1px; background: var(--line); margin: 10px 2px; }
+      .label { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 0 4px 6px; }
+      .status { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .st { all: unset; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); border-radius: 10px; padding: 8px 4px 7px; text-align: center; font-size: 11.5px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 5px; transition: border-color 0.12s, background 0.12s; }
+      .st i { width: 10px; height: 10px; border-radius: 99px; display: block; }
+      .st:hover { background: var(--panel-3); }
+      .st.on { border-color: var(--gold); background: #24211a; }
+      .st[aria-disabled='true'] { opacity: 0.45; cursor: default; }
+      .row { display: flex; align-items: center; gap: 10px; padding: 9px 6px; border-radius: 10px; }
+      .row.btn { cursor: pointer; }
+      .row.btn:hover { background: var(--panel-2); }
+      .row span { flex: 1; }
+      .row small { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
+      .row .ico { width: 18px; text-align: center; color: var(--muted); flex: none; }
+      .switch { position: relative; width: 38px; height: 22px; border-radius: 99px; background: var(--panel-3); border: 1px solid var(--line); flex: none; transition: background 0.15s, border-color 0.15s; }
+      .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 99px; background: #d9d9de; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
+      .switch.on { background: var(--gold); border-color: var(--gold); }
+      .switch.on::after { transform: translateX(16px); background: #15120a; }
+      .row[aria-disabled='true'] { opacity: 0.45; cursor: default; }
+      .row[aria-disabled='true']:hover { background: transparent; }
+      footer { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px 0; color: var(--muted); font-size: 11px; }
+      footer button { all: unset; cursor: pointer; color: var(--muted); padding: 4px 6px; border-radius: 6px; }
+      footer button:hover { color: var(--text); background: var(--panel-2); }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <div class="card">
+        <header>
+          <div class="logo" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 2.5 21.5 12 12 21.5 2.5 12z" fill="none" stroke="#d7b870" stroke-width="2.6" /><rect x="9.6" y="9.6" width="4.8" height="4.8" fill="#d7b870" /></svg>
+          </div>
+          <div class="title">
+            <b id="office">Office Impera</b>
+            <small id="sub">Fora do escritório</small>
+          </div>
+          <button class="x" id="close" title="Fechar" aria-label="Fechar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </header>
+
+        <button class="leave" id="leave">
+          <span id="leaveText">Sair do escritório</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7" /><path d="M10 12h10M17 8l4 4-4 4" /></svg>
+        </button>
+
+        <div class="sep"></div>
+        <div class="label">Seu status</div>
+        <div class="status" id="status">
+          <button class="st" data-s="AVAILABLE"><i style="background: var(--ok)"></i>Disponível</button>
+          <button class="st" data-s="BUSY"><i style="background: var(--warn)"></i>Ocupado</button>
+          <button class="st" data-s="DND"><i style="background: var(--danger)"></i>Não incomodar</button>
+        </div>
+
+        <div class="sep"></div>
+        <div class="row btn" id="autoMini" role="switch">
+          <span>Modo Mini automático<small>Ao minimizar ou trocar de app, só as câmeras ficam flutuando</small></span>
+          <div class="switch" id="autoMiniSw"></div>
+        </div>
+        <div class="row btn" id="mini" role="switch">
+          <span>Modo Mini agora</span>
+          <div class="switch" id="miniSw"></div>
+        </div>
+
+        <div class="sep"></div>
+        <div class="row btn" id="open"><div class="ico">↗</div><span>Abrir o escritório</span></div>
+        <div class="row btn" id="settings"><div class="ico">⚙</div><span>Áudio, vídeo e preferências</span></div>
+        <div class="row btn" id="updates"><div class="ico">⟳</div><span>Procurar atualizações</span></div>
+
+        <footer>
+          <span id="version"></span>
+          <button id="quit">Encerrar o app</button>
+        </footer>
+      </div>
+    </div>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let state = { office: null, status: 'AVAILABLE', autoMini: true, mini: false, version: '', productName: 'Office Impera' };
+      const STATUS = { AVAILABLE: 'Disponível', BUSY: 'Ocupado', DND: 'Não incomodar' };
+
+      function render() {
+        const inOffice = Boolean(state.office);
+        $('office').textContent = state.office || state.productName;
+        $('sub').textContent = inOffice ? 'No escritório · ' + STATUS[state.status] : 'Fora do escritório';
+        $('leave').disabled = !inOffice;
+        $('leaveText').textContent = inOffice ? 'Sair do escritório' : 'Você não está em um escritório';
+        for (const b of document.querySelectorAll('.st')) {
+          b.classList.toggle('on', inOffice && b.dataset.s === state.status);
+          b.setAttribute('aria-disabled', String(!inOffice));
+        }
+        $('autoMiniSw').classList.toggle('on', state.autoMini);
+        $('autoMini').setAttribute('aria-checked', String(state.autoMini));
+        $('miniSw').classList.toggle('on', state.mini);
+        $('mini').setAttribute('aria-checked', String(state.mini));
+        $('mini').setAttribute('aria-disabled', String(!inOffice));
+        $('settings').setAttribute('aria-disabled', String(!inOffice));
+        $('version').textContent = state.productName + ' ' + state.version;
+        requestAnimationFrame(() => window.tray.resize(Math.ceil(document.getElementById('wrap').getBoundingClientRect().height)));
+      }
+
+      $('close').onclick = () => window.tray.close();
+      $('leave').onclick = () => state.office && window.tray.leave();
+      for (const b of document.querySelectorAll('.st')) b.onclick = () => state.office && window.tray.status(b.dataset.s);
+      $('autoMini').onclick = () => window.tray.setAutoMini(!state.autoMini);
+      $('mini').onclick = () => state.office && window.tray.setMini(!state.mini);
+      $('open').onclick = () => window.tray.open();
+      $('settings').onclick = () => state.office && window.tray.settings();
+      $('updates').onclick = () => window.tray.updates();
+      $('quit').onclick = () => window.tray.quit();
+      document.addEventListener('keydown', (e) => e.key === 'Escape' && window.tray.close());
+
+      window.tray.onState((s) => {
+        state = s;
+        render();
+      });
+      window.tray.getState().then((s) => {
+        state = s;
+        render();
+      });
+    </script>
+  </body>
+</html>

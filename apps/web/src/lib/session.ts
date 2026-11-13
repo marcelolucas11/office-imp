@@ -89,6 +89,12 @@ export interface DesktopBridge {
   version: string;
   setStatus: (status: string) => void;
   setMini: (on: boolean) => void;
+  /** Versões novas do app: o Modo Mini abre numa janela flutuante transparente. */
+  miniWindow?: boolean;
+  setOffice?: (name: string | null) => void;
+  setMiniSize?: (width: number, height: number) => void;
+  onLeaveOffice?: (cb: () => void) => () => void;
+  onOpenSettings?: (cb: () => void) => () => void;
   onStatusShortcut: (cb: (status: string) => void) => () => void;
   onMiniChanged: (cb: (on: boolean) => void) => () => void;
   checkUpdates: (auto: boolean) => void;
