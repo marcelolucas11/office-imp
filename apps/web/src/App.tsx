@@ -14,6 +14,8 @@ import { EmoText } from './lib/icons';
 
 const OfficePage = lazy(() => import('./office/OfficePage'));
 const AdminPage = lazy(() => import('./admin/AdminPage'));
+// folha de sprites para conferência visual: só existe no servidor de desenvolvimento
+const DevArt = import.meta.env.DEV ? lazy(() => import('./pages/DevArt')) : null;
 
 export function Loading({ label }: { label?: string }) {
   return (
@@ -132,6 +134,7 @@ export function App() {
               </Private>
             }
           />
+          {DevArt ? <Route path="/dev/arte" element={<DevArt />} /> : null}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

@@ -69,6 +69,15 @@ export interface Rect {
 export type InteractKind = 'whiteboard' | 'website' | 'tv' | 'poster' | 'game' | 'note';
 export type ObjectCategory = 'structure' | 'furniture' | 'decor' | 'interactive';
 
+/** Variante de cor de um objeto (visual v2). */
+export interface ObjectColor {
+  /** Identificador gravado no mapa (`MapObject.color`). */
+  id: string;
+  label: string;
+  /** Cor principal da variante; o desenho deriva os outros tons dela. */
+  hex: string;
+}
+
 export interface ObjectDef {
   type: string;
   label: string;
@@ -83,15 +92,26 @@ export interface ObjectDef {
   resizable?: boolean;
   /** Sprite mais alto que o footprint (em tiles a mais para cima). */
   tall?: number;
+  /** Variantes de cor. A primeira é a padrão (usada quando o objeto do mapa não tem `color`). */
+  colors?: ObjectColor[];
 }
+
+/** Cores de estofado (cadeiras, sofás). A primeira é a padrão. */
+const UPHOLSTERY: ObjectColor[] = [
+  { id: 'graphite', label: 'Grafite', hex: '#434957' },
+  { id: 'blue', label: 'Azul', hex: '#3d5a8a' },
+  { id: 'green', label: 'Verde', hex: '#3f7557' },
+  { id: 'wine', label: 'Vinho', hex: '#8a3d45' },
+  { id: 'sand', label: 'Areia', hex: '#b39a78' },
+];
 
 const defs: ObjectDef[] = [
   { type: 'desk', label: 'Mesa de trabalho', w: 2, h: 1, solid: true, category: 'structure', tall: 1 },
-  { type: 'chair', label: 'Cadeira', w: 1, h: 1, solid: false, category: 'furniture' },
+  { type: 'chair', label: 'Cadeira', w: 1, h: 1, solid: false, category: 'furniture', colors: UPHOLSTERY },
   { type: 'table', label: 'Mesa de reunião', w: 4, h: 2, solid: true, category: 'furniture', resizable: true },
   { type: 'table_round', label: 'Mesa redonda', w: 1, h: 1, solid: true, category: 'furniture' },
   { type: 'counter', label: 'Balcão', w: 2, h: 1, solid: true, category: 'furniture', resizable: true },
-  { type: 'sofa', label: 'Sofá', w: 2, h: 1, solid: true, category: 'furniture' },
+  { type: 'sofa', label: 'Sofá', w: 2, h: 1, solid: true, category: 'furniture', colors: UPHOLSTERY },
   { type: 'armchair', label: 'Poltrona', w: 1, h: 1, solid: false, category: 'furniture' },
   { type: 'bookshelf', label: 'Estante', w: 1, h: 1, solid: true, category: 'furniture', tall: 1 },
   { type: 'cabinet', label: 'Armário', w: 1, h: 1, solid: true, category: 'furniture' },
@@ -132,6 +152,8 @@ export interface MapObject {
   h?: number;
   /** Direção (cadeiras, sofás). */
   dir?: Dir;
+  /** Id da variante de cor (`ObjectDef.colors`). Ausente = cor padrão do tipo. */
+  color?: string;
   props?: Record<string, any>;
   /** Decoração pertencente a uma mesa (colocada pelo dono da mesa). */
   ownerDeskId?: string;
@@ -211,6 +233,47 @@ export function inBounds(map: { width: number; height: number }, x: number, y: n
 export function objSize(o: MapObject): { w: number; h: number } {
   const def = OBJECT_DEFS[o.type];
   return { w: o.w ?? def?.w ?? 1, h: o.h ?? def?.h ?? 1 };
+}
+
+/** Variantes de cor de um tipo de objeto (lista vazia se o tipo não tem cores). */
+export function objectColors(type: string): ObjectColor[] {
+  return OBJECT_DEFS[type]?.colors ?? [];
+}
+
+/**
+ * Variante de cor em uso por um objeto: a que ele pede, se existir no tipo; senão a padrão
+ * (a primeira). `null` quando o tipo não tem variantes de cor.
+ */
+export function objColor(o: Pick<MapObject, 'type' | 'color'>): ObjectColor | null {
+  const colors = OBJECT_DEFS[o.type]?.colors;
+  if (!colors?.length) return null;
+  return colors.find((c) => c.id === o.color) ?? colors[0];
+}
+
+/** Erro do campo `color` de um objeto, ou `null` se estiver certo (ausente é sempre válido). */
+export function objColorError(o: { type: string; color?: unknown }): string | null {
+  if (o.color === undefined) return null;
+  if (typeof o.color !== 'string') return 'cor de objeto inválida';
+  if (!objectColors(o.type).some((c) => c.id === o.color)) return `cor desconhecida para ${o.type}: ${o.color.slice(0, 40)}`;
+  return null;
+}
+
+/**
+ * Remove o `color` que não existe na definição do tipo (o objeto volta para a cor padrão).
+ * Não altera o mapa recebido: devolve o mesmo objeto se não houver nada a corrigir.
+ * Serve para mapas gravados antes de uma mudança no catálogo; o que vem do cliente é
+ * recusado por `validateMapShape`.
+ */
+export function normalizeObjectColors(map: OfficeMap): OfficeMap {
+  if (!map.objects.some((o) => objColorError(o))) return map;
+  return {
+    ...map,
+    objects: map.objects.map((o) => {
+      if (!objColorError(o)) return o;
+      const { color: _drop, ...rest } = o;
+      return rest;
+    }),
+  };
 }
 
 export function rectContains(r: Rect, x: number, y: number): boolean {
@@ -442,6 +505,8 @@ export function validateMapShape(m: any): string | null {
     if (typeof o?.id !== 'string' || typeof o?.type !== 'string') return 'objeto inválido';
     if (!OBJECT_DEFS[o.type]) return `tipo de objeto desconhecido: ${o.type}`;
     if (!Number.isInteger(o.x) || !Number.isInteger(o.y)) return 'posição de objeto inválida';
+    const colorError = objColorError(o);
+    if (colorError) return colorError;
     if (ids.has(o.id)) return 'id de objeto duplicado';
     ids.add(o.id);
   }

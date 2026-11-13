@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Pixel art 32×32 desenhada por código (sem arquivos de imagem de terceiros).
 import { Floor, Wall, type OfficeMap } from '@office-imp/shared';
+import { makeCanvas } from './canvas';
+import { noise } from './prim';
+
+export { makeCanvas, noise };
 
 export type Ctx = CanvasRenderingContext2D;
 export const T = 32;
@@ -10,14 +14,10 @@ export function r(ctx: Ctx, x: number, y: number, w: number, h: number, c: strin
   ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
 }
 
-/** Ruído determinístico 0..1 por coordenada. */
-export function noise(x: number, y: number, seed = 0): number {
-  let h = (x * 374761393 + y * 668265263 + seed * 2147483647) | 0;
-  h = (h ^ (h >>> 13)) * 1274126177;
-  h ^= h >>> 16;
-  return ((h >>> 0) % 1000) / 1000;
-}
-
+/**
+ * Sombreado ADITIVO da arte antiga (soma `255 * amt` em cada canal e devolve `rgb()`).
+ * A arte nova usa o `shade` de `prim.ts` (proporcional, devolve hex).
+ */
 export function shade(hex: string, amt: number): string {
   const n = parseInt(hex.slice(1), 16);
   const f = (v: number) => Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
@@ -151,15 +151,6 @@ export function drawStatic(ctx: Ctx, map: OfficeMap, x0: number, y0: number, w: 
       if (wl) drawWall(ctx, wl, ox, oy, { below: isWallAt(map, tx, ty + 1), above: isWallAt(map, tx, ty - 1), left: isWallAt(map, tx - 1, ty), right: isWallAt(map, tx + 1, ty) });
     }
   }
-}
-
-export function makeCanvas(w: number, h: number): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext('2d')!;
-  ctx.imageSmoothingEnabled = false;
-  return c;
 }
 
 /** Folhas de tiles (para a paleta do Mapmaker e para exportar ao Tiled). */

@@ -501,12 +501,23 @@ describe('tempo real', () => {
     broken.spawns = [];
     expect((await admin.http.post(`/api/offices/${officeId}/map`, { map: broken })).status).toBe(400);
     expect((await ana.http.post(`/api/offices/${officeId}/map`, { map: cur.map })).status).toBe(403);
+    // cor por objeto: uma variante que não existe no tipo é recusada (ao validar e ao publicar)
+    const badColor = JSON.parse(JSON.stringify(cur.map));
+    badColor.objects.push({ id: 'obj_chair_bad', type: 'chair', x: 4, y: map.meta!.gen!.corridorY + 1, color: 'arco-iris' });
+    const badCheck = (await admin.http.post(`/api/offices/${officeId}/map/validate`, { map: badColor })).json;
+    expect(badCheck.ok).toBe(false);
+    expect(badCheck.errors[0]).toContain('cor desconhecida');
+    expect((await admin.http.post(`/api/offices/${officeId}/map`, { map: badColor })).status).toBe(400);
     const edited = JSON.parse(JSON.stringify(cur.map));
     edited.objects.push({ id: 'obj_tv_extra', type: 'tv', x: 2, y: map.meta!.gen!.corridorY + 1, props: { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } });
+    edited.objects.push({ id: 'obj_chair_blue', type: 'chair', x: 4, y: map.meta!.gen!.corridorY + 1, color: 'blue' });
     const pub = await admin.http.post(`/api/offices/${officeId}/map`, { map: edited, note: 'TV no corredor' });
     expect(pub.status).toBe(200);
     const msg = await a.next('map');
     expect(msg.map.objects.some((o: any) => o.id === 'obj_tv_extra')).toBe(true);
+    expect(msg.map.objects.find((o: any) => o.id === 'obj_chair_blue').color).toBe('blue');
+    // mapa antigo: nenhum objeto ganhou `color` por conta própria
+    expect(msg.map.objects.filter((o: any) => 'color' in o).map((o: any) => o.id)).toEqual(['obj_chair_blue']);
     const versions = (await admin.http.get(`/api/offices/${officeId}/map/versions`)).json;
     expect(versions[0]).toMatchObject({ note: 'TV no corredor', published: true, authorName: 'Gestora' });
     expect(versions.length).toBe(2);

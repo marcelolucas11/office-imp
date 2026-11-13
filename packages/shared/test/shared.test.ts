@@ -13,10 +13,18 @@ import {
   findPath,
   localDate,
   musicPosition,
+  normalizeObjectColors,
+  OBJECT_DEFS,
+  OBJECT_TYPES,
+  objColor,
+  objColorError,
+  objectColors,
   parseYouTubeUrl,
   requiresTwoFactor,
   tilesToRects,
   unionMs,
+  validateMapShape,
+  emptyMap,
   volumeForDistance,
   type Actor,
   type ProxPlayer,
@@ -136,6 +144,73 @@ describe('utilitários', () => {
       { x: 1, y: 1, w: 2, h: 2 },
       { x: 5, y: 5, w: 1, h: 1 },
     ]);
+  });
+});
+
+describe('cor por objeto', () => {
+  const mapWith = (...objects: any[]) => {
+    const m = emptyMap(6, 6);
+    m.layers.floor.fill(1);
+    m.spawns.push({ x: 1, y: 1 });
+    m.objects.push(...objects);
+    return m;
+  };
+
+  it('a primeira cor da definição é a padrão', () => {
+    const colors = objectColors('chair');
+    expect(colors.length).toBeGreaterThan(1);
+    expect(objColor({ type: 'chair' })).toBe(colors[0]);
+    expect(objColor({ type: 'chair', color: colors[1].id })).toBe(colors[1]);
+  });
+
+  it('cor desconhecida cai na padrão; tipo sem cores devolve null', () => {
+    expect(objColor({ type: 'chair', color: 'nao-existe' })).toBe(objectColors('chair')[0]);
+    expect(objectColors('desk')).toEqual([]);
+    expect(objColor({ type: 'desk' })).toBeNull();
+    expect(objColor({ type: 'desk', color: 'blue' })).toBeNull();
+    expect(objColor({ type: 'tipo-que-nao-existe', color: 'blue' })).toBeNull();
+  });
+
+  it('as definições de cor são bem formadas', () => {
+    for (const type of OBJECT_TYPES) {
+      const colors = OBJECT_DEFS[type].colors;
+      if (!colors) continue;
+      expect(colors.length).toBeGreaterThan(0);
+      expect(new Set(colors.map((c) => c.id)).size).toBe(colors.length);
+      for (const c of colors) {
+        expect(c.id).toMatch(/^[a-z0-9_-]{1,24}$/);
+        expect(c.hex).toMatch(/^#[0-9a-f]{6}$/);
+        expect(c.label.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('a validação aceita mapa sem cor e com cor válida', () => {
+    expect(validateMapShape(mapWith({ id: 'a', type: 'chair', x: 1, y: 2 }, { id: 'b', type: 'desk', x: 2, y: 2 }))).toBeNull();
+    expect(validateMapShape(mapWith({ id: 'a', type: 'chair', x: 1, y: 2, color: 'blue' }, { id: 'b', type: 'sofa', x: 2, y: 2, color: 'graphite' }))).toBeNull();
+  });
+
+  it('a validação recusa cor que não existe no tipo', () => {
+    expect(validateMapShape(mapWith({ id: 'a', type: 'chair', x: 1, y: 2, color: 'arco-iris' }))).toBe('cor desconhecida para chair: arco-iris');
+    expect(validateMapShape(mapWith({ id: 'a', type: 'desk', x: 1, y: 2, color: 'blue' }))).toBe('cor desconhecida para desk: blue');
+    expect(validateMapShape(mapWith({ id: 'a', type: 'chair', x: 1, y: 2, color: 7 }))).toBe('cor de objeto inválida');
+    expect(validateMapShape(mapWith({ id: 'a', type: 'chair', x: 1, y: 2, color: null }))).toBe('cor de objeto inválida');
+    expect(objColorError({ type: 'chair' })).toBeNull();
+  });
+
+  it('normalizar tira só a cor inválida e não altera o mapa recebido', () => {
+    const clean = mapWith({ id: 'a', type: 'chair', x: 1, y: 2 }, { id: 'b', type: 'chair', x: 2, y: 2, color: 'blue' });
+    expect(normalizeObjectColors(clean)).toBe(clean);
+    const dirty = mapWith({ id: 'a', type: 'chair', x: 1, y: 2, color: 'saiu-do-catalogo', dir: 'left' }, { id: 'b', type: 'chair', x: 2, y: 2, color: 'blue' }, { id: 'c', type: 'desk', x: 3, y: 2, color: 'blue' });
+    const before = JSON.stringify(dirty);
+    const fixed = normalizeObjectColors(dirty);
+    expect(JSON.stringify(dirty)).toBe(before);
+    expect(fixed.objects).toEqual([
+      { id: 'a', type: 'chair', x: 1, y: 2, dir: 'left' },
+      { id: 'b', type: 'chair', x: 2, y: 2, color: 'blue' },
+      { id: 'c', type: 'desk', x: 3, y: 2 },
+    ]);
+    expect(validateMapShape(fixed)).toBeNull();
   });
 });
 

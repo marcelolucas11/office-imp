@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { OBJECT_DEFS, objSize, type Dir, type MapObject } from '@office-imp/shared';
+import { OBJECT_DEFS, objColor, objSize, type Dir, type MapObject } from '@office-imp/shared';
+import { Sprite } from './prim';
+import { SEATING } from './seating';
+import type { SpritePainter } from './sprites';
 import { T, makeCanvas, noise, r, shade, type Ctx } from './tiles';
 
 const WOOD = '#9c6b43';
 const GOLD = '#d7b870';
 
+/** Desenho antigo (retângulos direto no canvas). Vai sumindo conforme os tipos migram para `SpritePainter`. */
 type Painter = (ctx: Ctx, w: number, h: number, top: number, o: MapObject) => void;
+
+/** Desenhos do visual v2 (primitivas de `prim.ts`). Têm prioridade sobre os antigos. */
+const spritePainters: Record<string, SpritePainter> = { ...SEATING };
 
 function sofaLike(ctx: Ctx, w: number, top: number, dir: Dir | undefined) {
   const base = '#3f4350';
@@ -55,20 +62,6 @@ const painters: Record<string, Painter> = {
     r(ctx, 56, y + 9, 5, 6, '#111318');
     r(ctx, 57, y + 10, 3, 2, '#7c4a1e');
   },
-  chair(ctx, _w, _h, top, o) {
-    const c = '#2b2f3a';
-    const seat = '#3b4252';
-    const y = top;
-    const dir = o.dir ?? 'up';
-    r(ctx, 9, y + 9, 14, 14, seat);
-    r(ctx, 9, y + 9, 14, 1, shade(seat, 0.12));
-    if (dir === 'up') r(ctx, 8, y + 21, 16, 6, c);
-    else if (dir === 'down') r(ctx, 8, y + 4, 16, 6, c);
-    else if (dir === 'left') r(ctx, 21, y + 7, 5, 18, c);
-    else r(ctx, 6, y + 7, 5, 18, c);
-    r(ctx, 11, y + 26, 2, 3, '#111318');
-    r(ctx, 19, y + 26, 2, 3, '#111318');
-  },
   table(ctx, w, h, top) {
     const hh = h * T;
     const y = top;
@@ -95,9 +88,6 @@ const painters: Record<string, Painter> = {
     r(ctx, 0, top + 2, w, 2, '#f5f5f4');
     r(ctx, 0, top + hh - 4, w, 2, '#292524');
     for (let x = 6; x < w - 4; x += 16) r(ctx, x, top + hh - 10, 6, 1, GOLD);
-  },
-  sofa(ctx, w, _h, top, o) {
-    sofaLike(ctx, w, top, o.dir);
   },
   armchair(ctx, w, _h, top, o) {
     sofaLike(ctx, w, top, o.dir === 'up' ? 'up' : 'down');
@@ -326,9 +316,10 @@ const painters: Record<string, Painter> = {
 
 const cache = new Map<string, HTMLCanvasElement>();
 
+/** Chave do cache de sprite: tipo + tamanho + direção + cor (a cor padrão e a ausência de cor dão a mesma chave). */
 export function objectKey(o: MapObject): string {
   const { w, h } = objSize(o);
-  return `${o.type}:${w}x${h}:${o.dir ?? ''}`;
+  return `${o.type}:${w}x${h}:${o.dir ?? ''}:${objColor(o)?.id ?? ''}`;
 }
 
 /** Sprite do objeto. A altura inclui a parte "alta" (tall) acima do footprint. */
@@ -339,11 +330,19 @@ export function objectSprite(o: MapObject): HTMLCanvasElement {
   const def = OBJECT_DEFS[o.type];
   const { w, h } = objSize(o);
   const tall = def?.tall ?? 0;
-  const c = makeCanvas(w * T, (h + tall) * T);
-  const ctx = c.getContext('2d')!;
-  const paint = painters[o.type];
-  if (paint) paint(ctx, w * T, h, tall * T, o);
-  else r(ctx, 4, tall * T + 4, w * T - 8, h * T - 8, '#be185d');
+  let c: HTMLCanvasElement;
+  const paintSprite = spritePainters[o.type];
+  if (paintSprite) {
+    const s = new Sprite(w * T, (h + tall) * T);
+    paintSprite(s, { o, w: w * T, h: h * T, top: tall * T, color: objColor(o) });
+    c = s.toCanvas();
+  } else {
+    c = makeCanvas(w * T, (h + tall) * T);
+    const ctx = c.getContext('2d')!;
+    const paint = painters[o.type];
+    if (paint) paint(ctx, w * T, h, tall * T, o);
+    else r(ctx, 4, tall * T + 4, w * T - 8, h * T - 8, '#be185d');
+  }
   cache.set(key, c);
   return c;
 }
@@ -371,16 +370,14 @@ export function objectTall(type: string): number {
   return OBJECT_DEFS[type]?.tall ?? 0;
 }
 
-/** Ícone 32×32 do objeto (paleta do Mapmaker e da Build Tool). */
-export function objectIcon(type: string): string {
-  const def = OBJECT_DEFS[type];
-  const sprite = objectSprite({ id: 'icon', type, x: 0, y: 0 });
+/** Ícone do objeto (paleta do Mapmaker e da Build Tool). `color` = id da variante de cor (opcional). */
+export function objectIcon(type: string, color?: string): string {
+  const sprite = objectSprite({ id: 'icon', type, x: 0, y: 0, color });
   const c = makeCanvas(40, 40);
   const ctx = c.getContext('2d')!;
   const scale = Math.min(40 / sprite.width, 40 / sprite.height, 1.25);
   const dw = sprite.width * scale;
   const dh = sprite.height * scale;
   ctx.drawImage(sprite, (40 - dw) / 2, (40 - dh) / 2, dw, dh);
-  void def;
   return c.toDataURL();
 }

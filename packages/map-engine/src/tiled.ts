@@ -51,7 +51,7 @@ export function toTiled(map: OfficeMap): Record<string, unknown> {
             y: o.y * TILE,
             width: w * TILE,
             height: h * TILE,
-            properties: Object.entries({ ...(o.props ?? {}), ...(o.dir ? { dir: o.dir } : {}) }).map(([name, value]) => ({
+            properties: Object.entries({ ...(o.props ?? {}), ...(o.dir ? { dir: o.dir } : {}), ...(o.color ? { color: o.color } : {}) }).map(([name, value]) => ({
               name,
               type: 'string',
               value: typeof value === 'string' ? value : JSON.stringify(value),
