@@ -144,7 +144,20 @@ export function avatarSheet(cfg: AvatarConfig): HTMLCanvasElement {
 }
 
 /** Retrato (de frente, parado) para listas e menus. */
+const portraitCache = new Map<string, string>();
+
+/** Retrato do avatar em data URL. Em cache: é chamado em toda renderização dos painéis. */
 export function avatarPortrait(cfg: AvatarConfig, scale = 2): string {
+  const key = `${avatarKey(cfg)}@${scale}`;
+  const hit = portraitCache.get(key);
+  if (hit) return hit;
+  const url = drawPortrait(cfg, scale);
+  if (portraitCache.size > 400) portraitCache.clear();
+  portraitCache.set(key, url);
+  return url;
+}
+
+function drawPortrait(cfg: AvatarConfig, scale: number): string {
   const sheet = avatarSheet(cfg);
   const c = makeCanvas(AV_W * scale, AV_H * scale);
   const ctx = c.getContext('2d')!;

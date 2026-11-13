@@ -61,9 +61,13 @@ interface Runtime {
   inviteId?: string;
   lastStepAt: number;
   stepCredit: number;
+  /** Época de movimento: sobe a cada correção; passos de épocas antigas (já em trânsito) são ignorados. */
+  epoch: number;
   whiteboards: Set<string>;
 }
 
+/** Rajada de passos aceita de uma vez: absorve a oscilação da rede (pacotes que chegam juntos) sem "puxar" o avatar de volta. */
+const STEP_BURST = 8;
 const STATUSES: Status[] = ['AVAILABLE', 'BUSY', 'DND'];
 const str = (v: unknown, max: number): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -80,11 +84,16 @@ export class OfficeRoom extends Room {
   /** areaId -> reunião em gravação */
   recordings = new Map<string, { meetingId: string; startedBy: string }>();
   private lastViews = new Map<string, AvView>();
-  private pendingMoves = new Map<string, [string, number, number, number]>();
+  /** Todos os passos do tick, em ordem (não só o último), para os outros clientes não verem saltos. */
+  private pendingMoves: [string, number, number, number][] = [];
   private avDirty = true;
   private desks: DeskInfo[] = [];
   private wbCache = new Map<string, { elements: Map<string, any>; dirty: boolean }>();
   private slowTick = 0;
+  /** Portas abertas. Toda porta começa fechada e bloqueia a passagem até alguém apertar X nela. */
+  private openDoors = new Set<string>();
+  /** tile → id da porta */
+  private doorAt = new Map<number, string>();
 
   // ---------- ciclo de vida ----------
 
@@ -110,6 +119,14 @@ export class OfficeRoom extends Room {
   private rebuildIndexes() {
     this.grid = buildCollision(this.map);
     this.areaIndex = buildAreaIndex(this.map);
+    this.doorAt.clear();
+    for (const o of this.map.objects) if (o.type === 'door') this.doorAt.set(o.y * this.map.width + o.x, o.id);
+    for (const id of [...this.openDoors]) if (![...this.doorAt.values()].includes(id)) this.openDoors.delete(id);
+  }
+
+  private closedDoorAt(x: number, y: number): string | null {
+    const id = this.doorAt.get(y * this.map.width + x);
+    return id && !this.openDoors.has(id) ? id : null;
   }
 
   async onAuth(_client: Client, options: any) {
@@ -130,7 +147,8 @@ export class OfficeRoom extends Room {
       existing.client.leave(4001);
     }
     let pos: { x: number; y: number } | null = null;
-    let distance = DEFAULT_INTERACTION_DISTANCE;
+    // o raio é do escritório (definido pela administração), igual para todos
+    const distance = this.officeDistance();
     let deskId: string | null = null;
     if (subject.kind === 'user') {
       const [m] = await db()
@@ -138,7 +156,6 @@ export class OfficeRoom extends Room {
         .from(schema.officeMembers)
         .where(and(eq(schema.officeMembers.officeId, this.officeId), eq(schema.officeMembers.userId, subject.id)));
       if (m?.lastX != null && m?.lastY != null) pos = { x: m.lastX, y: m.lastY };
-      distance = subject.user.interactionDistance;
       deskId = this.desks.find((d) => d.userId === subject.id)?.id ?? null;
     }
     const start = this.resolveSpawn(pos, subject.role);
@@ -170,7 +187,8 @@ export class OfficeRoom extends Room {
       kind: subject.kind,
       inviteId: subject.kind === 'guest' ? subject.inviteId : undefined,
       lastStepAt: 0,
-      stepCredit: 3,
+      stepCredit: STEP_BURST,
+      epoch: 0,
       whiteboards: new Set(),
     });
     this.tracker.join({ id: subject.id, name: subject.name, role: subject.role }, 'AVAILABLE');
@@ -183,6 +201,7 @@ export class OfficeRoom extends Room {
       desks: this.desksWithOnline(),
       music: [...this.music.values()],
       recordings: [...this.recordings.entries()].map(([areaId, r]) => ({ areaId, meetingId: r.meetingId })),
+      doors: [...this.openDoors],
       mapVersionId: this.mapVersionId,
       myDeskItems,
       now: Date.now(),
@@ -235,8 +254,8 @@ export class OfficeRoom extends Room {
       if (this.grid[p.y * this.map.width + p.x] === 1) return false;
       const a = privateAreaAt(this.map, this.areaIndex, p.x, p.y);
       if (a && (a.staffOnly ? !can(role, 'area.staffOnly') : false)) return false;
-      // não reaparece dentro de área privada: evita entrar em reunião sem querer
-      return !a;
+      // não reaparece dentro de área privada (evita entrar em reunião sem querer), exceto na área da própria mesa
+      return !a || Boolean(a.desk);
     };
     if (pos && ok(pos)) return pos;
     const spawns = this.map.spawns.filter(ok);
@@ -257,6 +276,7 @@ export class OfficeRoom extends Room {
   private canEnterTile(p: Runtime, x: number, y: number): { ok: boolean; notice?: string } {
     if (x < 0 || y < 0 || x >= this.map.width || y >= this.map.height) return { ok: false };
     if (this.grid[y * this.map.width + x] === 1) return { ok: false };
+    if (this.closedDoorAt(x, y)) return { ok: false, notice: 'door_closed' };
     const area = privateAreaAt(this.map, this.areaIndex, x, y);
     if (area && area.id !== p.state.areaId) {
       if (area.staffOnly && !can(p.state.role, 'area.staffOnly')) return { ok: false, notice: 'area_staff_only' };
@@ -327,6 +347,18 @@ export class OfficeRoom extends Room {
   async refreshOffice() {
     this.office = await getOffice(this.officeId);
     this.broadcast('office', { name: this.office.name, settings: publicSettings(this.office) });
+    this.applyDistance();
+  }
+
+  private officeDistance(): number {
+    const v = Math.round(officeSettings(this.office.settings).interactionDistance);
+    return Math.max(MIN_INTERACTION_DISTANCE, Math.min(MAX_INTERACTION_DISTANCE, v || DEFAULT_INTERACTION_DISTANCE));
+  }
+
+  private applyDistance() {
+    const v = this.officeDistance();
+    for (const p of this.players.values()) if (p.state.distance !== v) this.patch(p, { distance: v });
+    this.avDirty = true;
   }
 
   /** Mapa publicado mudou: recarrega e reposiciona quem ficou em tile bloqueado. */
@@ -380,9 +412,9 @@ export class OfficeRoom extends Room {
   // ---------- loop ----------
 
   private tick() {
-    if (this.pendingMoves.size) {
-      this.broadcast('moves', [...this.pendingMoves.values()]);
-      this.pendingMoves.clear();
+    if (this.pendingMoves.length) {
+      this.broadcast('moves', this.pendingMoves);
+      this.pendingMoves = [];
     }
     if (this.avDirty) {
       this.avDirty = false;
@@ -419,7 +451,7 @@ export class OfficeRoom extends Room {
   }
 
   private queueMove(p: Runtime) {
-    this.pendingMoves.set(p.state.id, [p.state.id, p.state.x, p.state.y, DIRS.indexOf(p.state.dir)]);
+    this.pendingMoves.push([p.state.id, p.state.x, p.state.y, DIRS.indexOf(p.state.dir)]);
   }
 
   // ---------- mensagens ----------
@@ -447,16 +479,19 @@ export class OfficeRoom extends Room {
     this.on('ping', (p, d) => p.client.send('pong', { t: d.t, now: Date.now() }));
 
     this.on('step', (p, d) => {
+      // passo enviado antes da última correção: o cliente já voltou para a posição certa, ignora
+      if ((Number(d.e) || 0) !== p.epoch) return;
       const x = Number(d.x);
       const y = Number(d.y);
       const now = Date.now();
-      // crédito de passos: recupera 1 a cada MIN_STEP_INTERVAL_MS, com rajada máxima de 3
-      p.stepCredit = Math.min(3, p.stepCredit + (now - (p.lastStepAt || now)) / MIN_STEP_INTERVAL_MS);
+      // crédito de passos: recupera 1 a cada MIN_STEP_INTERVAL_MS, com rajada máxima de STEP_BURST
+      p.stepCredit = Math.min(STEP_BURST, p.stepCredit + (now - (p.lastStepAt || now)) / MIN_STEP_INTERVAL_MS);
       p.lastStepAt = now;
       const adjacent = Number.isInteger(x) && Number.isInteger(y) && Math.abs(x - p.state.x) + Math.abs(y - p.state.y) === 1;
       const check = adjacent && p.stepCredit >= 1 ? this.canEnterTile(p, x, y) : { ok: false };
       if (!check.ok) {
-        p.client.send('correct', { x: p.state.x, y: p.state.y });
+        p.epoch++;
+        p.client.send('correct', { x: p.state.x, y: p.state.y, e: p.epoch });
         if ('notice' in check && check.notice) p.client.send('notice', { code: check.notice });
         return;
       }
@@ -464,6 +499,25 @@ export class OfficeRoom extends Room {
       const dir: Dir = x > p.state.x ? 'right' : x < p.state.x ? 'left' : y > p.state.y ? 'down' : 'up';
       this.applyPosition(p, x, y, dir);
       this.queueMove(p);
+    });
+
+    // porta: X perto dela abre ou fecha (para todos)
+    this.on('door', (p, d) => {
+      const door = this.map.objects.find((o) => o.type === 'door' && o.id === String(d.id ?? ''));
+      if (!door) return;
+      if (Math.max(Math.abs(door.x - p.state.x), Math.abs(door.y - p.state.y)) > 1) return;
+      const open = typeof d.open === 'boolean' ? d.open : !this.openDoors.has(door.id);
+      if (open === this.openDoors.has(door.id)) return;
+      if (!open) {
+        for (const q of this.players.values()) {
+          if (q.state.x === door.x && q.state.y === door.y) {
+            p.client.send('notice', { code: 'door_blocked' });
+            return;
+          }
+        }
+        this.openDoors.delete(door.id);
+      } else this.openDoors.add(door.id);
+      this.broadcast('door', { id: door.id, open });
     });
 
     this.on('face', (p, d) => {
@@ -493,8 +547,9 @@ export class OfficeRoom extends Room {
         return;
       }
       this.applyPosition(p, target.x, target.y, p.state.dir);
-      this.pendingMoves.delete(p.state.id);
-      this.broadcast('tp', { id: p.state.id, x: target.x, y: target.y });
+      this.pendingMoves = this.pendingMoves.filter((m) => m[0] !== p.state.id);
+      p.epoch++;
+      this.broadcast('tp', { id: p.state.id, x: target.x, y: target.y, e: p.epoch });
     });
 
     this.on('status', (p, d) => {
@@ -522,11 +577,16 @@ export class OfficeRoom extends Room {
       this.patch(p, { customStatus: { emoji, text, until } });
     });
 
-    this.on('distance', (p, d) => {
+    // raio de proximidade: só Dono/Admin mudam, e vale para o escritório inteiro
+    this.on('distance', async (p, d) => {
+      if (p.kind !== 'user' || !isAdminRole(p.state.role)) return;
       const v = Math.max(MIN_INTERACTION_DISTANCE, Math.min(MAX_INTERACTION_DISTANCE, Math.round(Number(d.value) || DEFAULT_INTERACTION_DISTANCE)));
-      this.patch(p, { distance: v });
-      if (p.kind === 'user') db().update(schema.users).set({ interactionDistance: v }).where(eq(schema.users.id, p.state.id)).catch(() => {});
-      this.avDirty = true;
+      const office = await getOffice(this.officeId);
+      await db()
+        .update(schema.offices)
+        .set({ settings: { ...office.settings, interactionDistance: v } })
+        .where(eq(schema.offices.id, this.officeId));
+      await this.refreshOffice();
     });
 
     this.on('media', (p, d) => this.patch(p, { mic: Boolean(d.mic), cam: Boolean(d.cam), screen: Boolean(d.screen) }));
@@ -923,6 +983,11 @@ export class OfficeRoom extends Room {
     return wb;
   }
 
+  /** Uma imagem nova foi enviada para o quadro: avisa quem está com ele aberto (cada um baixa pela API). */
+  whiteboardFileAdded(objectId: string, fileId: string, fromId: string) {
+    for (const o of this.players.values()) if (o.state.id !== fromId && o.whiteboards.has(objectId)) o.client.send('wb:file', { objectId, fileId });
+  }
+
   private flushWhiteboards() {
     for (const [objectId, wb] of this.wbCache) {
       if (!wb.dirty) continue;
@@ -940,5 +1005,5 @@ export class OfficeRoom extends Room {
 
 export function publicSettings(office: OfficeRow) {
   const s = officeSettings(office.settings);
-  return { awayMinutes: s.awayMinutes, notesRestrictedToAdmins: s.notesRestrictedToAdmins, monitoringNotice: s.monitoringNotice };
+  return { awayMinutes: s.awayMinutes, notesRestrictedToAdmins: s.notesRestrictedToAdmins, monitoringNotice: s.monitoringNotice, interactionDistance: s.interactionDistance };
 }

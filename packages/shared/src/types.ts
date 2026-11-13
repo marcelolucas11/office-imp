@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Role } from './permissions';
 import type { Dir } from './map';
+import { DEFAULT_INTERACTION_DISTANCE } from './constants';
 
 export type Status = 'AVAILABLE' | 'BUSY' | 'DND';
 export type TrackedStatus = Status | 'AWAY';
@@ -174,6 +175,8 @@ export interface OfficeSettings {
   notesRestrictedToAdmins: boolean;
   notesRecipients: string[];
   monitoringNotice: string;
+  /** Raio de proximidade do escritório (tiles), igual para todos. */
+  interactionDistance: number;
 }
 
 export const DEFAULT_MONITORING_NOTICE =
@@ -186,6 +189,7 @@ export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   notesRestrictedToAdmins: false,
   notesRecipients: [],
   monitoringNotice: DEFAULT_MONITORING_NOTICE,
+  interactionDistance: DEFAULT_INTERACTION_DISTANCE,
 };
 
 export interface WizardInput {

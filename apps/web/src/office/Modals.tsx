@@ -6,6 +6,7 @@ import {
   MAX_DESK_DECOR,
   MAX_INTERACTION_DISTANCE,
   MIN_INTERACTION_DISTANCE,
+  DEFAULT_INTERACTION_DISTANCE,
   OBJECT_DEFS,
   ROLE_LABEL,
   STATUS_COLOR,
@@ -25,6 +26,7 @@ import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { desktop, toast, useSession } from '../lib/session';
 import { av, useAv } from './av';
+import { Emo, EmoText } from '../lib/icons';
 
 const Whiteboard = lazy(() => import('./Whiteboard'));
 const close = () => useGame.setState({ modal: null });
@@ -150,8 +152,8 @@ export function DeskModal({ deskId }: { deskId: string }) {
         <p className="text-xs text-muted">{desk.online ? t('desk.onlineNow', '{{name}} está online agora.', { name: desk.userName }) : t('desk.offlineNow', '{{name}} está offline. O recado aparece quando entrar.', { name: desk.userName })}</p>
         <Tabs
           tabs={[
-            { id: 'note', label: t('desk.note', '📝 Recado') },
-            { id: 'gift', label: t('desk.gift', '🎁 Presente') },
+            { id: 'note', label: <EmoText text={t('desk.note', '📝 Recado')} /> },
+            { id: 'gift', label: <EmoText text={t('desk.gift', '🎁 Presente')} /> },
           ]}
           value={kind}
           onChange={setKind}
@@ -159,8 +161,8 @@ export function DeskModal({ deskId }: { deskId: string }) {
         {kind === 'gift' ? (
           <div className="flex flex-wrap gap-1">
             {GIFTS.map((g) => (
-              <button key={g} type="button" onClick={() => setEmoji(g)} className={cx('rounded-lg px-2 py-1 text-2xl', emoji === g ? 'bg-gold/25' : 'hover:bg-panel-3')}>
-                {g}
+              <button key={g} type="button" onClick={() => setEmoji(g)} className={cx('rounded-lg p-1.5', emoji === g ? 'bg-gold/25' : 'hover:bg-panel-3')}>
+                <Emo e={g} size={30} />
               </button>
             ))}
           </div>
@@ -231,7 +233,7 @@ export function MyDeskModal() {
           {items.length === 0 ? <Empty>{t('mydesk.empty', 'Nada por aqui ainda.')}</Empty> : null}
           {items.map((i) => (
             <div key={i.id} className="flex items-start gap-3 rounded-xl bg-panel-2 p-3">
-              <span className="text-2xl">{i.kind === 'gift' ? (i.emoji ?? '🎁') : '📝'}</span>
+              <Emo e={i.kind === 'gift' ? (i.emoji ?? '🎁') : '📝'} size={30} />
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted">
                   {i.authorName} · {new Date(i.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
@@ -239,7 +241,7 @@ export function MyDeskModal() {
                 <p className="whitespace-pre-wrap break-words text-sm">{i.content}</p>
               </div>
               <button type="button" title={t('app.delete', 'Excluir')} className="text-muted hover:text-danger" onClick={() => net.send('desk:item:delete', { id: i.id })}>
-                🗑
+                <Emo e="🗑" size={20} />
               </button>
             </div>
           ))}
@@ -383,7 +385,7 @@ export function ProfileModal({ playerId }: { playerId: string }) {
         ) : (
           <>
             <Button small onClick={() => net.send('wave', { to: p.id })}>
-              👋 {t('people.wave', 'Acenar')}
+              <Emo e="👋" /> {t('people.wave', 'Acenar')}
             </Button>
             <Button
               small
@@ -392,7 +394,7 @@ export function ProfileModal({ playerId }: { playerId: string }) {
                 useGame.setState({ panel: 'chat', chatTab: 'dm', dmWith: p.id, modal: null });
               }}
             >
-              💬 {t('people.message', 'Mensagem')}
+              <Emo e="💬" /> {t('people.message', 'Mensagem')}
             </Button>
             <Button
               small
@@ -401,7 +403,7 @@ export function ProfileModal({ playerId }: { playerId: string }) {
                 useGame.setState({ following: p.id, modal: null });
               }}
             >
-              🚶 {t('profile.follow', 'Seguir')}
+              <Emo e="🚶" /> {t('profile.follow', 'Seguir')}
             </Button>
             <Button
               small
@@ -411,7 +413,7 @@ export function ProfileModal({ playerId }: { playerId: string }) {
                 close();
               }}
             >
-              📍 {t('people.goto', 'Ir até')}
+              <Emo e="📍" /> {t('people.goto', 'Ir até')}
             </Button>
           </>
         )}
@@ -510,8 +512,8 @@ export function CustomStatusModal() {
       <div className="space-y-3">
         <div className="flex flex-wrap gap-1">
           {['🎧', '🍽️', '☕', '📞', '🏠', '🚗', '🤒', '🌴', '💻', '🔥'].map((e) => (
-            <button key={e} type="button" onClick={() => setEmoji(e)} className={cx('rounded-lg px-2 py-1 text-xl', emoji === e ? 'bg-gold/25' : 'hover:bg-panel-3')}>
-              {e}
+            <button key={e} type="button" onClick={() => setEmoji(e)} className={cx('rounded-lg p-1.5', emoji === e ? 'bg-gold/25' : 'hover:bg-panel-3')}>
+              <Emo e={e} size={26} />
             </button>
           ))}
         </div>
@@ -536,6 +538,7 @@ export function CustomStatusModal() {
 export function SettingsModal() {
   const s = useAv();
   const me = useGame((g) => g.players[g.meId]);
+  const canAdmin = useGame((g) => g.canAdmin);
   const { logout } = useSession();
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [cams, setCams] = useState<MediaDeviceInfo[]>([]);
@@ -567,9 +570,16 @@ export function SettingsModal() {
         {dev(t('settings.out', 'Saída de som'), outs, s.outId, 'audiooutput')}
         <Toggle checked={s.hd} onChange={(v) => void av.setPrefs({ hd: v })} label={t('settings.hd', 'Vídeo em HD (usa mais internet)')} />
         <Toggle checked={s.hearNearby} onChange={(v) => void av.setPrefs({ hearNearby: v })} label={t('settings.hear', 'Ouvir quem está por perto na área aberta')} />
-        <Field label={t('settings.distance', 'Distância de interação: {{n}} passos', { n: me?.distance ?? 5 })} hint={t('settings.distanceHint', 'Você conecta com quem estiver dentro desse raio. Em salas privadas o raio não vale.')}>
-          <input type="range" min={MIN_INTERACTION_DISTANCE} max={MAX_INTERACTION_DISTANCE} value={me?.distance ?? 5} onChange={(e) => net.send('distance', { value: Number(e.target.value) })} className="w-full accent-[#d7b870]" />
-        </Field>
+        {canAdmin ? (
+          <Field
+            label={t('settings.distanceAdmin', 'Distância de interação do escritório: {{n}} blocos', { n: me?.distance ?? DEFAULT_INTERACTION_DISTANCE })}
+            hint={t('settings.distanceAdminHint', 'Vale para todos no escritório. O padrão é 2 blocos. Em salas e mesas o raio não vale.')}
+          >
+            <input type="range" min={MIN_INTERACTION_DISTANCE} max={MAX_INTERACTION_DISTANCE} value={me?.distance ?? DEFAULT_INTERACTION_DISTANCE} onChange={(e) => net.send('distance', { value: Number(e.target.value) })} className="w-full accent-[#d7b870]" />
+          </Field>
+        ) : (
+          <p className="text-xs text-muted">{t('settings.distanceInfo', 'Distância de interação: {{n}} blocos (definida pela administração).', { n: me?.distance ?? DEFAULT_INTERACTION_DISTANCE })}</p>
+        )}
         {!desktop && perm !== 'granted' ? (
           <Button small variant="ghost" onClick={() => void Notification.requestPermission().then(setPerm)}>
             {t('settings.notify', 'Ativar notificações de acenos e mensagens')}

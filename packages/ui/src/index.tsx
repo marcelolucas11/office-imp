@@ -127,7 +127,7 @@ export function Modal({ title, onClose, children, wide, footer }: { title: strin
   );
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string; badge?: number }[]; value: T; onChange: (v: T) => void }) {
+export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: ReactNode; badge?: number }[]; value: T; onChange: (v: T) => void }) {
   return (
     <div className="flex gap-1 border-b border-line">
       {tabs.map((t) => (

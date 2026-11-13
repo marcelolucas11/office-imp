@@ -6,6 +6,7 @@ import { Badge, Spinner, cx } from '@office-imp/ui';
 import { t } from '../lib/i18n';
 import { useSession } from '../lib/session';
 import { Logo } from '../pages/Shell';
+import { Emo } from '../lib/icons';
 
 const Analytics = lazy(() => import('./Insights').then((m) => ({ default: m.Analytics })));
 const Notes = lazy(() => import('./Insights').then((m) => ({ default: m.Notes })));
@@ -38,7 +39,7 @@ export default function AdminPage() {
         <nav className="flex-1 space-y-0.5 overflow-auto px-2">
           {nav.map((n) => (
             <NavLink key={n.to} to={n.to} className={({ isActive }) => cx('flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors', isActive ? 'bg-gold/15 text-gold' : 'text-stone-300 hover:bg-panel-2')}>
-              <span>{n.icon}</span>
+              <Emo e={n.icon} size={20} />
               {n.label}
             </NavLink>
           ))}

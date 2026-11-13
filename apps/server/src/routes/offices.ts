@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { FastifyInstance } from 'fastify';
 import { and, desc, eq } from 'drizzle-orm';
-import { EXPANSION_THRESHOLD, can, canAdminOffice, isValidTimezone, mapDesks, validateMapShape, type OfficeMap } from '@office-imp/shared';
+import { EXPANSION_THRESHOLD, MAX_INTERACTION_DISTANCE, MIN_INTERACTION_DISTANCE, can, canAdminOffice, isValidTimezone, mapDesks, stripDerivedAreas, validateMapShape, type OfficeMap } from '@office-imp/shared';
 import { expandOffice, generateOffice, reserveBlankWing, toTiled, validateOffice } from '@office-imp/map-engine';
 import { config } from '../config';
 import { db, schema } from '../db';
@@ -76,6 +76,7 @@ export async function officeRoutes(app: FastifyInstance) {
             notesRestrictedToAdmins: z.boolean().optional(),
             notesRecipients: z.array(z.string().trim().email().max(200)).max(30).optional(),
             monitoringNotice: z.string().trim().min(20).max(3000).optional(),
+            interactionDistance: z.number().int().min(MIN_INTERACTION_DISTANCE).max(MAX_INTERACTION_DISTANCE).optional(),
           })
           .optional(),
       }),
@@ -157,7 +158,7 @@ export async function officeRoutes(app: FastifyInstance) {
     const map = (req.body as any)?.map;
     const shape = validateMapShape(map);
     if (shape) return { ok: false, errors: [shape], warnings: [], desks: 0 };
-    return validateOffice(map as OfficeMap);
+    return validateOffice(stripDerivedAreas(map as OfficeMap));
   });
 
   app.post('/api/offices/:id/map', async (req) => {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Room, RoomEvent, Track, VideoPresets, type RemoteParticipant, type RemoteTrackPublication } from 'livekit-client';
+import { Room, RoomEvent, Track, VideoPresets, type LocalTrack, type RemoteParticipant, type RemoteTrackPublication } from 'livekit-client';
 import { create } from 'zustand';
-import { volumeForDistance, type AvView } from '@office-imp/shared';
+import { DEFAULT_INTERACTION_DISTANCE, volumeForDistance, type AvView } from '@office-imp/shared';
 import { bus } from '../game/bus';
 import { net } from '../game/net';
 import { useGame } from '../game/store';
@@ -92,6 +92,8 @@ class AvManager {
   private wanted = new WeakMap<RemoteTrackPublication, boolean>();
   private audioEls = new Set<HTMLMediaElement>();
   private lastMedia = '';
+  /** Microfone e câmera que continuam abertos durante a troca de sala (área aberta ↔ área privada). */
+  private carried: { mic: LocalTrack | null; cam: LocalTrack | null } = { mic: null, cam: null };
 
   start() {
     if (this.active) return;
@@ -111,6 +113,7 @@ class AvManager {
         const before = prev.players[prev.meId];
         if (me && before && me.status !== before.status && me.status === 'BUSY') void this.setMic(false);
         if (me && before && me.distance !== before.distance) this.applyVolumes();
+        if (me && before && me.areaId !== before.areaId) this.onAreaChange(before.areaId, me.areaId);
         if (s.players !== prev.players) this.refreshSoon();
       }),
     );
@@ -130,6 +133,26 @@ class AvManager {
     this.chain = this.chain.then(() => this.reconcile()).catch((e) => console.warn('[av] falha', e));
   }
 
+  /** A câmera foi ligada sozinha ao chegar numa mesa (e desliga sozinha ao sair, se a pessoa não mexeu nela). */
+  private autoCam = false;
+
+  private onAreaChange(prevId: string | null, nextId: string | null) {
+    const areas = useGame.getState().map?.areas ?? [];
+    const prev = prevId ? areas.find((a) => a.id === prevId) : undefined;
+    const next = nextId ? areas.find((a) => a.id === nextId) : undefined;
+    if (next?.desk) {
+      if (!this.want.cam && useGame.getState().me()?.status !== 'DND') {
+        this.want.cam = true;
+        this.autoCam = true;
+        this.queue();
+      }
+    } else if (prev?.desk && this.autoCam) {
+      this.autoCam = false;
+      this.want.cam = false;
+      this.queue();
+    }
+  }
+
   private refreshTimer: number | null = null;
   private refreshSoon() {
     if (this.refreshTimer) return;
@@ -145,6 +168,7 @@ class AvManager {
     if (!this.active || !office || g.phase !== 'online') {
       await this.leaveAux();
       await this.leaveMain();
+      this.dropCarried();
       this.current = '';
       useAv.setState({ conn: 'off', room: 'none', peers: [] });
       this.pushLocal();
@@ -152,7 +176,8 @@ class AvManager {
     }
     const want = this.view.room;
     if (want !== this.current || (want !== 'none' && !this.main)) {
-      await this.leaveMain();
+      // trocando de uma sala para outra: mantém microfone e câmera abertos (sem desligar e religar)
+      await this.leaveMain(want !== 'none');
       if (want === 'none') {
         this.current = 'none';
         this.want = { mic: false, cam: false };
@@ -172,6 +197,11 @@ class AvManager {
           this.scheduleRetry();
         }
       }
+    }
+    // câmera ligada/desligada sozinha pela mesa, sem troca de sala pendente
+    if (this.main && this.main.localParticipant.isCameraEnabled !== this.want.cam) {
+      await this.main.localParticipant.setCameraEnabled(this.want.cam).catch((e) => this.deviceError(e, 'cam'));
+      this.pushLocal();
     }
     const needAux = Boolean(this.main) && this.current !== 'open' && this.current !== 'none' && this.view.spotlight.length > 0;
     if (needAux && !this.aux) await this.joinAux(office.id).catch(() => {});
@@ -206,8 +236,23 @@ class AvManager {
     await room.connect(url, token, { autoSubscribe: roomId !== 'open' });
     this.main = room;
     useAv.setState({ blocked: !room.canPlaybackAudio });
-    if (this.want.mic) await room.localParticipant.setMicrophoneEnabled(true).catch((e) => this.deviceError(e, 'mic'));
-    if (this.want.cam) await room.localParticipant.setCameraEnabled(true).catch((e) => this.deviceError(e, 'cam'));
+    const { mic, cam } = this.carried;
+    this.carried = { mic: null, cam: null };
+    const lp = room.localParticipant;
+    if (this.want.mic) {
+      if (mic) await lp.publishTrack(mic, { source: Track.Source.Microphone }).catch(async () => {
+        mic.stop();
+        await lp.setMicrophoneEnabled(true).catch((e) => this.deviceError(e, 'mic'));
+      });
+      else await lp.setMicrophoneEnabled(true).catch((e) => this.deviceError(e, 'mic'));
+    } else mic?.stop();
+    if (this.want.cam) {
+      if (cam) await lp.publishTrack(cam, { source: Track.Source.Camera }).catch(async () => {
+        cam.stop();
+        await lp.setCameraEnabled(true).catch((e) => this.deviceError(e, 'cam'));
+      });
+      else await lp.setCameraEnabled(true).catch((e) => this.deviceError(e, 'cam'));
+    } else cam?.stop();
     this.pushLocal();
   }
 
@@ -219,14 +264,34 @@ class AvManager {
     this.aux = room;
   }
 
-  private async leaveMain() {
+  private async leaveMain(keep = false) {
     const room = this.main;
     this.main = null;
-    if (room) await room.disconnect().catch(() => {});
+    if (room || !keep) this.dropCarried();
+    if (room) {
+      const lp = room.localParticipant;
+      const live = (src: Track.Source): LocalTrack | null => {
+        const tr = lp.getTrackPublication(src)?.track as LocalTrack | undefined;
+        return tr && !tr.isMuted && tr.mediaStreamTrack?.readyState === 'live' ? tr : null;
+      };
+      const mic = keep && this.want.mic ? live(Track.Source.Microphone) : null;
+      const cam = keep && this.want.cam ? live(Track.Source.Camera) : null;
+      const all = [...lp.trackPublications.values()].map((pub) => pub.track).filter(Boolean) as LocalTrack[];
+      // sem parar as faixas: as que seguem para a próxima sala continuam capturando
+      await room.disconnect(false).catch(() => {});
+      for (const tr of all) if (tr !== mic && tr !== cam) tr.stop();
+      this.carried = { mic, cam };
+    }
     this.meter.watch(null);
     for (const el of this.audioEls) el.remove();
     this.audioEls.clear();
     useAv.setState({ focus: null });
+  }
+
+  private dropCarried() {
+    this.carried.mic?.stop();
+    this.carried.cam?.stop();
+    this.carried = { mic: null, cam: null };
   }
 
   private async leaveAux() {
@@ -310,7 +375,7 @@ class AvManager {
 
   applyVolumes() {
     const g = useGame.getState();
-    const radius = g.players[g.meId]?.distance ?? 5;
+    const radius = g.players[g.meId]?.distance ?? DEFAULT_INTERACTION_DISTANCE;
     const hear = useAv.getState().hearNearby;
     const v = this.view;
     const vol = (p: RemoteParticipant, value: number) => {
@@ -396,6 +461,7 @@ class AvManager {
   }
 
   async setCam(on: boolean) {
+    this.autoCam = false;
     this.want.cam = on;
     if (!this.main) {
       if (on) this.notConnected();

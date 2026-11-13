@@ -17,6 +17,7 @@ import { t } from '../lib/i18n';
 import { desktop } from '../lib/session';
 import { av, useAv } from './av';
 import { MOD, STATUS_KEYS, TrackView } from './Hud';
+import { Emo } from '../lib/icons';
 
 const TILE_W = 240;
 const TILE_H = 135;
@@ -196,7 +197,7 @@ function MiniContent({ target }: { target: Target }) {
             </div>
           )}
           <span className="absolute bottom-1.5 left-1.5 flex max-w-[85%] items-center gap-1 rounded-lg bg-black/65 px-1.5 py-0.5 text-[11px] font-medium backdrop-blur-sm">
-            {tile.screen ? '🖥' : tile.mic === false ? <MicOff /> : null}
+            {tile.screen ? <Emo e="🖥" size={14} /> : tile.mic === false ? <MicOff /> : null}
             <span className="truncate">{tile.name}</span>
           </span>
           {tile.key === 'me' ? <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full ring-2 ring-black/60" style={{ background: STATUS_COLOR[status] }} /> : null}

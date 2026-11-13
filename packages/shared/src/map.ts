@@ -149,6 +149,10 @@ export interface MapArea {
   partners?: boolean;
   /** Sala de reunião: permite notas de reunião. */
   meeting?: boolean;
+  /** Área de conversa de uma mesa de funcionário (gerada automaticamente a partir da mesa). */
+  desk?: boolean;
+  /** Mesa dona da área (quando `desk`). */
+  deskId?: string;
   capacity: number;
   rects: Rect[];
 }
@@ -318,6 +322,70 @@ export function deskZone(desk: MapObject): Rect {
 export function deskSeat(desk: MapObject): Point {
   const s = desk.props?.seat as Point | undefined;
   return s ?? { x: desk.x, y: desk.y + 1 };
+}
+
+/** Prefixo dos ids das áreas de mesa, que são derivadas das mesas e nunca gravadas no mapa. */
+export const DESK_AREA_PREFIX = 'desk:';
+/** Lugares na área de uma mesa: a cadeira + 3 em volta. */
+export const DESK_AREA_CAPACITY = 4;
+
+export function isDerivedArea(a: MapArea): boolean {
+  return a.id.startsWith(DESK_AREA_PREFIX);
+}
+
+/** Remove as áreas derivadas (antes de gravar ou editar o mapa). */
+export function stripDerivedAreas(map: OfficeMap): OfficeMap {
+  if (!map.areas.some(isDerivedArea)) return map;
+  return { ...map, areas: map.areas.filter((a) => !isDerivedArea(a)) };
+}
+
+/**
+ * Área de conversa de cada mesa: um quadrado de 2×2 tiles (4 lugares) que inclui a cadeira.
+ * Quem chega na mesa entra numa conversa privada com quem estiver nesses 4 tiles.
+ * Mesas dentro de salas privadas (sócios) não ganham área própria: a sala já cumpre esse papel.
+ */
+export function deskAreas(map: OfficeMap): MapArea[] {
+  const base = map.areas.filter((a) => !isDerivedArea(a) && a.kind === 'private');
+  const grid = buildCollision(map);
+  const taken: Rect[] = base.flatMap((a) => a.rects);
+  const out: MapArea[] = [];
+  let n = 0;
+  for (const desk of mapDesks(map)) {
+    n++;
+    const seat = deskSeat(desk);
+    const custom = desk.props?.area as Rect | undefined;
+    const candidates: Rect[] = custom
+      ? [custom]
+      : [
+          { x: seat.x, y: seat.y, w: 2, h: 2 },
+          { x: seat.x - 1, y: seat.y, w: 2, h: 2 },
+          { x: seat.x, y: seat.y - 1, w: 2, h: 2 },
+          { x: seat.x - 1, y: seat.y - 1, w: 2, h: 2 },
+        ];
+    let best: Rect | null = null;
+    let bestScore = 1;
+    for (const r of candidates) {
+      if (r.x < 0 || r.y < 0 || r.x + r.w > map.width || r.y + r.h > map.height) continue;
+      if (taken.some((t) => rectsOverlap(t, r))) continue;
+      let score = 0;
+      for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (grid[y * map.width + x] === 0) score++;
+      if (score > bestScore) {
+        best = r;
+        bestScore = score;
+      }
+      if (score === r.w * r.h) break;
+    }
+    if (!best) continue;
+    taken.push(best);
+    out.push({ id: `${DESK_AREA_PREFIX}${desk.id}`, name: `Mesa ${n}`, kind: 'private', staffOnly: false, desk: true, deskId: desk.id, capacity: DESK_AREA_CAPACITY, rects: [best] });
+  }
+  return out;
+}
+
+/** Mapa com as áreas das mesas recalculadas (usar depois de carregar o mapa). */
+export function withDeskAreas(map: OfficeMap): OfficeMap {
+  const clean = stripDerivedAreas(map);
+  return { ...clean, areas: [...clean.areas, ...deskAreas(clean)] };
 }
 
 /** Junta tiles soltos em retângulos por linha (usado ao pintar áreas no Mapmaker). */

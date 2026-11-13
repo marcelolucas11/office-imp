@@ -59,3 +59,29 @@ Registro das decisões tomadas durante a construção: o que foi escolhido, o qu
   a publicação de microfone e câmera com um servidor que devolve o identificador da oferta
   (1.9 ou mais novo). Com o servidor 1.8 a negociação expira, e foi o teste de ponta a ponta com o
   LiveKit real que pegou isso. Ao atualizar um dos dois, rode o E2E do CI antes de publicar.
+
+## Melhorias de 13/11/2026
+
+- **Movimento sem "voltar".** O servidor aceita uma rajada de até 8 passos (antes 3): quando a rede
+  entrega vários passos juntos, eles não são mais recusados. Cada passo leva a "época" de movimento;
+  depois de uma correção, os passos que já estavam a caminho são ignorados em silêncio (antes cada um
+  gerava outra correção e o avatar pulava várias vezes). O servidor repassa todos os passos do tick,
+  não só o último, e o cliente anda de forma contínua (sem pausa entre tiles), adiantando um pouco o
+  passo de quem está atrasado em vez de teleportar. A interface React só recebe as posições a cada
+  200 ms, e os retratos dos avatares ficam em cache (antes eram redesenhados 20 vezes por segundo).
+- **Câmera e microfone na troca de sala.** As faixas seguem abertas e são publicadas de novo na sala
+  seguinte (`disconnect(false)` + `publishTrack`), sem desligar e religar o dispositivo.
+- **Área das mesas.** Cada mesa comum ganha uma área privada de 2×2 tiles com a cadeira (4 lugares).
+  A área é derivada da mesa a cada carga e nunca é gravada no mapa: vale para mapas antigos e para
+  mesas colocadas no Mapmaker. Ao entrar nela a câmera liga sozinha, e desliga ao sair se a pessoa
+  não mexeu nela. Mesas dentro de salas privadas (sócios) não ganham área própria.
+- **Raio de proximidade do escritório.** 2 blocos de fábrica, igual para todos; só Dono/Admin mudam
+  (Configurações do escritório ou o controle no próprio escritório).
+- **Portas.** Começam fechadas e bloqueiam a passagem; X perto delas abre ou fecha para todos.
+  Quem anda sozinho (clique duplo, seguir) abre a porta pelo caminho. Não fecha com alguém na porta.
+  O estado fica na memória da sala (volta a "fechada" se o servidor reiniciar).
+- **Ícones 2D.** Os emojis da interface e das reações viraram ícones de traço branco sobre fundo
+  preto (desenhos do Lucide, ISC). O que a pessoa digita no chat continua como ela escreveu.
+- **Imagens do quadro branco.** O Excalidraw guarda as imagens fora do desenho; agora elas são
+  enviadas para `/api/offices/:id/whiteboards/:obj/files` e baixadas por quem está com o quadro aberto.
+

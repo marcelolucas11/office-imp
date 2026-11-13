@@ -37,7 +37,7 @@ export function drawAreas(ctx: Ctx, areas: MapArea[], x0 = 0, y0 = 0, selectedId
     if (first) {
       ctx.font = 'bold 11px Montserrat Variable, sans-serif';
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      const label = `${a.kind === 'spotlight' ? '★ ' : a.staffOnly ? '🔒 ' : ''}${a.name}`;
+      const label = `${a.kind === 'spotlight' ? '★ ' : ''}${a.name}${a.staffOnly ? ' (equipe)' : ''}`;
       const tw = ctx.measureText(label).width;
       ctx.fillRect((first.x - x0) * T + 3, (first.y - y0) * T + 3, tw + 8, 16);
       ctx.fillStyle = '#fff';

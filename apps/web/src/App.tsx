@@ -10,6 +10,7 @@ import { Home } from './pages/Home';
 import { Invite } from './pages/Invite';
 import { Login } from './pages/Login';
 import { Setup } from './pages/Setup';
+import { EmoText } from './lib/icons';
 
 const OfficePage = lazy(() => import('./office/OfficePage'));
 const AdminPage = lazy(() => import('./admin/AdminPage'));
@@ -31,7 +32,9 @@ function Toasts() {
       {toasts.map((x) => (
         <div key={x.id} className={cx('oi-pop pointer-events-auto rounded-xl border bg-panel p-3 text-sm shadow-xl', x.kind === 'error' ? 'border-danger/60' : x.kind === 'ok' ? 'border-ok/50' : 'border-line')}>
           <div className="flex items-start gap-2">
-            <span className="flex-1 whitespace-pre-wrap break-words">{x.text}</span>
+            <span className="flex-1 whitespace-pre-wrap break-words">
+              <EmoText text={x.text} />
+            </span>
             <button type="button" aria-label={t('app.close', 'Fechar')} className="text-muted hover:text-stone-100" onClick={() => dismiss(x.id)}>
               ✕
             </button>

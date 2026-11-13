@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-export const DEFAULT_INTERACTION_DISTANCE = 5;
+/** Raio de proximidade de fábrica (em tiles). Só Dono/Admin aumentam, nas configurações do escritório. */
+export const DEFAULT_INTERACTION_DISTANCE = 2;
 export const MIN_INTERACTION_DISTANCE = 1;
 export const MAX_INTERACTION_DISTANCE = 10;
 export const TICK_MS = 50; // 20 ticks/s

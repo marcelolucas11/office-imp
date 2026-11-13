@@ -13,6 +13,7 @@ import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { desktop, toast, useSession } from '../lib/session';
 import { av, useAv, type PeerMedia } from './av';
+import { Emo, EmoText } from '../lib/icons';
 
 export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 export const MOD = isMac ? '⌘' : 'Ctrl';
@@ -60,7 +61,7 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
         <div className="grid h-full w-full place-items-center">{avatar ? <img src={avatar} alt="" className="pixel h-16" /> : <span className="text-2xl text-muted">{name.slice(0, 1).toUpperCase()}</span>}</div>
       )}
       <span className="absolute bottom-1 left-1 flex max-w-[92%] items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px]">
-        {kind === 'screen' ? '🖥' : mic === false ? <span className="text-danger">🔇</span> : null}
+        {kind === 'screen' ? <Emo e="🖥" size={16} /> : mic === false ? <Emo e="🔇" size={16} className="bg-danger/80" /> : null}
         <span className="truncate">{name}</span>
         {badge ? <span className="text-gold">{badge}</span> : null}
       </span>
@@ -181,7 +182,13 @@ export function StatusMenu({ onClose }: { onClose: () => void }) {
           onClose();
         }}
       >
-        {me?.customStatus ? `${me.customStatus.emoji} ${me.customStatus.text}` : t('status.custom', '✏️ Definir um status personalizado…')}
+        {me?.customStatus ? (
+          <>
+            <Emo e={me.customStatus.emoji} /> {me.customStatus.text}
+          </>
+        ) : (
+          <EmoText text={t('status.custom', '✏️ Definir um status personalizado…')} />
+        )}
       </button>
     </div>
   );
@@ -260,10 +267,10 @@ export function BottomBar() {
         </IconButton>
         <span className="mx-1 h-6 w-px bg-line" />
         <IconButton label={me.hand ? t('bar.handDown', 'Baixar a mão') : t('bar.handUp', 'Levantar a mão')} active={me.hand} onClick={() => net.send('hand', { raised: !me.hand })}>
-          ✋
+          <Emo e="✋" size={20} />
         </IconButton>
         <IconButton label={t('bar.emotes', 'Reações')} active={menu === 'emotes'} onClick={() => setMenu(menu === 'emotes' ? null : 'emotes')}>
-          😀
+          <Emo e="😀" size={20} />
         </IconButton>
         {menu === 'emotes' ? (
           <div className="oi-pop absolute bottom-14 left-1/2 flex -translate-x-1/2 gap-1 rounded-2xl border border-line bg-panel p-2 shadow-2xl">
@@ -271,38 +278,38 @@ export function BottomBar() {
               <button
                 key={e}
                 type="button"
-                className="rounded-lg px-2 py-1 text-xl hover:bg-panel-3"
+                className="rounded-lg p-1.5 hover:bg-panel-3"
                 onClick={() => {
                   net.send('emote', { emoji: e });
                   setMenu(null);
                 }}
               >
-                {e}
+                <Emo e={e} size={28} />
               </button>
             ))}
           </div>
         ) : null}
         <span className="mx-1 h-6 w-px bg-line" />
         <IconButton label={t('bar.radio', 'Rádio do escritório')} active={music.some((c) => c.listeners.includes(me.id))} onClick={() => set({ modal: { kind: 'radio' } })}>
-          🎵
+          <Emo e="🎵" size={20} />
           {music.length ? <span className="absolute -right-1 -top-1 rounded-full bg-gold px-1 text-[10px] font-bold text-ink">{music.length}</span> : null}
         </IconButton>
         {can(me.role, 'calendar.use') ? (
           <IconButton label={t('bar.calendar', 'Agenda')} onClick={() => set({ modal: { kind: 'calendar' } })}>
-            📅
+            <Emo e="📅" size={20} />
           </IconButton>
         ) : null}
         <IconButton label={t('bar.simplified', 'Visualização Simplificada (só as pessoas)')} active={simplified} onClick={() => set({ simplified: !simplified })}>
-          👁
+          <Emo e="👁" size={20} />
         </IconButton>
         <IconButton label={t('bar.more', 'Mais opções')} active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? null : 'more')}>
           ⋯
         </IconButton>
         {menu === 'more' ? (
           <div className="oi-pop absolute bottom-14 right-0 w-64 rounded-2xl border border-line bg-panel p-2 text-sm shadow-2xl" onClick={() => setMenu(null)}>
-            <MenuItem onClick={() => setMini(true)}>🪟 {t('more.mini', 'Modo Mini')}</MenuItem>
-            <MenuItem onClick={() => set({ minimap: !minimap })}>🗺 {minimap ? t('more.hideMinimap', 'Esconder o mini-mapa') : t('more.showMinimap', 'Mostrar o mini-mapa')}</MenuItem>
-            <MenuItem onClick={() => net.send('lead')}>🚩 {t('more.lead', 'Pedir que me sigam (liderar)')}</MenuItem>
+            <MenuItem onClick={() => setMini(true)}><Emo e="🪟" /> {t('more.mini', 'Modo Mini')}</MenuItem>
+            <MenuItem onClick={() => set({ minimap: !minimap })}><Emo e="🗺" /> {minimap ? t('more.hideMinimap', 'Esconder o mini-mapa') : t('more.showMinimap', 'Mostrar o mini-mapa')}</MenuItem>
+            <MenuItem onClick={() => net.send('lead')}><Emo e="🚩" /> {t('more.lead', 'Pedir que me sigam (liderar)')}</MenuItem>
             {me.deskId ? (
               <>
                 <MenuItem
@@ -311,24 +318,24 @@ export function BottomBar() {
                     if (desk) net.send('teleport', deskSeat(desk));
                   }}
                 >
-                  🪑 {t('more.goDesk', 'Ir para a minha mesa')}
+                  <Emo e="🪑" /> {t('more.goDesk', 'Ir para a minha mesa')}
                 </MenuItem>
-                <MenuItem onClick={() => set({ modal: { kind: 'myDesk' } })}>🪴 {t('more.myDesk', 'Minha mesa (recados e decoração)')}</MenuItem>
+                <MenuItem onClick={() => set({ modal: { kind: 'myDesk' } })}><Emo e="🪴" /> {t('more.myDesk', 'Minha mesa (recados e decoração)')}</MenuItem>
               </>
             ) : null}
-            <MenuItem onClick={() => set({ modal: { kind: 'avatar' } })}>🧍 {t('more.avatar', 'Personalizar o avatar')}</MenuItem>
-            <MenuItem onClick={() => set({ modal: { kind: 'settings' } })}>⚙️ {t('more.settings', 'Áudio, vídeo e preferências')}</MenuItem>
+            <MenuItem onClick={() => set({ modal: { kind: 'avatar' } })}><Emo e="🧍" /> {t('more.avatar', 'Personalizar o avatar')}</MenuItem>
+            <MenuItem onClick={() => set({ modal: { kind: 'settings' } })}><Emo e="⚙" /> {t('more.settings', 'Áudio, vídeo e preferências')}</MenuItem>
             {canAdmin ? (
               <>
                 <div className="my-1 border-t border-line" />
-                <MenuItem onClick={() => set({ modal: { kind: 'mapmaker' } })}>🛠 {t('more.mapmaker', 'Mapmaker e Build Tool')}</MenuItem>
-                <MenuItem onClick={() => nav('/admin')}>📊 {t('more.admin', 'Painel do ADM')}</MenuItem>
+                <MenuItem onClick={() => set({ modal: { kind: 'mapmaker' } })}><Emo e="🛠" /> {t('more.mapmaker', 'Mapmaker e Build Tool')}</MenuItem>
+                <MenuItem onClick={() => nav('/admin')}><Emo e="📊" /> {t('more.admin', 'Painel do ADM')}</MenuItem>
               </>
             ) : isAdminRole(role) ? (
-              <MenuItem onClick={() => nav('/admin')}>📊 {t('more.admin', 'Painel do ADM')}</MenuItem>
+              <MenuItem onClick={() => nav('/admin')}><Emo e="📊" /> {t('more.admin', 'Painel do ADM')}</MenuItem>
             ) : null}
             <div className="my-1 border-t border-line" />
-            <MenuItem onClick={() => nav('/')}>🚪 {t('more.leave', 'Sair do escritório')}</MenuItem>
+            <MenuItem onClick={() => nav('/')}><Emo e="🚪" /> {t('more.leave', 'Sair do escritório')}</MenuItem>
           </div>
         ) : null}
         {following ? (
@@ -342,7 +349,7 @@ export function BottomBar() {
         {blocked ? (
           <div className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap">
             <Button small onClick={() => void av.unblock()}>
-              🔊 {t('bar.unblock', 'Clique para ativar o som')}
+              <Emo e="🔊" /> {t('bar.unblock', 'Clique para ativar o som')}
             </Button>
           </div>
         ) : null}
@@ -352,11 +359,11 @@ export function BottomBar() {
       {/* direita: painéis */}
       <div className="flex items-center gap-2 rounded-2xl border border-line bg-panel/95 p-2 shadow-lg">
         <IconButton data-testid="btn-chat" label={t('bar.chat', 'Chat')} active={panel === 'chat'} onClick={() => set({ panel: panel === 'chat' ? null : 'chat', unread: 0 })}>
-          💬
+          <Emo e="💬" size={20} />
           {unread > 0 ? <span className="absolute -right-1 -top-1 rounded-full bg-danger px-1 text-[10px] font-bold text-white">{unread > 99 ? '99+' : unread}</span> : null}
         </IconButton>
         <IconButton data-testid="btn-people" label={t('bar.people', 'Participantes')} active={panel === 'people'} onClick={() => set({ panel: panel === 'people' ? null : 'people' })}>
-          👥
+          <Emo e="👥" size={20} />
           <span className="absolute -right-1 -top-1 rounded-full bg-panel-3 px-1 text-[10px] font-bold text-stone-100">{Object.keys(players).length}</span>
         </IconButton>
       </div>
@@ -568,23 +575,28 @@ function PeoplePanel() {
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: STATUS_COLOR[st] }} title={STATUS_LABEL[st]} />
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => useGame.setState({ modal: { kind: 'profile', playerId: p.id } })}>
               <span className="block truncate text-sm">
-                {p.name} {p.id === meId ? <span className="text-muted">({t('people.you', 'você')})</span> : null} {p.hand ? '✋' : ''}
+                {p.name} {p.id === meId ? <span className="text-muted">({t('people.you', 'você')})</span> : null} {p.hand ? <Emo e="✋" size={15} /> : null}
               </span>
               <span className="block truncate text-[11px] text-muted">
                 {ROLE_LABEL[p.role]} · {area ?? t('people.openArea', 'área aberta')}
-                {p.customStatus ? ` · ${p.customStatus.emoji} ${p.customStatus.text}` : ''}
+                {p.customStatus ? (
+                  <>
+                    {' · '}
+                    <Emo e={p.customStatus.emoji} size={13} /> {p.customStatus.text}
+                  </>
+                ) : null}
               </span>
             </button>
             {p.id !== meId ? (
               <span className="flex shrink-0 gap-1 opacity-70 group-hover:opacity-100">
                 <button type="button" title={t('people.wave', 'Acenar')} onClick={() => net.send('wave', { to: p.id })}>
-                  👋
+                  <Emo e="👋" size={20} />
                 </button>
                 <button type="button" title={t('people.message', 'Mensagem')} onClick={() => useGame.setState({ panel: 'chat', chatTab: 'dm', dmWith: p.id })}>
-                  💬
+                  <Emo e="💬" size={20} />
                 </button>
                 <button type="button" title={t('people.goto', 'Ir até')} onClick={() => net.gotoPlayer(p.id)}>
-                  📍
+                  <Emo e="📍" size={20} />
                 </button>
               </span>
             ) : null}
@@ -600,7 +612,7 @@ function PeoplePanel() {
               <span className="min-w-0 flex-1 truncate text-sm">{m.name}</span>
               <Badge color="gray">{ROLE_LABEL[m.role]}</Badge>
               <button type="button" title={t('people.goDesk', 'Ir até a mesa')} onClick={() => goDesk(m.id)}>
-                🪑
+                <Emo e="🪑" size={20} />
               </button>
             </div>
           ))}

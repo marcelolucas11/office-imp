@@ -7,14 +7,18 @@ import {
   OBJECT_DEFS,
   STATUS_COLOR,
   STEP_MS,
+  buildAreaIndex,
   buildCollision,
+  can,
   deskSeat,
   deskZone,
   findPath,
   mapDesks,
   nearestFree,
   objSize,
+  privateAreaAt,
   rectContains,
+  type AreaIndex,
   type AvatarConfig,
   type Dir,
   type MapObject,
@@ -23,12 +27,17 @@ import {
   type Point,
 } from '@office-imp/shared';
 import { AV_FRAMES, AV_H, AV_W, avatarKey, avatarSheet } from '../game/art/avatar';
-import { objectKey, objectSprite, objectTall } from '../game/art/objects';
+import { doorClosedSprite, objectKey, objectSprite, objectTall } from '../game/art/objects';
 import { T, drawStatic, makeCanvas } from '../game/art/tiles';
 import { bus } from '../game/bus';
 import { net } from '../game/net';
 import { useGame } from '../game/store';
 import { t } from '../lib/i18n';
+import { emojiCanvas, hasIcon } from '../lib/icons';
+
+const BADGE = 13;
+const EMOTE = 24;
+const ICON_RES = 64;
 
 const CHUNK = 24;
 const D_FLOOR = 0;
@@ -45,7 +54,9 @@ interface Ava {
   sprite: Phaser.GameObjects.Sprite;
   label: Phaser.GameObjects.Text;
   dot: Phaser.GameObjects.Arc;
-  emote?: Phaser.GameObjects.Text;
+  /** Ícones ao lado do nome (status personalizado, mão levantada, tela compartilhada). */
+  badges: Phaser.GameObjects.Image[];
+  emote?: Phaser.GameObjects.Image | Phaser.GameObjects.Text;
   tx: number;
   ty: number;
   dir: Dir;
@@ -53,6 +64,12 @@ interface Ava {
   foot: number;
   idleAt: number;
   queue: [number, number, Dir][];
+  /** tile de onde o passo atual saiu */
+  fx: number;
+  fy: number;
+  /** tempo decorrido e duração do passo atual (ms) */
+  el: number;
+  dur: number;
 }
 
 const px = (tx: number) => tx * T + T / 2;
@@ -72,8 +89,14 @@ export class OfficeScene extends Phaser.Scene {
   private statics: Phaser.GameObjects.Image[] = [];
   private staticKeys: string[] = [];
   private objs: Phaser.GameObjects.Image[] = [];
+  /** id da porta → sprite (troca entre aberta e fechada) */
+  private doorImgs = new Map<string, Phaser.GameObjects.Image>();
+  /** tile → id da porta */
+  private doorAt = new Map<number, string>();
+  private lastDoorAsk = 0;
   private deskLabels: Phaser.GameObjects.Text[] = [];
   private dim!: Phaser.GameObjects.Graphics;
+  private areaLine!: Phaser.GameObjects.Graphics;
   private zone!: Phaser.GameObjects.Graphics;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private path: Point[] | null = null;
@@ -83,6 +106,10 @@ export class OfficeScene extends Phaser.Scene {
   private zoomIdx = 2;
   private rev = 0;
   private cleaned = false;
+  private areaIndex: AreaIndex | null = null;
+  private lastAreaWarn = 0;
+  /** Época de movimento: muda a cada correção do servidor; passos de épocas antigas são ignorados lá. */
+  private epoch = 0;
 
   constructor() {
     super('office');
@@ -102,6 +129,7 @@ export class OfficeScene extends Phaser.Scene {
     this.zoomIdx = window.innerWidth >= 1500 ? 2 : 1;
     cam.setZoom(this.effZoom);
     this.dim = this.add.graphics().setDepth(D_DIM);
+    this.areaLine = this.add.graphics().setDepth(D_RUG + 1);
     this.zone = this.add.graphics().setDepth(D_DIM + 1);
     const kb = this.input.keyboard!;
     this.keys = kb.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT', false) as Record<string, Phaser.Input.Keyboard.Key>;
@@ -116,15 +144,26 @@ export class OfficeScene extends Phaser.Scene {
     on('player:join', (p: PlayerState) => this.addAva(p));
     on('player:leave', (id: string) => this.removeAva(id));
     on('moves', (list: [string, number, number, number][]) => this.onMoves(list));
-    on('tp', (d) => this.snap(d.id, d.x, d.y));
+    on('tp', (d) => {
+      if (d.id === useGame.getState().meId) {
+        this.path = null;
+        if (Number.isInteger(d.e)) this.epoch = d.e;
+      }
+      this.snap(d.id, d.x, d.y);
+    });
     on('correct', (d) => {
       this.path = null;
+      if (Number.isInteger(d.e)) this.epoch = d.e;
       this.snap(useGame.getState().meId, d.x, d.y);
     });
     on('player:update', (d) => this.onPatch(d.id, d.patch));
     on('emote', (d) => this.showEmote(d.id, d.emoji));
     on('map', () => this.buildMap());
     on('desks', () => this.refreshDeskLabels());
+    on('doors', (d: { id: string }) => {
+      this.applyDoor(d.id);
+      this.updateHint();
+    });
     on('goto', (pt: Point) => this.goTo(pt.x, pt.y));
     on('zoom', (dir: number) => this.zoom(dir));
     this.offs.push(
@@ -155,6 +194,7 @@ export class OfficeScene extends Phaser.Scene {
     if (!map) return;
     this.map = map;
     this.grid = buildCollision(map);
+    this.areaIndex = buildAreaIndex(map);
     this.rev++;
     for (const i of this.statics) i.destroy();
     for (const k of this.staticKeys) this.textures.remove(k);
@@ -174,6 +214,9 @@ export class OfficeScene extends Phaser.Scene {
     }
     for (const o of this.objs) o.destroy();
     this.objs = [];
+    this.doorImgs.clear();
+    this.doorAt.clear();
+    if (!this.textures.exists('door:closed')) this.textures.addCanvas('door:closed', doorClosedSprite());
     for (const o of map.objects) {
       const def = OBJECT_DEFS[o.type];
       if (!def) continue;
@@ -181,7 +224,12 @@ export class OfficeScene extends Phaser.Scene {
       if (!this.textures.exists(key)) this.textures.addCanvas(key, objectSprite(o));
       const { h } = objSize(o);
       const img = this.add.image(o.x * T, (o.y - objectTall(o.type)) * T, key).setOrigin(0);
-      if (FLOOR_TYPES.has(o.type)) img.setDepth(D_RUG);
+      if (o.type === 'door') {
+        this.doorImgs.set(o.id, img);
+        this.doorAt.set(o.y * map.width + o.x, o.id);
+        // fechada fica na altura dos avatares (bloqueia, como uma parede); aberta fica no chão
+        this.applyDoor(o.id);
+      } else if (FLOOR_TYPES.has(o.type)) img.setDepth(D_RUG);
       else if (def.above || o.props?.above) img.setDepth(D_DIM - 1);
       else if (def.solid) img.setDepth(D_WORLD + (o.y + h) * T - 1);
       else img.setDepth(D_WORLD + o.y * T + 1);
@@ -191,6 +239,21 @@ export class OfficeScene extends Phaser.Scene {
     this.drawDim();
     this.drawZone();
     this.updateHint();
+  }
+
+  private applyDoor(id: string) {
+    const img = this.doorImgs.get(id);
+    const o = this.map.objects.find((x) => x.id === id);
+    if (!img || !o) return;
+    const open = Boolean(useGame.getState().doors[id]);
+    img.setTexture(open ? `obj:${objectKey(o)}` : 'door:closed');
+    img.setDepth(open ? D_RUG : D_WORLD + (o.y + 1) * T - 1);
+  }
+
+  private closedDoorAt(x: number, y: number): string | null {
+    if (!this.map) return null;
+    const id = this.doorAt.get(y * this.map.width + x);
+    return id && !useGame.getState().doors[id] ? id : null;
   }
 
   private text(x: number, y: number, s: string, color: string, size = 10) {
@@ -212,12 +275,19 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Escurece o que está fora da área privada atual. O recorte claro é exatamente a área
+   * (mais a parede em volta, só nos lados que são parede): antes ele sobrava um tile para fora
+   * e, nas bordas das mesas de café, a pessoa parecia dentro mas já estava fora da conversa.
+   */
   private drawDim() {
     this.dim.clear();
+    this.areaLine.clear();
     const g = useGame.getState();
     const me = g.players[g.meId];
     const area = me?.areaId ? this.map.areas.find((a) => a.id === me.areaId) : null;
     if (!area || !area.rects.length) return;
+    const inArea = (x: number, y: number) => area.rects.some((r) => rectContains(r, x, y));
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
@@ -228,11 +298,43 @@ export class OfficeScene extends Phaser.Scene {
       x1 = Math.max(x1, r.x + r.w);
       y1 = Math.max(y1, r.y + r.h);
     }
-    // inclui a parede em volta para não escurecer as bordas da sala
-    const bx0 = (x0 - 1) * T;
-    const by0 = (y0 - 1) * T;
-    const bx1 = (x1 + 1) * T;
-    const by1 = (y1 + 1) * T;
+    // contorno dourado tile a tile: mostra o limite real da conversa
+    this.areaLine.lineStyle(2, 0xd7b870, 0.75);
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        if (!inArea(x, y)) continue;
+        const X = x * T;
+        const Y = y * T;
+        if (!inArea(x, y - 1)) this.areaLine.lineBetween(X, Y + 1, X + T, Y + 1);
+        if (!inArea(x, y + 1)) this.areaLine.lineBetween(X, Y + T - 1, X + T, Y + T - 1);
+        if (!inArea(x - 1, y)) this.areaLine.lineBetween(X + 1, Y, X + 1, Y + T);
+        if (!inArea(x + 1, y)) this.areaLine.lineBetween(X + T - 1, Y, X + T - 1, Y + T);
+      }
+    }
+    // mesa de trabalho: só o contorno, sem escurecer o escritório inteiro
+    if (area.desk) return;
+    const wallish = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= this.map.width || y >= this.map.height) return false;
+      if (this.map.layers.walls[y * this.map.width + x] !== 0) return true;
+      return this.map.objects.some((o) => o.type === 'door' && o.x === x && o.y === y);
+    };
+    const sideIsWall = (xs: number, xe: number, ys: number, ye: number) => {
+      let n = 0;
+      let w = 0;
+      for (let y = ys; y < ye; y++) for (let x = xs; x < xe; x++) {
+        n++;
+        if (wallish(x, y)) w++;
+      }
+      return n > 0 && w === n;
+    };
+    const pT = sideIsWall(x0, x1, y0 - 1, y0) ? 1 : 0;
+    const pB = sideIsWall(x0, x1, y1, y1 + 1) ? 1 : 0;
+    const pL = sideIsWall(x0 - 1, x0, y0, y1) ? 1 : 0;
+    const pR = sideIsWall(x1, x1 + 1, y0, y1) ? 1 : 0;
+    const bx0 = (x0 - pL) * T;
+    const by0 = (y0 - pT) * T;
+    const bx1 = (x1 + pR) * T;
+    const by1 = (y1 + pB) * T;
     const W = this.map.width * T;
     const H = this.map.height * T;
     const pad = 4000;
@@ -241,6 +343,8 @@ export class OfficeScene extends Phaser.Scene {
     this.dim.fillRect(-pad, by1, W + pad * 2, H - by1 + pad);
     this.dim.fillRect(-pad, by0, bx0 + pad, by1 - by0);
     this.dim.fillRect(bx1, by0, W - bx1 + pad, by1 - by0);
+    // áreas que não são retangulares: escurece os buracos dentro do retângulo envolvente
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (!inArea(x, y)) this.dim.fillRect(x * T, y * T, T, T);
   }
 
   private drawZone() {
@@ -269,7 +373,26 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private labelText(p: PlayerState): string {
-    return `${p.customStatus?.emoji ? `${p.customStatus.emoji} ` : ''}${p.spotlight ? '★ ' : ''}${p.name}${p.hand ? ' ✋' : ''}${p.screen ? ' 🖥' : ''}`;
+    const custom = p.customStatus?.emoji && !hasIcon(p.customStatus.emoji) ? `${p.customStatus.emoji} ` : '';
+    return `${custom}${p.spotlight ? '★ ' : ''}${p.name}`;
+  }
+
+  private badgeList(p: PlayerState): string[] {
+    const out: string[] = [];
+    if (p.customStatus?.emoji && hasIcon(p.customStatus.emoji)) out.push(p.customStatus.emoji);
+    if (p.hand) out.push('✋');
+    if (p.screen) out.push('🖥');
+    return out;
+  }
+
+  /** Textura do ícone 2D (traço branco, fundo preto) de um emoji. */
+  private iconTexture(emoji: string): string | null {
+    const key = `emo:${emoji}`;
+    if (this.textures.exists(key)) return key;
+    const c = emojiCanvas(emoji, ICON_RES);
+    if (!c) return null;
+    this.textures.addCanvas(key, c);
+    return key;
   }
 
   private resetPlayers() {
@@ -279,7 +402,7 @@ export class OfficeScene extends Phaser.Scene {
     const me = this.avas.get(g.meId);
     if (me) {
       const cam = this.cameras.main;
-      cam.startFollow(me.sprite, true, 0.18, 0.18, 0, 20);
+      cam.startFollow(me.sprite, true, 1, 1, 0, 20);
       cam.centerOn(me.sprite.x, me.sprite.y - 20);
     }
     this.path = null;
@@ -299,7 +422,7 @@ export class OfficeScene extends Phaser.Scene {
     });
     const label = this.text(0, 0, this.labelText(p), p.id === meId ? '#e6d2a0' : '#ffffff').setDepth(D_LABEL);
     const dot = this.add.circle(0, 0, 4, 0xffffff).setStrokeStyle(1.5, 0x0b0b0d).setDepth(D_LABEL);
-    const a: Ava = { id: p.id, sprite, label, dot, tx: p.x, ty: p.y, dir: p.dir, moving: false, foot: 1, idleAt: 0, queue: [] };
+    const a: Ava = { id: p.id, sprite, label, dot, badges: [], tx: p.x, ty: p.y, dir: p.dir, moving: false, foot: 1, idleAt: 0, queue: [], fx: p.x, fy: p.y, el: 0, dur: STEP_MS };
     this.avas.set(p.id, a);
     this.applyLook(a, p);
     this.place(a);
@@ -312,12 +435,19 @@ export class OfficeScene extends Phaser.Scene {
     a.sprite.destroy();
     a.label.destroy();
     a.dot.destroy();
+    for (const b of a.badges) b.destroy();
     a.emote?.destroy();
     this.avas.delete(id);
   }
 
   private applyLook(a: Ava, p: PlayerState) {
     a.label.setText(this.labelText(p));
+    for (const b of a.badges) b.destroy();
+    a.badges = [];
+    for (const e of this.badgeList(p)) {
+      const key = this.iconTexture(e);
+      if (key) a.badges.push(this.add.image(0, 0, key).setDisplaySize(BADGE, BADGE).setDepth(D_LABEL));
+    }
     a.dot.setFillStyle(Phaser.Display.Color.HexStringToColor(STATUS_COLOR[p.away ? 'AWAY' : p.status]).color);
     a.sprite.setAlpha(p.away ? 0.6 : 1);
   }
@@ -327,6 +457,7 @@ export class OfficeScene extends Phaser.Scene {
     a.sprite.setDepth(D_WORLD + y);
     a.label.setPosition(x + 5, y - AV_H + 3);
     a.dot.setPosition(x + 5 - a.label.width / 2 - 7, y - AV_H + 3 - a.label.height / 2);
+    for (let i = 0; i < a.badges.length; i++) a.badges[i].setPosition(x + 5 + a.label.width / 2 + 2 + BADGE / 2 + i * (BADGE + 2), y - AV_H + 3 - a.label.height / 2);
     a.emote?.setPosition(x, y - AV_H - 12);
   }
 
@@ -349,87 +480,113 @@ export class OfficeScene extends Phaser.Scene {
     const a = this.avas.get(id);
     if (!a) return;
     a.emote?.destroy();
-    const e = this.add.text(a.sprite.x, a.sprite.y - AV_H - 12, emoji, { fontSize: '22px', resolution: this.effZoom }).setOrigin(0.5, 1).setDepth(D_LABEL + 1);
+    const key = this.iconTexture(emoji);
+    const e = key
+      ? this.add.image(a.sprite.x, a.sprite.y - AV_H - 12, key).setOrigin(0.5, 1).setDisplaySize(EMOTE, EMOTE).setDepth(D_LABEL + 1)
+      : this.add.text(a.sprite.x, a.sprite.y - AV_H - 12, emoji, { fontSize: '22px', resolution: this.effZoom }).setOrigin(0.5, 1).setDepth(D_LABEL + 1);
     a.emote = e;
-    this.tweens.add({ targets: e, scale: { from: 0.4, to: 1 }, duration: 180, ease: 'Back.easeOut' });
+    const sx = e.scaleX;
+    this.tweens.add({ targets: e, scaleX: { from: sx * 0.4, to: sx }, scaleY: { from: e.scaleY * 0.4, to: e.scaleY }, duration: 180, ease: 'Back.easeOut' });
     this.time.delayedCall(EMOTE_MS, () => {
       if (a.emote === e) a.emote = undefined;
       e.destroy();
     });
   }
 
-  private snap(id: string, x: number, y: number) {
+  private snap(id: string, x: number, y: number, keepQueue = false) {
     const a = this.avas.get(id);
     if (!a) return;
-    this.tweens.killTweensOf(a.sprite);
-    a.queue = [];
+    if (!keepQueue) a.queue = [];
     a.moving = false;
-    a.tx = x;
-    a.ty = y;
-    a.sprite.setPosition(px(x), py(y));
+    a.tx = a.fx = x;
+    a.ty = a.fy = y;
+    a.el = 0;
     a.sprite.setFrame(frame(a.dir, 0));
-    this.place(a);
-    if (id === useGame.getState().meId) {
-      this.cameras.main.centerOn(a.sprite.x, a.sprite.y - 20);
-      this.afterOwnStep();
-    }
+    this.render(a);
+    if (id === useGame.getState().meId) this.afterOwnStep();
   }
 
-  private step(a: Ava, x: number, y: number, dir: Dir, done?: () => void) {
+  /** Começa um passo de um tile. `carry` é o tempo que sobrou do passo anterior (movimento contínuo, sem pausa entre tiles). */
+  private beginStep(a: Ava, x: number, y: number, dir: Dir, dur: number, carry = 0) {
+    a.fx = a.tx;
+    a.fy = a.ty;
     a.tx = x;
     a.ty = y;
     a.dir = dir;
     a.moving = true;
     a.idleAt = 0;
+    a.el = Math.min(carry, dur);
+    a.dur = dur;
     a.foot = a.foot === 1 ? 2 : 1;
     a.sprite.setFrame(frame(dir, a.foot));
-    this.tweens.add({
-      targets: a.sprite,
-      x: px(x),
-      y: py(y),
-      duration: STEP_MS,
-      onUpdate: () => this.place(a),
-      onComplete: () => {
-        a.moving = false;
-        a.idleAt = this.time.now + 70;
-        this.place(a);
-        done?.();
-      },
-    });
+    this.render(a);
+  }
+
+  /** Avança o passo atual. Devolve o tempo que sobrou se o passo terminou, ou -1. */
+  private advance(a: Ava, dt: number): number {
+    if (!a.moving) return -1;
+    a.el += dt;
+    if (a.el < a.dur) {
+      this.render(a);
+      return -1;
+    }
+    const left = a.el - a.dur;
+    a.moving = false;
+    a.fx = a.tx;
+    a.fy = a.ty;
+    a.el = 0;
+    a.idleAt = this.time.now + 90;
+    this.render(a);
+    return left;
+  }
+
+  /** Posição na tela: interpolação linear, arredondada ao pixel do mundo (sem tremer com a câmera). */
+  private render(a: Ava) {
+    const k = a.moving ? Math.min(1, a.el / a.dur) : 1;
+    const x = px(a.fx) + (px(a.tx) - px(a.fx)) * k;
+    const y = py(a.fy) + (py(a.ty) - py(a.fy)) * k;
+    a.sprite.setPosition(Math.round(x), Math.round(y));
+    this.place(a);
   }
 
   private onMoves(list: [string, number, number, number][]) {
-    const meId = useGame.getState().meId;
+    const g = useGame.getState();
     for (const [id, x, y, di] of list) {
-      if (id === meId) continue;
+      if (id === g.meId) continue;
       const a = this.avas.get(id);
       if (!a) continue;
       a.queue.push([x, y, DIRS[di] ?? a.dir]);
-      if (a.queue.length > 5) {
+      if (a.queue.length > 12) {
+        // muito atrasado (aba em segundo plano, rede travada): pula para o fim
         const last = a.queue[a.queue.length - 1];
         a.dir = last[2];
         this.snap(id, last[0], last[1]);
-      } else if (!a.moving) this.nextQueued(a);
-      if (id === useGame.getState().following) this.followGoal = '';
+      } else if (!a.moving) this.nextQueued(a, 0);
+      if (id === g.following) this.followGoal = '';
     }
   }
 
-  private nextQueued(a: Ava) {
-    const n = a.queue.shift();
-    if (!n) return;
-    const [x, y, dir] = n;
-    const dist = Math.abs(x - a.tx) + Math.abs(y - a.ty);
-    if (dist === 0) {
-      a.dir = dir;
-      a.sprite.setFrame(frame(dir, 0));
-      this.nextQueued(a);
-    } else if (dist > 1) {
-      a.dir = dir;
-      const rest = a.queue;
-      this.snap(a.id, x, y);
-      a.queue = rest;
-      this.nextQueued(a);
-    } else this.step(a, x, y, dir, () => this.nextQueued(a));
+  private nextQueued(a: Ava, carry: number) {
+    for (;;) {
+      const n = a.queue.shift();
+      if (!n) return;
+      const [x, y, dir] = n;
+      const dist = Math.abs(x - a.tx) + Math.abs(y - a.ty);
+      if (dist === 0) {
+        a.dir = dir;
+        a.sprite.setFrame(frame(dir, 0));
+        continue;
+      }
+      if (dist > 1) {
+        a.dir = dir;
+        this.snap(a.id, x, y, true);
+        continue;
+      }
+      // com fila acumulada, anda um pouco mais rápido para alcançar sem "teleportar"
+      const dur = STEP_MS / (1 + Math.min(1.2, 0.35 * a.queue.length));
+      this.beginStep(a, x, y, dir, dur, carry);
+      return;
+    }
   }
 
   // ---------- o meu avatar ----------
@@ -445,19 +602,64 @@ export class OfficeScene extends Phaser.Scene {
 
   private blocked(x: number, y: number): boolean {
     if (x < 0 || y < 0 || x >= this.map.width || y >= this.map.height) return true;
-    return this.grid[y * this.map.width + x] === 1;
+    return this.grid[y * this.map.width + x] === 1 || this.closedDoorAt(x, y) !== null;
   }
 
-  update(time: number) {
+  /**
+   * Limites da câmera: o avatar fica no centro, mas perto da borda do escritório a câmera para
+   * e o avatar sai do centro — assim a tela não mostra o vazio preto de fora do mapa.
+   * Se o mapa for menor que a tela naquele eixo, ele fica centralizado.
+   */
+  private updateBounds() {
+    if (!this.map) return;
+    const cam = this.cameras.main;
+    const vw = cam.width / cam.zoom;
+    const vh = cam.height / cam.zoom;
+    // folga só em cima: nome e reações de quem está encostado na parede de cima continuam visíveis
+    const top = 28;
+    const W = this.map.width * T;
+    const H = this.map.height * T + top;
+    const bx = W < vw ? (W - vw) / 2 : 0;
+    const by = H < vh ? (H - vh) / 2 - top : -top;
+    const bw = Math.max(W, vw);
+    const bh = Math.max(H, vh);
+    const b = cam.getBounds();
+    if (cam.useBounds && Math.abs(b.x - bx) < 0.5 && Math.abs(b.y - by) < 0.5 && Math.abs(b.width - bw) < 0.5 && Math.abs(b.height - bh) < 0.5) return;
+    cam.setBounds(bx, by, bw, bh);
+  }
+
+  update(time: number, delta: number) {
+    this.updateBounds();
+    const dt = Math.min(delta, 100);
+    const g = useGame.getState();
     for (const a of this.avas.values()) {
+      if (a.id !== g.meId && a.moving) {
+        const left = this.advance(a, dt);
+        if (left >= 0) this.nextQueued(a, left);
+      }
       if (!a.moving && a.idleAt && time > a.idleAt) {
         a.sprite.setFrame(frame(a.dir, 0));
         a.idleAt = 0;
       }
     }
+    const me = this.avas.get(g.meId);
+    if (!me) return;
+    let carry = 0;
+    if (me.moving) {
+      const left = this.advance(me, dt);
+      if (left < 0) return;
+      carry = left;
+      this.afterOwnStep();
+    }
+    if (g.phase !== 'online') return;
+    this.tryOwnStep(carry);
+  }
+
+  /** Decide o próximo passo do meu avatar (teclado, caminho ou seguir) e já começa a andar. */
+  private tryOwnStep(carry: number) {
     const g = useGame.getState();
     const me = this.avas.get(g.meId);
-    if (!me || me.moving || g.phase !== 'online') return;
+    if (!me || me.moving) return;
     let dir: Dir | null = !isTyping() && !g.modal ? this.keyDir() : null;
     let fromPath = false;
     if (dir) {
@@ -479,18 +681,60 @@ export class OfficeScene extends Phaser.Scene {
     if (!dir) return;
     const nx = me.tx + DIR_VEC[dir].x;
     const ny = me.ty + DIR_VEC[dir].y;
-    if (this.blocked(nx, ny)) {
+    const door = this.closedDoorAt(nx, ny);
+    if (door) {
+      const now = performance.now();
+      if (fromPath) {
+        // andando sozinho (clique duplo, seguir, ir até): abre a porta e continua
+        if (now - this.lastDoorAsk > 600) {
+          this.lastDoorAsk = now;
+          net.send('door', { id: door, open: true });
+        }
+        return;
+      }
+      if (now - this.lastDoorAsk > 2500) {
+        this.lastDoorAsk = now;
+        bus.emit('notice', 'door_closed');
+      }
+    }
+    if (this.blocked(nx, ny) || !this.canEnterArea(nx, ny)) {
       this.path = null;
       if (me.dir !== dir) {
         me.dir = dir;
         me.sprite.setFrame(frame(dir, 0));
-        net.send('face', { dir });
+        net.send('face', { dir, e: this.epoch });
       }
       return;
     }
     if (fromPath) this.path!.shift();
-    net.send('step', { x: nx, y: ny });
-    this.step(me, nx, ny, dir, () => this.afterOwnStep());
+    net.send('step', { x: nx, y: ny, e: this.epoch });
+    this.beginStep(me, nx, ny, dir, STEP_MS, carry);
+  }
+
+  /** Mesma regra do servidor para áreas privadas (somente equipe e lotação), para não andar e "voltar". */
+  private canEnterArea(x: number, y: number): boolean {
+    const g = useGame.getState();
+    const me = g.players[g.meId];
+    if (!me || !this.areaIndex) return true;
+    const area = privateAreaAt(this.map, this.areaIndex, x, y);
+    if (!area || area.id === me.areaId) return true;
+    const now = performance.now();
+    const warn = (code: string) => {
+      if (now - this.lastAreaWarn < 2500) return;
+      this.lastAreaWarn = now;
+      bus.emit('notice', code);
+    };
+    if (area.staffOnly && !can(me.role, 'area.staffOnly')) {
+      warn('area_staff_only');
+      return false;
+    }
+    let n = 0;
+    for (const p of Object.values(g.players)) if (p.areaId === area.id) n++;
+    if (n >= area.capacity) {
+      warn('area_full');
+      return false;
+    }
+    return true;
   }
 
   private followTick(me: Ava, targetId: string) {
@@ -535,6 +779,22 @@ export class OfficeScene extends Phaser.Scene {
       break;
     }
     if (!hint) {
+      // porta: na frente, ao lado ou em cima dela
+      let best: MapObject | null = null;
+      let bestD = Infinity;
+      for (const o of this.map.objects) {
+        if (o.type !== 'door') continue;
+        const d = Math.abs(o.x - me.tx) + Math.abs(o.y - me.ty);
+        if (Math.max(Math.abs(o.x - me.tx), Math.abs(o.y - me.ty)) > 1 || d >= bestD) continue;
+        best = o;
+        bestD = d;
+      }
+      if (best) {
+        const open = Boolean(g.doors[best.id]);
+        hint = { text: open ? t('hint.doorClose', 'X — fechar a porta') : t('hint.doorOpen', 'X — abrir a porta'), object: best };
+      }
+    }
+    if (!hint) {
       for (const o of this.map.objects) {
         const def = OBJECT_DEFS[o.type];
         if (!def?.interact) continue;
@@ -553,6 +813,10 @@ export class OfficeScene extends Phaser.Scene {
     const g = useGame.getState();
     const o = g.hint?.object;
     if (!o) return;
+    if (o.type === 'door') {
+      net.send('door', { id: o.id });
+      return;
+    }
     if (o.type === 'desk') {
       const info = g.desks.find((x) => x.id === o.id);
       useGame.setState({ modal: info?.userId === g.meId ? { kind: 'myDesk' } : { kind: 'desk', deskId: o.id } });

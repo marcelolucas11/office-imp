@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { can, type DeskInfo, type OfficeMap, type OfficeSettings, type Rect, type WizardInput } from '@office-imp/shared';
+import { MAX_INTERACTION_DISTANCE, can, type DeskInfo, type OfficeMap, type OfficeSettings, type Rect, type WizardInput } from '@office-imp/shared';
 import { Badge, Button, Card, Empty, Field, Input, Modal, Tabs, Textarea, Toggle } from '@office-imp/ui';
 import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { toast, useSession } from '../lib/session';
 import { Loadable, MapPreview, OfficeSelect, Page, act, fmtDate, useLoad, useOfficeChoice } from './util';
+import { Emo } from '../lib/icons';
 
 interface AdminOffice {
   id: string;
@@ -277,6 +278,7 @@ function OfficeSettingsForm({ office, onSaved }: { office: AdminOffice; onSaved:
             chatRetentionDays: st.chatRetentionDays,
             audioRetentionDays: st.audioRetentionDays,
             notesRestrictedToAdmins: st.notesRestrictedToAdmins,
+            interactionDistance: st.interactionDistance,
             notesRecipients: recipients
               .split(/[\n,;]+/)
               .map((r) => r.trim())
@@ -286,9 +288,9 @@ function OfficeSettingsForm({ office, onSaved }: { office: AdminOffice; onSaved:
         }),
       t('oset.saved', 'Configurações salvas.'),
     ).then((ok) => ok && onSaved());
-  const num = (k: 'awayMinutes' | 'chatRetentionDays' | 'audioRetentionDays', label: string, hint?: string) => (
+  const num = (k: 'awayMinutes' | 'chatRetentionDays' | 'audioRetentionDays' | 'interactionDistance', label: string, hint?: string, max?: number) => (
     <Field label={label} hint={hint}>
-      <Input type="number" min={1} value={st[k]} onChange={(e) => setSt({ ...st, [k]: Math.max(1, Number(e.target.value) || 1) })} />
+      <Input type="number" min={1} max={max} value={st[k]} onChange={(e) => setSt({ ...st, [k]: Math.min(max ?? Infinity, Math.max(1, Number(e.target.value) || 1)) })} />
     </Field>
   );
   return (
@@ -305,6 +307,7 @@ function OfficeSettingsForm({ office, onSaved }: { office: AdminOffice; onSaved:
         </Field>
         {num('awayMinutes', t('oset.away', 'Ausente depois de (minutos)'), t('oset.awayHint', 'Sem teclado, mouse ou movimento.'))}
         {num('chatRetentionDays', t('oset.chatDays', 'Guardar o chat por (dias)'))}
+        {num('interactionDistance', t('oset.distance', 'Distância de interação (blocos)'), t('oset.distanceHint', 'Raio de proximidade de todos no escritório. Padrão: 2. Só a administração muda.'), MAX_INTERACTION_DISTANCE)}
         {num('audioRetentionDays', t('oset.audioDays', 'Guardar áudios de reunião por (dias)'), t('oset.audioHint', 'O texto das notas fica guardado sem prazo.'))}
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -361,7 +364,7 @@ export function Offices() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button onClick={() => nav(`/o/${office.slug}`)}>{t('offices.enter', 'Entrar no escritório')}</Button>
                 <Button variant="ghost" onClick={() => nav(`/o/${office.slug}?mapmaker=1`)}>
-                  🛠 {t('offices.mapmaker', 'Abrir o Mapmaker')}
+                  <Emo e="🛠" /> {t('offices.mapmaker', 'Abrir o Mapmaker')}
                 </Button>
                 {can(me?.role, 'office.delete') ? (
                   <Button variant="subtle" className="ml-auto" onClick={() => void remove()}>

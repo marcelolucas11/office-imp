@@ -7,6 +7,7 @@ import { serverNow, useGame } from '../game/store';
 import { t } from '../lib/i18n';
 import { toast } from '../lib/session';
 import { useAv } from './av';
+import { Emo, EmoText } from '../lib/icons';
 
 // ---------- YouTube IFrame API ----------
 let ytReady: Promise<void> | null = null;
@@ -178,7 +179,7 @@ export function RadioDock() {
   return (
     <div className="absolute bottom-20 left-3 z-30 w-[256px] overflow-hidden rounded-2xl border border-line bg-panel/97 shadow-2xl" data-testid="radio-dock">
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
-        <span className={cx(ch.playing && 'oi-pulse')}>🎵</span>
+        <Emo e="🎵" size={18} className={cx(ch.playing && 'oi-pulse')} />
         <button type="button" className="min-w-0 flex-1 truncate text-left font-semibold text-gold" onClick={() => useGame.setState({ modal: { kind: 'radio' } })} title={t('radio.open', 'Abrir o rádio')}>
           {ch.name}
         </button>
@@ -195,7 +196,7 @@ export function RadioDock() {
           {track?.title ?? track?.videoId ?? '—'}
         </p>
         <div className="flex items-center gap-2 text-[11px] text-muted">
-          <span>🔈</span>
+          <Emo e="🔈" size={16} />
           <input type="range" min={0} max={100} value={volume} onChange={(e) => setVolume(Number(e.target.value))} className="w-full accent-[#d7b870]" aria-label={t('radio.volume', 'Volume')} />
           {inCall ? <span title={t('radio.duck', 'Volume reduzido durante a conversa')}>↓</span> : null}
         </div>
@@ -266,9 +267,9 @@ export function RadioModal() {
                   <Badge color={c.playing ? 'green' : 'gray'}>{c.playing ? t('radio.playing', 'tocando') : t('radio.paused', 'pausado')}</Badge>
                 </div>
                 <p className="truncate text-xs text-muted">
-                  🎧 {t('radio.dj', 'DJ: {{name}}', { name: c.djName })} · {t('radio.listeners', '{{n}} ouvindo', { n: c.listeners.length })}
+                  <Emo e="🎧" /> {t('radio.dj', 'DJ: {{name}}', { name: c.djName })} · {t('radio.listeners', '{{n}} ouvindo', { n: c.listeners.length })}
                 </p>
-                <p className="mt-1 truncate text-sm">🎵 {cur?.title ?? cur?.videoId}</p>
+                <p className="mt-1 truncate text-sm"><Emo e="🎵" /> {cur?.title ?? cur?.videoId}</p>
                 <div className="mt-2">
                   {on ? (
                     <Button small variant="subtle" onClick={() => net.send('music:leave')}>
@@ -309,16 +310,16 @@ export function RadioModal() {
               {control ? (
                 <div className="flex flex-wrap gap-2">
                   <Button small variant="subtle" onClick={() => ctl('prev')}>
-                    ⏮
+                    <Emo e="⏮" size={20} />
                   </Button>
                   <Button small onClick={() => ctl(mine.playing ? 'pause' : 'play')}>
-                    {mine.playing ? '⏸' : '▶'}
+                    <Emo e={mine.playing ? '⏸' : '▶'} size={18} />
                   </Button>
                   <Button small variant="subtle" onClick={() => ctl('next')}>
-                    ⏭
+                    <Emo e="⏭" size={20} />
                   </Button>
                   <Button small variant="ghost" onClick={() => ctl(mine.locked ? 'unlock' : 'lock')}>
-                    {mine.locked ? t('radio.unlock', '🔓 Liberar a fila') : t('radio.lock', '🔒 Bloquear a fila')}
+                    <EmoText text={mine.locked ? t('radio.unlock', '🔓 Liberar a fila') : t('radio.lock', '🔒 Bloquear a fila')} />
                   </Button>
                   <Button small variant="danger" onClick={() => ctl('close')}>
                     {t('radio.close', 'Fechar canal')}

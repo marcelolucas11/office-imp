@@ -16,6 +16,7 @@ import { AvatarModal, CalendarModal, CustomStatusModal, DeskModal, MyDeskModal, 
 import { RadioDock, RadioModal } from './Radio';
 import { createGame } from './scene';
 import { playSound } from './sounds';
+import { Emo, EmoText } from '../lib/icons';
 
 const Mapmaker = lazy(() => import('./Mapmaker'));
 
@@ -125,6 +126,7 @@ function TopLeft() {
   const me = useGame((s) => s.players[s.meId]);
   const map = useGame((s) => s.map);
   const recordings = useGame((s) => s.recordings);
+  const desks = useGame((s) => s.desks);
   const hide = useGame((s) => s.mini && !s.miniExt);
   const role = useSession((s) => s.me?.role);
   const isUser = useSession((s) => s.me?.kind === 'user');
@@ -132,6 +134,8 @@ function TopLeft() {
   if (!office || !me || hide) return null;
   const area = me.areaId ? map?.areas.find((a) => a.id === me.areaId) : null;
   const rec = area ? recordings[area.id] : undefined;
+  const deskOwner = area?.desk ? desks.find((d) => d.id === area.deskId)?.userName : null;
+  const areaName = area?.desk ? (deskOwner ? t('area.deskOf', 'Mesa de {{name}}', { name: deskOwner }) : t('area.deskFree', 'Mesa livre')) : area?.name;
   const canStart = Boolean(area?.meeting && isUser && role !== 'GUEST' && (!office.settings.notesRestrictedToAdmins || isAdminRole(role)));
   const toggle = async () => {
     if (!area) return;
@@ -151,20 +155,20 @@ function TopLeft() {
       </div>
       {area ? (
         <div className="rounded-xl border border-sky-400/40 bg-panel/90 px-3 py-1.5 text-xs shadow-lg" data-testid="area-badge">
-          🔒 {area.name} <span className="text-muted">· {t('area.private', 'conversa privada')}</span>
+          <Emo e="🔒" /> {areaName} <span className="text-muted">· {t('area.private', 'conversa privada')}</span>
         </div>
       ) : me.spotlight ? (
         <div className="rounded-xl border border-warn/60 bg-panel/90 px-3 py-1.5 text-xs shadow-lg">★ {t('area.spotlight', 'Você está no palco: todos ouvem e veem você.')}</div>
       ) : null}
       {rec ? (
         <div className="oi-pulse rounded-xl border border-danger bg-danger/20 px-3 py-1.5 text-xs font-semibold text-red-200 shadow-lg" data-testid="rec-indicator">
-          🔴 {t('rec.badge', 'Gravando áudio para notas')}
+          <Emo e="🔴" /> {t('rec.badge', 'Gravando áudio para notas')}
         </div>
       ) : null}
       {area?.meeting && (canStart || rec) ? (
         <div className="pointer-events-auto">
           <Button small variant={rec ? 'danger' : 'ghost'} disabled={busy} onClick={() => void toggle()} data-testid="notes-toggle">
-            {rec ? t('rec.stop', 'Parar as notas') : t('rec.start', '📝 Iniciar notas de reunião')}
+            <EmoText text={rec ? t('rec.stop', 'Parar as notas') : t('rec.start', '📝 Iniciar notas de reunião')} />
           </Button>
         </div>
       ) : null}
@@ -282,7 +286,7 @@ export default function OfficePage() {
     return (
       <div className="grid h-full place-items-center p-6">
         <div className="max-w-md space-y-4 rounded-2xl border border-line bg-panel p-6 text-center" data-testid="office-blocked">
-          <div className="text-4xl">{phase === 'kicked' ? '👋' : '🚪'}</div>
+          <div className="flex justify-center"><Emo e={phase === 'kicked' ? '👋' : '🚪'} size={56} /></div>
           <p className="text-sm">{phase === 'kicked' ? kickText(kickReason) : error}</p>
           {errorCode === 'invite_required' ? <p className="text-xs text-muted">{t('office.inviteRequired', 'Cole o link de convite na tela inicial para ativar o seu acesso.')}</p> : null}
           <div className="flex justify-center gap-2">

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
-import { buildCollision, floodFill, mapDesks, MAX_MAP_SIZE, type WizardInput } from '@office-imp/shared';
+import { buildCollision, deskSeat, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type WizardInput } from '@office-imp/shared';
 import { expandOffice, generateOffice, modulesForInput, renderAscii, reserveBlankWing, toTiled, validateOffice } from '../src';
 
 const base: WizardInput = { name: 'Impera', size: 'small', partners: 2, partnersShareRoom: true };
@@ -118,5 +118,37 @@ describe('gerador de escritórios', () => {
     const txt = renderAscii(generateOffice(base));
     expect(txt).toContain('@');
     expect(txt).toContain('D');
+  });
+});
+
+describe('áreas das mesas', () => {
+  it('cada mesa comum ganha uma área de 4 tiles com a cadeira, sem sobrepor outras áreas', () => {
+    const map = generateOffice({ name: 'X', size: 'custom', customCount: 15, partners: 2, partnersShareRoom: true });
+    const full = withDeskAreas(map);
+    const desks = mapDesks(map);
+    const regular = desks.filter((d) => !d.props?.partner);
+    const areas = full.areas.filter((a) => a.desk);
+    expect(areas.length).toBe(regular.length);
+    const grid = buildCollision(map);
+    for (const a of areas) {
+      expect(a.capacity).toBe(4);
+      expect(a.rects).toHaveLength(1);
+      const r = a.rects[0];
+      expect(r.w * r.h).toBe(4);
+      const desk = desks.find((d) => d.id === a.deskId)!;
+      const seat = deskSeat(desk);
+      expect(rectContains(r, seat.x, seat.y)).toBe(true);
+      for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) expect(grid[y * map.width + x]).toBe(0);
+    }
+    const all = full.areas.filter((a) => a.kind === 'private').flatMap((a) => a.rects);
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) expect(rectsOverlap(all[i], all[j])).toBe(false);
+    // continua válido e as áreas derivadas não são gravadas
+    expect(validateOffice(stripDerivedAreas(full)).errors).toEqual([]);
+    expect(stripDerivedAreas(full).areas.some((a) => a.desk)).toBe(false);
+  });
+
+  it('é idempotente', () => {
+    const map = generateOffice(base);
+    expect(JSON.stringify(withDeskAreas(withDeskAreas(map)))).toBe(JSON.stringify(withDeskAreas(map)));
   });
 });

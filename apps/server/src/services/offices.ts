@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { and, desc, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
-import { mapDesks, type DeskInfo, type OfficeMap } from '@office-imp/shared';
+import { mapDesks, stripDerivedAreas, withDeskAreas, type DeskInfo, type OfficeMap } from '@office-imp/shared';
 import { validateOffice } from '@office-imp/map-engine';
 import { db, schema } from '../db';
 import { newId } from '../lib/crypto';
@@ -25,7 +25,8 @@ export async function currentMap(office: OfficeRow): Promise<{ id: string; map: 
   if (!office.mapVersionId) throw notFound('Este escritório ainda não tem mapa.');
   const [v] = await db().select().from(schema.mapVersions).where(eq(schema.mapVersions.id, office.mapVersionId));
   if (!v) throw notFound('Versão do mapa não encontrada.');
-  return { id: v.id, map: v.json };
+  // as áreas das mesas são derivadas das mesas a cada carga (valem também para mapas antigos)
+  return { id: v.id, map: withDeskAreas(v.json) };
 }
 
 /** Mantém a tabela de mesas em sincronia com os objetos "desk" do mapa. */
@@ -46,7 +47,8 @@ export async function syncDesks(officeId: string, map: OfficeMap): Promise<numbe
 }
 
 /** Valida, grava como nova versão publicada e atualiza as mesas. */
-export async function publishMap(officeId: string, map: OfficeMap, author: { id: string; name: string } | null, note: string): Promise<string> {
+export async function publishMap(officeId: string, input: OfficeMap, author: { id: string; name: string } | null, note: string): Promise<string> {
+  const map = stripDerivedAreas(input);
   const res = validateOffice(map);
   if (!res.ok) throw badRequest(`O mapa tem problemas: ${res.errors.join(' ')}`, 'invalid_map');
   const id = newId();
@@ -64,7 +66,7 @@ export async function publishMap(officeId: string, map: OfficeMap, author: { id:
 /** Atualiza o JSON da versão atual sem criar versão nova (decoração de mesa). */
 export async function patchCurrentMap(office: OfficeRow, map: OfficeMap): Promise<void> {
   if (!office.mapVersionId) return;
-  await db().update(schema.mapVersions).set({ json: map }).where(eq(schema.mapVersions.id, office.mapVersionId));
+  await db().update(schema.mapVersions).set({ json: stripDerivedAreas(map) }).where(eq(schema.mapVersions.id, office.mapVersionId));
 }
 
 export async function listDesks(officeId: string): Promise<DeskInfo[]> {

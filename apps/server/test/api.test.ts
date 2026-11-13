@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { areaCenter, mapDesks, type AvView, type MapArea, type OfficeMap } from '@office-imp/shared';
+import { areaCenter, buildCollision, mapDesks, type AvView, type MapArea, type OfficeMap } from '@office-imp/shared';
 import { config } from '../src/config';
 import { totpCode } from '../src/lib/crypto';
 import { setMailTestMode, testOutbox } from '../src/lib/mailer';
@@ -209,31 +209,91 @@ describe('tempo real', () => {
     a.send('teleport', spot);
     const tp = await a.next('tp', (d) => d.id === ana.id);
     expect(tp).toMatchObject(spot);
-    a.send('step', { x: spot.x + 1, y: spot.y });
+    // cada passo leva a "época" de movimento (muda a cada correção ou teleporte)
+    let e = tp.e;
+    a.send('step', { x: spot.x + 1, y: spot.y, e });
     const moves = await b.next('moves', (d) => d.some((m: any) => m[0] === ana.id));
     expect(moves.find((m: any) => m[0] === ana.id).slice(1, 3)).toEqual([spot.x + 1, spot.y]);
     // salto de 5 tiles
-    a.send('step', { x: spot.x + 6, y: spot.y });
-    expect(await a.next('correct')).toEqual({ x: spot.x + 1, y: spot.y });
+    a.send('step', { x: spot.x + 6, y: spot.y, e });
+    const c1 = await a.next('correct');
+    expect(c1).toMatchObject({ x: spot.x + 1, y: spot.y });
+    expect(c1.e).toBe(e + 1);
+    // passos já em trânsito, da época antiga, são ignorados (sem nova correção em cascata)
+    a.send('step', { x: spot.x + 2, y: spot.y, e });
+    await sleep(120);
+    e = c1.e;
     // parede: sobe até a parede do corredor
-    a.send('step', { x: spot.x + 1, y: spot.y - 1 });
+    a.send('step', { x: spot.x + 1, y: spot.y - 1, e });
     await sleep(150);
-    a.send('step', { x: spot.x + 1, y: spot.y - 2 });
+    a.send('step', { x: spot.x + 1, y: spot.y - 2, e });
     const wallIsThere = map.layers.walls[(spot.y - 2) * map.width + spot.x + 1] !== 0;
-    if (wallIsThere) expect(await a.next('correct')).toEqual({ x: spot.x + 1, y: spot.y - 1 });
+    if (wallIsThere) expect(await a.next('correct')).toMatchObject({ x: spot.x + 1, y: spot.y - 1 });
   });
 
   it('proximidade conecta de perto e desconecta de longe', async () => {
     const spot = openSpot();
+    a.clear();
+    b.clear();
     a.send('teleport', spot);
     b.send('teleport', { x: spot.x + 2, y: spot.y });
+    // raio de fábrica: 2 blocos
     const av = await a.next<AvView>('av', (d) => d.peers.length === 1);
     expect(av.room).toBe('open');
     expect(av.peers[0].id).toBe(bia.id);
-    b.send('teleport', { x: spot.x + 18, y: spot.y });
-    const far = await a.next<AvView>('av', (d) => d.peers.length === 0);
-    expect(far.peers).toEqual([]);
+    b.send('teleport', { x: spot.x + 3, y: spot.y });
+    const out = await a.next<AvView>('av', (d) => d.peers.length === 0);
+    expect(out.peers).toEqual([]);
     b.send('teleport', { x: spot.x + 2, y: spot.y });
+    await a.next('av', (d) => d.peers.length === 1);
+  });
+
+  it('raio de proximidade: só a administração muda, e vale para todos', async () => {
+    const spot = openSpot();
+    // funcionária não consegue mudar o raio
+    b.send('distance', { value: 6 });
+    await sleep(150);
+    a.clear();
+    b.send('teleport', { x: spot.x + 5, y: spot.y });
+    expect((await a.next<AvView>('av', (d) => d.peers.length === 0)).peers).toEqual([]);
+    // o Admin/Dono aumenta pelas configurações do escritório
+    const res = await owner.http.patch(`/api/offices/${officeId}`, { settings: { interactionDistance: 6 } });
+    expect(res.status).toBe(200);
+    await a.next('av', (d) => d.peers.length === 1);
+    expect((await owner.http.patch(`/api/offices/${officeId}`, { settings: { interactionDistance: 2 } })).status).toBe(200);
+    await a.next('av', (d) => d.peers.length === 0);
+    b.send('teleport', { x: spot.x + 2, y: spot.y });
+    await a.next('av', (d) => d.peers.length === 1);
+  });
+
+  it('portas: fechadas bloqueiam; X abre e fecha para todos; não fecha com alguém na porta', async () => {
+    const grid = buildCollision(map);
+    const free = (x: number, y: number) => x >= 0 && y >= 0 && x < map.width && y < map.height && grid[y * map.width + x] === 0;
+    const door = map.objects.find((o) => o.type === 'door' && (free(o.x, o.y + 1) || free(o.x, o.y - 1)))!;
+    const side = free(door.x, door.y + 1) ? { x: door.x, y: door.y + 1 } : { x: door.x, y: door.y - 1 };
+    a.clear();
+    a.send('teleport', side);
+    const tp = await a.next('tp', (d) => d.id === ana.id);
+    expect(tp).toMatchObject(side);
+    let e = tp.e;
+    a.send('step', { x: door.x, y: door.y, e });
+    const c = await a.next('correct');
+    expect(c).toMatchObject(side);
+    expect((await a.next('notice')).code).toBe('door_closed');
+    e = c.e;
+    a.send('door', { id: door.id });
+    expect(await b.next('door', (d) => d.id === door.id)).toEqual({ id: door.id, open: true });
+    a.send('step', { x: door.x, y: door.y, e });
+    await b.next('moves', (d) => d.some((m: any) => m[0] === ana.id && m[1] === door.x && m[2] === door.y));
+    a.send('door', { id: door.id, open: false });
+    expect((await a.next('notice', (d) => d.code === 'door_blocked')).code).toBe('door_blocked');
+    a.send('step', { x: side.x, y: side.y, e });
+    await sleep(120);
+    a.send('door', { id: door.id, open: false });
+    expect(await b.next('door', (d) => d.id === door.id && !d.open)).toEqual({ id: door.id, open: false });
+    // volta para perto da Bia (os próximos testes contam com isso)
+    a.clear();
+    a.send('teleport', openSpot());
     await a.next('av', (d) => d.peers.length === 1);
   });
 

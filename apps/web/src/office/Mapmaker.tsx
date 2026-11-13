@@ -17,6 +17,8 @@ import {
   type MapArea,
   type MapObject,
   type ObjectCategory,
+  stripDerivedAreas,
+  withDeskAreas,
   type OfficeMap,
   type Point,
   type Rect,
@@ -30,6 +32,7 @@ import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { toast } from '../lib/session';
 import { uploadImage } from './Modals';
+import { Emo, EmoText } from '../lib/icons';
 
 type Tool = 'select' | 'object' | 'floor' | 'wall' | 'erase' | 'fill' | 'area' | 'spawn' | 'target';
 const DIR_LABEL: Record<Dir, string> = { down: '↓', left: '←', right: '→', up: '↑' };
@@ -53,7 +56,8 @@ interface Version {
 export default function Mapmaker() {
   const office = useGame((s) => s.office)!;
   const live = useGame((s) => s.map)!;
-  const mapRef = useRef<OfficeMap>(structuredClone(live));
+  // as áreas das mesas são automáticas: não aparecem para edição (só no desenho)
+  const mapRef = useRef<OfficeMap>(stripDerivedAreas(structuredClone(live)));
   const [rev, setRev] = useState(0);
   const undo = useRef<string[]>([]);
   const redo = useRef<string[]>([]);
@@ -107,7 +111,7 @@ export default function Mapmaker() {
   useEffect(() => {
     const c = canvas.current;
     if (!c) return;
-    const full = renderFull(map, { areas: overlays, spawns: overlays, grid: overlays, selectedArea: selArea });
+    const full = renderFull(overlays ? withDeskAreas(map) : map, { areas: overlays, spawns: overlays, grid: overlays, selectedArea: selArea });
     c.width = full.width;
     c.height = full.height;
     const ctx = c.getContext('2d')!;
@@ -385,7 +389,7 @@ export default function Mapmaker() {
   );
   const toolBtn = (id: Tool, label: string, title: string) => (
     <Button key={id} small variant={tool === id ? 'primary' : 'subtle'} title={title} onClick={() => setTool(id)}>
-      {label}
+      <EmoText text={label} />
     </Button>
   );
   const def = selected ? OBJECT_DEFS[selected.type] : null;
@@ -500,7 +504,7 @@ export default function Mapmaker() {
                 {map.areas.map((a) => (
                   <button key={a.id} type="button" onClick={() => (setSelArea(a.id), setTool('area'))} className={cx('flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-left text-sm', selArea === a.id ? 'border-gold bg-gold/10' : 'border-line hover:border-muted')}>
                     <span className="truncate">
-                      {a.kind === 'spotlight' ? '★ ' : a.staffOnly ? '🔒 ' : ''}
+                      {a.kind === 'spotlight' ? '★ ' : a.staffOnly ? <Emo e="🔒" size={14} /> : ''} 
                       {a.name}
                     </span>
                     <Badge color="gray">{a.kind === 'spotlight' ? t('mm.kindSpot', 'palco') : t('mm.cap', '{{n}} lugares', { n: a.capacity })}</Badge>

@@ -22,6 +22,7 @@ Os sons de aceno, mensagem e aviso de gravação são sintetizados por código (
 | Phaser 3 | MIT |
 | Colyseus | MIT |
 | Excalidraw | MIT |
+| Lucide (desenhos dos ícones 2D que substituem os emojis) | ISC — © Lucide Icons and Contributors |
 | Fastify, Drizzle ORM, React, Vite, Tailwind CSS, Zustand, i18next | MIT |
 | Electron, electron-builder, electron-updater | MIT |
 | PostgreSQL | PostgreSQL License |

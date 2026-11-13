@@ -93,6 +93,51 @@ export async function miscRoutes(app: FastifyInstance) {
     return reply.send(fs.createReadStream(file));
   });
 
+  // ---- imagens do quadro branco ----
+  // O Excalidraw guarda as imagens fora dos elementos (só o fileId vai no desenho). Sem isso,
+  // os outros participantes recebiam o desenho, mas não a imagem.
+  const wbFile = (officeId: string, objectId: string, fileId: string) => {
+    if (![officeId, objectId].every((v) => /^[A-Za-z0-9_-]{1,80}$/.test(v)) || !/^[A-Za-z0-9_-]{6,120}$/.test(fileId)) throw notFound();
+    return path.join(config.uploadsDir, 'wb', officeId, objectId, `${fileId}.json`);
+  };
+  const wbAccess = (req: any, officeId: string, objectId: string) => {
+    const s = requireSubject(req);
+    const player = hub.room(officeId)?.players.get(s.id);
+    if (!player || !player.whiteboards.has(objectId)) throw forbidden('Abra o quadro branco no escritório para ver as imagens.');
+    return s;
+  };
+
+  app.post('/api/offices/:officeId/whiteboards/:objectId/files', { bodyLimit: 12 * 1024 * 1024 }, async (req) => {
+    const { officeId, objectId } = req.params as { officeId: string; objectId: string };
+    const s = wbAccess(req, officeId, objectId);
+    const body = parse(
+      z.object({
+        id: z.string().max(120),
+        mimeType: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']),
+        dataURL: z.string().max(11 * 1024 * 1024),
+        created: z.number().optional(),
+      }),
+      req.body,
+    );
+    if (!body.dataURL.startsWith(`data:${body.mimeType};base64,`)) throw badRequest('Imagem inválida.');
+    const file = wbFile(officeId, objectId, body.id);
+    if (!fs.existsSync(file)) {
+      await fsp.mkdir(path.dirname(file), { recursive: true });
+      await fsp.writeFile(file, JSON.stringify({ id: body.id, mimeType: body.mimeType, dataURL: body.dataURL, created: body.created ?? Date.now() }));
+    }
+    hub.room(officeId)?.whiteboardFileAdded(objectId, body.id, s.id);
+    return { ok: true };
+  });
+
+  app.get('/api/offices/:officeId/whiteboards/:objectId/files/:fileId', async (req, reply) => {
+    const { officeId, objectId, fileId } = req.params as { officeId: string; objectId: string; fileId: string };
+    wbAccess(req, officeId, objectId);
+    const file = wbFile(officeId, objectId, fileId);
+    if (!fs.existsSync(file)) throw notFound();
+    reply.header('content-type', 'application/json').header('cache-control', 'private, max-age=31536000, immutable');
+    return reply.send(fs.createReadStream(file));
+  });
+
   // ---- Google Calendar ----
   app.get('/api/calendar/status', async (req) => calendarStatus(requireUser(req).id));
 

@@ -13,6 +13,8 @@ const NOTICES: Record<string, (d: any) => string> = {
   teleport_blocked: () => t('notice.teleportBlocked', 'Não foi possível ir até lá.'),
   wave_dnd: (d) => t('notice.waveDnd', '{{name}} está em "Não incomodar".', { name: d.name }),
   wave_sent: (d) => t('notice.waveSent', 'Você acenou para {{name}}.', { name: d.name }),
+  door_blocked: () => t('notice.doorBlocked', 'Tem alguém na porta. Espere a pessoa passar para fechar.'),
+  door_closed: () => t('notice.doorClosed', 'A porta está fechada. Aperte X perto dela para abrir.'),
   desk_taken: () => t('notice.deskTaken', 'Esta mesa já tem dono.'),
   desk_item_sent: (d) => t('notice.deskItemSent', 'Entregue na mesa de {{name}}.', { name: d.name }),
   decor_invalid: () => t('notice.decorInvalid', 'Não dá para colocar isso aí. Use a área da sua mesa.'),
@@ -28,6 +30,20 @@ class OfficeNet {
   private retry = 0;
   private pingTimer: number | null = null;
   private retryTimer: number | null = null;
+  private posBuf = new Map<string, [number, number, number]>();
+  private posTimer: number | null = null;
+
+  private flushPos() {
+    this.posTimer = null;
+    if (!this.posBuf.size) return;
+    const players = { ...useGame.getState().players };
+    for (const [id, [x, y, di]] of this.posBuf) {
+      const p = players[id];
+      if (p) players[id] = { ...p, x, y, dir: DIRS[di] ?? p.dir };
+    }
+    this.posBuf.clear();
+    useGame.setState({ players });
+  }
 
   async connect(slug: string) {
     this.wanted = true;
@@ -74,11 +90,14 @@ class OfficeNet {
     const get = useGame.getState;
 
     room.onMessage('init', (d) => {
+      this.posBuf.clear();
       const players: Record<string, PlayerState> = {};
       for (const p of d.players as PlayerState[]) players[p.id] = p;
       const recordings: Record<string, string> = {};
       for (const r of d.recordings) recordings[r.areaId] = r.meetingId;
-      set({ phase: 'online', meId: d.me, players, desks: d.desks, music: d.music, recordings, deskItems: d.myDeskItems ?? [], timeOffset: d.now - Date.now() });
+      const doors: Record<string, true> = {};
+      for (const id of (d.doors ?? []) as string[]) doors[id] = true;
+      set({ phase: 'online', meId: d.me, players, desks: d.desks, music: d.music, recordings, doors, deskItems: d.myDeskItems ?? [], timeOffset: d.now - Date.now() });
       bus.emit('players:reset');
       void this.loadHistory();
       const unseen = (d.myDeskItems ?? []).filter((i: DeskItem) => !i.seen).length;
@@ -99,21 +118,20 @@ class OfficeNet {
       bus.emit('player:leave', d.id);
     });
     room.onMessage('moves', (list: [string, number, number, number][]) => {
-      const players = { ...get().players };
-      for (const [id, x, y, di] of list) {
-        const p = players[id];
-        if (!p) continue;
-        players[id] = { ...p, x, y, dir: DIRS[di] ?? p.dir };
-      }
-      set({ players });
+      // a cena anda na hora; o estado do React (painéis, mini-mapa, áudio) só a cada 200 ms,
+      // para não re-renderizar a interface 20 vezes por segundo enquanto alguém anda
+      for (const [id, x, y, di] of list) this.posBuf.set(id, [x, y, di]);
+      if (!this.posTimer) this.posTimer = window.setTimeout(() => this.flushPos(), 200);
       bus.emit('moves', list);
     });
     room.onMessage('tp', (d) => {
+      this.posBuf.delete(d.id);
       const p = get().players[d.id];
       if (p) set({ players: { ...get().players, [d.id]: { ...p, x: d.x, y: d.y } } });
       bus.emit('tp', d);
     });
     room.onMessage('correct', (d) => {
+      this.posBuf.delete(get().meId);
       const p = get().players[get().meId];
       if (p) set({ players: { ...get().players, [p.id]: { ...p, x: d.x, y: d.y } } });
       bus.emit('correct', d);
@@ -151,6 +169,13 @@ class OfficeNet {
       }
     });
     room.onMessage('emote', (d) => bus.emit('emote', d));
+    room.onMessage('door', (d: { id: string; open: boolean }) => {
+      const doors = { ...get().doors };
+      if (d.open) doors[d.id] = true;
+      else delete doors[d.id];
+      set({ doors });
+      bus.emit('doors', d);
+    });
     room.onMessage('wave', (d) => {
       const me = get().players[get().meId];
       if (me?.status === 'DND') return;
@@ -181,6 +206,7 @@ class OfficeNet {
       bus.emit('music', music);
     });
     room.onMessage('map', (d) => {
+      this.posBuf.clear();
       const players: Record<string, PlayerState> = {};
       for (const p of d.players as PlayerState[]) players[p.id] = p;
       set({ map: d.map, mapRev: get().mapRev + 1, players });
@@ -200,6 +226,7 @@ class OfficeNet {
     });
     room.onMessage('wb:scene', (d) => bus.emit('wb:scene', d));
     room.onMessage('wb:update', (d) => bus.emit('wb:update', d));
+    room.onMessage('wb:file', (d) => bus.emit('wb:file', d));
     room.onMessage('forceUpdate', (d) => set({ forceUpdateAt: Date.now() + d.seconds * 1000 }));
     room.onMessage('kick', (d) => {
       this.wanted = false;
@@ -271,3 +298,8 @@ function notify(title: string, body: string) {
 }
 
 export const net = new OfficeNet();
+
+bus.on('notice', (code: string) => {
+  const f = NOTICES[code];
+  if (f) toast(f({}), 'info');
+});

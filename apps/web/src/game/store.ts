@@ -9,7 +9,7 @@ export interface OfficeInfo {
   slug: string;
   name: string;
   timezone: string;
-  settings: { awayMinutes: number; notesRestrictedToAdmins: boolean; monitoringNotice: string };
+  settings: { awayMinutes: number; notesRestrictedToAdmins: boolean; monitoringNotice: string; interactionDistance?: number };
 }
 
 export type ModalState =
@@ -45,6 +45,8 @@ export interface GameState {
   unread: number;
   music: MusicChannel[];
   recordings: Record<string, string>;
+  /** Portas abertas (id → true). As demais estão fechadas e bloqueiam a passagem. */
+  doors: Record<string, true>;
   timeOffset: number;
   forceUpdateAt: number | null;
   panel: 'chat' | 'people' | null;
@@ -85,6 +87,7 @@ export const useGame = create<GameState>((set, get) => ({
   unread: 0,
   music: [],
   recordings: {},
+  doors: {},
   timeOffset: 0,
   forceUpdateAt: null,
   panel: null,
@@ -120,6 +123,7 @@ export function resetGame() {
     unread: 0,
     music: [],
     recordings: {},
+    doors: {},
     forceUpdateAt: null,
     panel: null,
     modal: null,

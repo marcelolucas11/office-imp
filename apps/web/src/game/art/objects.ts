@@ -348,6 +348,25 @@ export function objectSprite(o: MapObject): HTMLCanvasElement {
   return c;
 }
 
+let closedDoor: HTMLCanvasElement | null = null;
+
+/** Porta fechada: folha de madeira inteira no vão, com maçaneta dourada. */
+export function doorClosedSprite(): HTMLCanvasElement {
+  if (closedDoor) return closedDoor;
+  const c = makeCanvas(T, T);
+  const ctx = c.getContext('2d')!;
+  r(ctx, 0, 0, 3, T, '#5b3a29');
+  r(ctx, T - 3, 0, 3, T, '#5b3a29');
+  r(ctx, 3, 0, T - 6, T, '#8a5a3a');
+  r(ctx, 3, 0, T - 6, 2, shade('#8a5a3a', 0.15));
+  r(ctx, 3, T - 3, T - 6, 3, shade('#8a5a3a', -0.25));
+  r(ctx, 6, 4, T - 12, 10, shade('#8a5a3a', -0.1));
+  r(ctx, 6, 17, T - 12, 10, shade('#8a5a3a', -0.1));
+  r(ctx, T - 9, 14, 3, 3, GOLD);
+  closedDoor = c;
+  return c;
+}
+
 export function objectTall(type: string): number {
   return OBJECT_DEFS[type]?.tall ?? 0;
 }
