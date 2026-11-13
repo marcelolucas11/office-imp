@@ -504,6 +504,15 @@ function toggleTrayWindow() {
   trayWin.focus();
 }
 
+/** "Fechar tudo": encerra o app por completo (janela, Modo Mini, bandeja e processos em segundo plano). */
+function quitAll() {
+  quitting = true;
+  hideTrayWindow();
+  app.quit();
+  // se alguma janela segurar o fechamento, força a saída em seguida
+  setTimeout(() => app.exit(0), 3000);
+}
+
 function setupTray() {
   try {
     tray = new Tray(trayIcon(null));
@@ -547,8 +556,7 @@ function setupTray() {
         void checkUpdates(true, true);
         break;
       case 'quit':
-        quitting = true;
-        app.quit();
+        quitAll();
         break;
       case 'close':
         hideTrayWindow();

@@ -68,6 +68,8 @@
       .switch.on::after { transform: translateX(16px); background: #15120a; }
       .row[aria-disabled='true'] { opacity: 0.45; cursor: default; }
       .row[aria-disabled='true']:hover { background: transparent; }
+      .row.quit, .row.quit .ico { color: #f87171; }
+      .row.quit:hover { background: rgba(239, 68, 68, 0.12); }
       footer { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px 0; color: var(--muted); font-size: 11px; }
       footer button { all: unset; cursor: pointer; color: var(--muted); padding: 4px 6px; border-radius: 6px; }
       footer button:hover { color: var(--text); background: var(--panel-2); }
@@ -117,9 +119,14 @@
         <div class="row btn" id="settings"><div class="ico">⚙</div><span>Áudio, vídeo e preferências</span></div>
         <div class="row btn" id="updates"><div class="ico">⟳</div><span>Procurar atualizações</span></div>
 
+        <div class="sep"></div>
+        <div class="row btn quit" id="quit">
+          <div class="ico">⏻</div>
+          <span>Fechar tudo<small>Encerra o app por completo, inclusive em segundo plano</small></span>
+        </div>
+
         <footer>
           <span id="version"></span>
-          <button id="quit">Encerrar o app</button>
         </footer>
       </div>
     </div>

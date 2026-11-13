@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Ícone da barra de menus (Mac) / área de notificação (Windows): o losango do office-imp em dourado
+// Ícone da barra de menus (Mac) / área de notificação (Windows): o losango do office-imp em branco
 // com uma bolinha da cor do status no canto, desenhado por código para ficar nítido em telas Retina.
 import { nativeImage } from 'electron';
 
 export type Rgb = [number, number, number];
 
-const GOLD: Rgb = [215, 184, 112];
+const WHITE: Rgb = [255, 255, 255];
 const SS = 4; // supersampling por eixo (antialiasing)
 
 /** Gera o ícone em 18 pt (36 px com fator 2). `dot` = cor do status; null = sem bolinha. */
@@ -17,7 +17,7 @@ export function trayIcon(dot: Rgb | null): Electron.NativeImage {
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      let gold = 0;
+      let fill = 0;
       let dotA = 0;
       for (let sy = 0; sy < SS; sy++) {
         for (let sx = 0; sx < SS; sx++) {
@@ -30,7 +30,7 @@ export function trayIcon(dot: Rgb | null): Electron.NativeImage {
           const d = Math.hypot(px - dotC, py - dotC);
           if (dot && d <= 6.2) dotA++;
           else if (dot && d <= 8.6) continue; // anel transparente separa a bolinha do losango
-          else if (inDiamond || inSquare) gold++;
+          else if (inDiamond || inSquare) fill++;
         }
       }
       const n = SS * SS;
@@ -42,9 +42,9 @@ export function trayIcon(dot: Rgb | null): Electron.NativeImage {
       if (dot && dotA) {
         a = dotA / n;
         [r, g, b] = dot;
-      } else if (gold) {
-        a = gold / n;
-        [r, g, b] = GOLD;
+      } else if (fill) {
+        a = fill / n;
+        [r, g, b] = WHITE;
       }
       // BGRA pré-multiplicado
       buf[i] = Math.round(b * a);
