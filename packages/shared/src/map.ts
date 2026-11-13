@@ -18,6 +18,12 @@ export const Floor = {
   Kitchen: 8,
   Stage: 9,
   Corridor: 10,
+  // visual v2 (Fase B): ids novos sempre no fim; os antigos não mudam de significado
+  Porcelain: 11,
+  BurntCement: 12,
+  Herringbone: 13,
+  CarpetPattern: 14,
+  SyntheticGrass: 15,
 } as const;
 
 export const FLOOR_LABEL: Record<number, string> = {
@@ -31,19 +37,35 @@ export const FLOOR_LABEL: Record<number, string> = {
   8: 'Copa (xadrez)',
   9: 'Palco',
   10: 'Corredor',
+  11: 'Porcelanato',
+  12: 'Cimento queimado',
+  13: 'Madeira espinha de peixe',
+  14: 'Carpete com padrão',
+  15: 'Grama sintética',
 };
 
 export const Wall = {
   None: 0,
   Wall: 1,
+  /** Janela: adota o acabamento da parede vizinha (lisa, tijolo, madeira…). */
   Window: 2,
   Dark: 3,
+  // visual v2 (Fase B)
+  Plain: 4,
+  Brick: 5,
+  WoodPanel: 6,
+  /** Divisória de vidro: só o desenho muda; bloqueia a passagem como qualquer parede. */
+  Glass: 7,
 } as const;
 
 export const WALL_LABEL: Record<number, string> = {
   1: 'Parede',
   2: 'Janela',
   3: 'Parede escura',
+  4: 'Parede lisa clara',
+  5: 'Tijolo aparente',
+  6: 'Painel de madeira',
+  7: 'Divisória de vidro',
 };
 
 export type Dir = 'up' | 'down' | 'left' | 'right';

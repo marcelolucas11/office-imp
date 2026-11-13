@@ -9,6 +9,7 @@ const SCALES = [1, 2, 3, 4];
 
 function sheetTitle(name: string): string {
   if (name === 'pisos') return t('devArt.floors', 'Pisos e paredes');
+  if (name === 'exterior') return t('devArt.exterior', 'Exterior e períodos do dia');
   if (name === 'objetos') return t('devArt.objects', 'Objetos');
   if (name === 'avatares') return t('devArt.avatars', 'Avatares');
   return name;

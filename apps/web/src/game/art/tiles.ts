@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Pixel art 32×32 desenhada por código (sem arquivos de imagem de terceiros).
-import { Floor, Wall, type OfficeMap } from '@office-imp/shared';
+import { Wall, type DayPeriod, type OfficeMap } from '@office-imp/shared';
 import { makeCanvas } from './canvas';
+import { isVoid } from './exterior';
+import { FLOOR_COLOR, drawFloorTile } from './floors';
 import { noise } from './prim';
+import { WALL_MINI, wallCanvas, type WallNeighbors, type WallTile, type WindowKind } from './walls';
 
-export { makeCanvas, noise };
+export { FLOOR_COLOR, WALL_MINI, makeCanvas, noise };
+export type { WallNeighbors };
 
 export type Ctx = CanvasRenderingContext2D;
 export const T = 32;
@@ -24,113 +28,11 @@ export function shade(hex: string, amt: number): string {
   return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-export const FLOOR_COLOR: Record<number, string> = {
-  [Floor.Wood]: '#b98b5e',
-  [Floor.WoodDark]: '#6f4e37',
-  [Floor.CarpetDark]: '#2e3038',
-  [Floor.CarpetGold]: '#a88c4c',
-  [Floor.Tile]: '#d9d6cf',
-  [Floor.Concrete]: '#8d8f94',
-  [Floor.Grass]: '#5a9a4a',
-  [Floor.Kitchen]: '#e4e0d8',
-  [Floor.Stage]: '#5b3a29',
-  [Floor.Corridor]: '#3a3d47',
-};
 export const WALL_COLOR = '#17181d';
 
-function planks(ctx: Ctx, ox: number, oy: number, tx: number, ty: number, base: string) {
-  r(ctx, ox, oy, T, T, base);
-  for (let row = 0; row < 4; row++) {
-    const y = oy + row * 8;
-    r(ctx, ox, y + 7, T, 1, shade(base, -0.1));
-    const off = Math.floor(noise(tx, ty * 4 + row, 3) * 28) + 2;
-    r(ctx, ox + off, y, 1, 7, shade(base, -0.08));
-    if (noise(tx, ty * 4 + row, 9) > 0.6) r(ctx, ox + ((off + 9) % 28), y + 3, 5, 1, shade(base, 0.05));
-  }
-}
-
-function speckle(ctx: Ctx, ox: number, oy: number, tx: number, ty: number, base: string, strength: number) {
-  r(ctx, ox, oy, T, T, base);
-  for (let i = 0; i < 26; i++) {
-    const x = Math.floor(noise(tx * 31 + i, ty * 17, 1) * 16) * 2;
-    const y = Math.floor(noise(tx * 13, ty * 29 + i, 2) * 16) * 2;
-    r(ctx, ox + x, oy + y, 2, 2, shade(base, noise(i, tx + ty, 5) > 0.5 ? strength : -strength));
-  }
-}
-
+/** Desenha o bloco (tx, ty) de um piso. O desenho vem do padrão contínuo de `floors.ts`. */
 export function drawFloor(ctx: Ctx, id: number, ox: number, oy: number, tx: number, ty: number) {
-  const base = FLOOR_COLOR[id];
-  if (!base) return;
-  switch (id) {
-    case Floor.Wood:
-    case Floor.WoodDark:
-      planks(ctx, ox, oy, tx, ty, base);
-      break;
-    case Floor.Stage:
-      planks(ctx, ox, oy, tx, ty, base);
-      r(ctx, ox, oy, T, 1, '#d7b870');
-      break;
-    case Floor.CarpetDark:
-    case Floor.Corridor:
-      speckle(ctx, ox, oy, tx, ty, base, 0.025);
-      break;
-    case Floor.CarpetGold:
-      speckle(ctx, ox, oy, tx, ty, base, 0.04);
-      if ((tx + ty) % 2 === 0) r(ctx, ox + 14, oy + 14, 4, 4, shade(base, 0.08));
-      break;
-    case Floor.Tile:
-      r(ctx, ox, oy, T, T, base);
-      r(ctx, ox, oy + T - 1, T, 1, shade(base, -0.1));
-      r(ctx, ox + T - 1, oy, 1, T, shade(base, -0.1));
-      r(ctx, ox, oy, T, 1, shade(base, 0.05));
-      break;
-    case Floor.Concrete:
-      speckle(ctx, ox, oy, tx, ty, base, 0.03);
-      break;
-    case Floor.Grass:
-      speckle(ctx, ox, oy, tx, ty, base, 0.06);
-      break;
-    case Floor.Kitchen:
-      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) r(ctx, ox + i * 16, oy + j * 16, 16, 16, (i + j) % 2 === 0 ? base : '#c4bfb4');
-      break;
-  }
-}
-
-export interface WallNeighbors {
-  below: boolean;
-  above: boolean;
-  left: boolean;
-  right: boolean;
-}
-
-export function drawWall(ctx: Ctx, id: number, ox: number, oy: number, n: WallNeighbors) {
-  const cap = id === Wall.Dark ? '#0f1014' : '#17181d';
-  const edge = '#30323c';
-  const face = id === Wall.Dark ? '#2a2c35' : '#3d404c';
-  if (n.below) {
-    // trecho vertical: só o topo da parede
-    r(ctx, ox, oy, T, T, cap);
-    if (!n.left) r(ctx, ox, oy, 2, T, edge);
-    if (!n.right) r(ctx, ox + T - 2, oy, 2, T, edge);
-    if (!n.above) r(ctx, ox, oy, T, 2, edge);
-    return;
-  }
-  // face frontal visível
-  r(ctx, ox, oy, T, 12, cap);
-  if (!n.above) r(ctx, ox, oy, T, 2, edge);
-  if (!n.left) r(ctx, ox, oy, 2, 12, edge);
-  if (!n.right) r(ctx, ox + T - 2, oy, 2, 12, edge);
-  r(ctx, ox, oy + 12, T, 20, face);
-  r(ctx, ox, oy + 12, T, 1, shade(face, 0.12));
-  r(ctx, ox, oy + 28, T, 2, '#b0914b');
-  r(ctx, ox, oy + 30, T, 2, shade(face, -0.12));
-  if (id === Wall.Window) {
-    r(ctx, ox + 4, oy + 14, 24, 12, '#22242b');
-    r(ctx, ox + 5, oy + 15, 22, 10, '#7fb7d9');
-    r(ctx, ox + 5, oy + 15, 22, 3, '#a9d4ec');
-    r(ctx, ox + 15, oy + 15, 2, 10, '#22242b');
-    r(ctx, ox + 8, oy + 18, 3, 1, '#e8f4fb');
-  }
+  drawFloorTile(ctx, id, ox, oy, tx, ty);
 }
 
 export function isWallAt(map: OfficeMap, x: number, y: number): boolean {
@@ -138,28 +40,104 @@ export function isWallAt(map: OfficeMap, x: number, y: number): boolean {
   return map.layers.walls[y * map.width + x] !== 0;
 }
 
-/** Desenha um trecho (em tiles) do chão e das paredes do mapa. */
-export function drawStatic(ctx: Ctx, map: OfficeMap, x0: number, y0: number, w: number, h: number) {
-  for (let ty = y0; ty < Math.min(map.height, y0 + h); ty++) {
-    for (let tx = x0; tx < Math.min(map.width, x0 + w); tx++) {
+function wallId(map: OfficeMap, x: number, y: number): number {
+  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return 0;
+  return map.layers.walls[y * map.width + x];
+}
+
+/**
+ * Acabamento de um bloco de parede. A janela (`Wall.Window`) não tem acabamento próprio: adota o
+ * da parede mais próxima na mesma fileira (esquerda, depois direita) ou coluna (cima, depois baixo),
+ * passando por cima de outras janelas. Sem vizinha, fica com o da parede padrão.
+ */
+export function wallStyle(map: OfficeMap, x: number, y: number): number {
+  const id = wallId(map, x, y);
+  if (id !== Wall.Window) return id;
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+    for (let k = 1; k <= 24; k++) {
+      const w = wallId(map, x + dx * k, y + dy * k);
+      if (w === Wall.Window) continue;
+      if (w !== 0 && w !== Wall.Glass) return w;
+      break;
+    }
+  }
+  return Wall.Wall;
+}
+
+/** Seguindo na direção (dx, dy) a partir da parede, chega-se ao exterior (vazio ou fora do mapa)? */
+function exteriorBeyond(map: OfficeMap, x: number, y: number, dx: number, dy: number): boolean {
+  for (let k = 1; k <= 4; k++) {
+    const cx = x + dx * k;
+    const cy = y + dy * k;
+    if (isVoid(map, cx, cy)) return true;
+    if (!isWallAt(map, cx, cy)) return false;
+  }
+  return false;
+}
+
+/** O que a janela em (x, y) mostra. `vertical` = trecho de parede que só mostra o topo. */
+export function windowKind(map: OfficeMap, x: number, y: number, vertical: boolean): WindowKind {
+  if (vertical) return exteriorBeyond(map, x, y, -1, 0) || exteriorBeyond(map, x, y, 1, 0) ? 'outside' : 'inner';
+  if (exteriorBeyond(map, x, y, 0, -1)) return 'view';
+  if (exteriorBeyond(map, x, y, 0, 1)) return 'outside';
+  return 'inner';
+}
+
+/** Tudo o que o desenho de um bloco de parede precisa saber sobre a vizinhança. */
+export function wallTileAt(map: OfficeMap, x: number, y: number, period: DayPeriod = 'day'): WallTile | null {
+  const id = wallId(map, x, y);
+  if (!id) return null;
+  const below = isWallAt(map, x, y + 1);
+  const left = isWallAt(map, x - 1, y);
+  const right = isWallAt(map, x + 1, y);
+  const isWindow = id === Wall.Window;
+  return {
+    style: wallStyle(map, x, y),
+    n: { below, above: isWallAt(map, x, y - 1), left, right, leftFace: left && !isWallAt(map, x - 1, y + 1), rightFace: right && !isWallAt(map, x + 1, y + 1) },
+    window: isWindow ? windowKind(map, x, y, below) : null,
+    winLeft: isWindow && wallId(map, x - 1, y) === Wall.Window && !isWallAt(map, x - 1, y + 1),
+    winRight: isWindow && wallId(map, x + 1, y) === Wall.Window && !isWallAt(map, x + 1, y + 1),
+    variant: x & 3,
+    period,
+  };
+}
+
+/**
+ * Desenha um trecho (em tiles) do chão e das paredes do mapa. Blocos sem piso nem parede ficam
+ * transparentes (é onde o exterior aparece). `period` só muda a vista e o vidro das janelas externas.
+ */
+export function drawStatic(ctx: Ctx, map: OfficeMap, x0: number, y0: number, w: number, h: number, period: DayPeriod = 'day') {
+  for (let ty = Math.max(0, y0); ty < Math.min(map.height, y0 + h); ty++) {
+    for (let tx = Math.max(0, x0); tx < Math.min(map.width, x0 + w); tx++) {
       const i = ty * map.width + tx;
       const ox = (tx - x0) * T;
       const oy = (ty - y0) * T;
       const f = map.layers.floor[i];
       if (f) drawFloor(ctx, f, ox, oy, tx, ty);
-      const wl = map.layers.walls[i];
-      if (wl) drawWall(ctx, wl, ox, oy, { below: isWallAt(map, tx, ty + 1), above: isWallAt(map, tx, ty - 1), left: isWallAt(map, tx - 1, ty), right: isWallAt(map, tx + 1, ty) });
+      const wall = wallTileAt(map, tx, ty, period);
+      if (wall) ctx.drawImage(wallCanvas(wall), ox, oy);
     }
   }
 }
 
+/** O mapa tem janela ou vidro cujo desenho muda com o período do dia? */
+export function hasPeriodWalls(map: OfficeMap): boolean {
+  return map.layers.walls.includes(Wall.Window);
+}
+
+/** Maior id de piso/parede que cabe na folha de tiles (16 colunas, o id 0 é vazio). */
+const TILESET_COLS = 16;
+
 /** Folhas de tiles (para a paleta do Mapmaker e para exportar ao Tiled). */
 export function tilesetCanvas(kind: 'floor' | 'walls'): HTMLCanvasElement {
-  const c = makeCanvas(16 * T, T);
+  const c = makeCanvas(TILESET_COLS * T, T);
   const ctx = c.getContext('2d')!;
-  for (let id = 1; id <= 15; id++) {
+  for (let id = 1; id < TILESET_COLS; id++) {
     if (kind === 'floor') drawFloor(ctx, id, (id - 1) * T, 0, id, 0);
-    else if (id <= 3) drawWall(ctx, id, (id - 1) * T, 0, { below: false, above: false, left: true, right: true });
+    else if (WALL_MINI[id]) {
+      const n = { below: false, above: false, left: true, right: true };
+      ctx.drawImage(wallCanvas(id === Wall.Window ? { style: Wall.Wall, n, window: 'view', variant: 1 } : { style: id, n, variant: id }), (id - 1) * T, 0);
+    }
   }
   return c;
 }

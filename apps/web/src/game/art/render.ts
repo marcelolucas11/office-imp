@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { OBJECT_DEFS, objSize, type MapArea, type OfficeMap, type Rect } from '@office-imp/shared';
+import { OBJECT_DEFS, objSize, type DayPeriod, type MapArea, type OfficeMap, type Rect } from '@office-imp/shared';
+import { EXTERIOR_MARGIN, drawExterior } from './exterior';
 import { objectSprite, objectTall } from './objects';
-import { FLOOR_COLOR, T, WALL_COLOR, drawStatic, makeCanvas, type Ctx } from './tiles';
+import { FLOOR_COLOR, T, WALL_MINI, drawStatic, makeCanvas, type Ctx } from './tiles';
+
+/** Fundo neutro do Mapmaker: ali o vazio fica escuro, para se ver onde falta piso. */
+export const VOID_COLOR = '#0b0b0d';
+/** Cor do vazio no mini-mapa e nas miniaturas: verde escuro, lembrando a grama do exterior. */
+export const MINI_VOID_COLOR = '#22382a';
 
 export function sortedObjects(map: OfficeMap) {
   return [...map.objects].sort((a, b) => {
@@ -46,11 +52,30 @@ export function drawAreas(ctx: Ctx, areas: MapArea[], x0 = 0, y0 = 0, selectedId
   }
 }
 
-/** Mapa inteiro em resolução cheia (Mapmaker). */
+/**
+ * O escritório como aparece no jogo, com o exterior em volta: grama e árvores na margem e nos
+ * vazios, chão, paredes (com a vista das janelas no período dado) e objetos. `margin` em blocos.
+ * Usado por `pnpm art:map` e pela folha de conferência; a cena do Phaser monta o mesmo em camadas.
+ */
+export function renderScene(map: OfficeMap, opts: { period?: DayPeriod; margin?: number } = {}): HTMLCanvasElement {
+  const period = opts.period ?? 'day';
+  const m = Math.max(0, Math.round(opts.margin ?? EXTERIOR_MARGIN));
+  const c = makeCanvas((map.width + m * 2) * T, (map.height + m * 2) * T);
+  const ctx = c.getContext('2d')!;
+  drawExterior(ctx, map, period, -m, -m, map.width + m * 2, map.height + m * 2);
+  drawStatic(ctx, map, -m, -m, map.width + m * 2, map.height + m * 2, period);
+  drawObjects(ctx, map, -m, -m);
+  return c;
+}
+
+/**
+ * Mapa inteiro em resolução cheia (Mapmaker). O fundo é neutro, sem o exterior: para editar,
+ * importa ver quais blocos estão vazios. As janelas mostram a vista de dia.
+ */
 export function renderFull(map: OfficeMap, opts: { areas?: boolean; spawns?: boolean; grid?: boolean; selectedArea?: string | null } = {}): HTMLCanvasElement {
   const c = makeCanvas(map.width * T, map.height * T);
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#0b0b0d';
+  ctx.fillStyle = VOID_COLOR;
   ctx.fillRect(0, 0, c.width, c.height);
   drawStatic(ctx, map, 0, 0, map.width, map.height);
   drawObjects(ctx, map);
@@ -87,14 +112,14 @@ export function renderFull(map: OfficeMap, opts: { areas?: boolean; spawns?: boo
 export function renderMini(map: OfficeMap, px: number, highlight?: Rect | null): HTMLCanvasElement {
   const c = makeCanvas(map.width * px, map.height * px);
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#0b0b0d';
+  ctx.fillStyle = MINI_VOID_COLOR;
   ctx.fillRect(0, 0, c.width, c.height);
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       const i = y * map.width + x;
       const wl = map.layers.walls[i];
       const f = map.layers.floor[i];
-      if (wl) ctx.fillStyle = wl === 2 ? '#5d8fb0' : WALL_COLOR === '#17181d' ? '#4a4d5a' : WALL_COLOR;
+      if (wl) ctx.fillStyle = WALL_MINI[wl] ?? '#4a4d5a';
       else if (f) ctx.fillStyle = FLOOR_COLOR[f] ?? '#555';
       else continue;
       ctx.fillRect(x * px, y * px, px, px);

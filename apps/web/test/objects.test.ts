@@ -113,9 +113,9 @@ describe('sprites dos objetos', () => {
 
   it('as folhas de conferência cobrem o catálogo inteiro', () => {
     const sheets = artSheets(1);
-    expect(sheets.map((s) => s.name)).toEqual(['pisos', 'objetos', 'avatares']);
+    expect(sheets.map((s) => s.name)).toEqual(['pisos', 'exterior', 'objetos', 'avatares']);
     const variants = OBJECT_TYPES.reduce((n, type) => n + Math.max(1, objectColors(type).length), 0);
-    expect(sheets[1].count).toBeGreaterThanOrEqual(variants);
+    expect(sheets.find((s) => s.name === 'objetos')!.count).toBeGreaterThanOrEqual(variants);
     for (const s of sheets) expect(s.canvas.width * s.canvas.height).toBeGreaterThan(0);
     const big = artSheets(2);
     expect(big[0].canvas.width).toBe(sheets[0].canvas.width * 2);

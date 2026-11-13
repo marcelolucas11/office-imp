@@ -3,12 +3,13 @@
 // direções) e avatares de exemplo. Tudo sai das definições de `@office-imp/shared`, então
 // um tipo novo de piso, parede ou objeto aparece aqui sozinho.
 // Usado por `pnpm art:sheet` (Node, gera PNG) e pela página /dev/arte (navegador).
-import { AVATAR_OPTIONS, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, emptyMap, objectColors, type AvatarConfig, type Dir, type MapObject } from '@office-imp/shared';
+import { AVATAR_OPTIONS, DAY_PERIODS, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, emptyMap, objectColors, type AvatarConfig, type DayPeriod, type Dir, type MapObject, type OfficeMap } from '@office-imp/shared';
 import { avatarSheet } from './avatar';
 import { makeCanvas } from './canvas';
 import { doorClosedSprite, objectSprite } from './objects';
 import { FONT_H, drawText, textWidth } from './pixfont';
 import { Sprite } from './prim';
+import { renderScene } from './render';
 import { T, drawFloor, drawStatic } from './tiles';
 
 export interface ArtSheet {
@@ -114,26 +115,58 @@ function ids(table: Record<string, number>): number[] {
     .sort((a, b) => a - b);
 }
 
-/** Pisos em blocos de 3×3 (para ver a repetição) e paredes num trecho com frente, quina e lateral. */
+/** Pisos em blocos de 4×3 (para ver a continuidade entre blocos) e paredes num trecho com frente, quina, lateral e janela. */
 export function floorCells(): Cell[] {
   const cells: Cell[] = [];
   for (const id of ids(Floor)) {
-    const canvas = makeCanvas(3 * T, 3 * T);
+    const canvas = makeCanvas(4 * T, 3 * T);
     const ctx = canvas.getContext('2d')!;
-    for (let ty = 0; ty < 3; ty++) for (let tx = 0; tx < 3; tx++) drawFloor(ctx, id, tx * T, ty * T, tx, ty);
+    for (let ty = 0; ty < 3; ty++) for (let tx = 0; tx < 4; tx++) drawFloor(ctx, id, tx * T, ty * T, tx, ty);
     cells.push({ canvas, lines: [constName(Floor, id), `PISO ${id}`] });
   }
   for (const id of ids(Wall)) {
-    const map = emptyMap(5, 4);
-    map.layers.floor.fill(Floor.Tile);
-    for (let x = 0; x < 5; x++) map.layers.walls[x] = id;
-    for (let y = 1; y < 4; y++) map.layers.walls[y * 5] = id;
-    map.layers.walls[2 * 5 + 3] = id;
-    const canvas = makeCanvas(5 * T, 4 * T);
-    drawStatic(canvas.getContext('2d')!, map, 0, 0, 5, 4);
+    const W = 6;
+    const H = 4;
+    const map = emptyMap(W, H);
+    map.layers.floor.fill(id === Wall.Glass ? Floor.Herringbone : Floor.Tile);
+    for (let x = 0; x < W; x++) map.layers.walls[x] = id;
+    for (let y = 1; y < H; y++) map.layers.walls[y * W] = id;
+    map.layers.walls[2 * W + 4] = id;
+    // duas janelas emendadas na parede de cima (a própria janela herda o acabamento da vizinha)
+    if (id !== Wall.Window && id !== Wall.Glass) map.layers.walls[2] = map.layers.walls[3] = Wall.Window;
+    const canvas = makeCanvas(W * T, H * T);
+    drawStatic(canvas.getContext('2d')!, map, 0, 0, W, H);
     cells.push({ canvas, lines: [constName(Wall, id), `PAREDE ${id}`] });
   }
   return cells;
+}
+
+/** Salinha de exemplo: parede lisa com janelas para o exterior, uma divisória de vidro e uma janela vista de fora. */
+export function sampleRoom(): OfficeMap {
+  const W = 9;
+  const H = 6;
+  const map = emptyMap(W, H);
+  const at = (x: number, y: number) => y * W + x;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      map.layers.floor[at(x, y)] = x < 5 ? Floor.Herringbone : Floor.BurntCement;
+      if (x === 0 || y === 0 || x === W - 1 || y === H - 1) map.layers.walls[at(x, y)] = x < 5 ? Wall.Plain : Wall.Brick;
+    }
+  }
+  for (const x of [1, 2, 3, 6, 7]) map.layers.walls[at(x, 0)] = Wall.Window;
+  for (const x of [2, 6]) map.layers.walls[at(x, H - 1)] = Wall.Window;
+  for (let y = 1; y < H - 2; y++) map.layers.walls[at(4, y)] = Wall.Glass;
+  map.objects.push({ id: 'p1', type: 'plant', x: 1, y: 1 }, { id: 'c1', type: 'chair', x: 2, y: 3 }, { id: 's1', type: 'sofa', x: 6, y: 2, dir: 'down' });
+  map.spawns.push({ x: 2, y: 2 });
+  return map;
+}
+
+const PERIOD_LABEL: Record<DayPeriod, string> = { dawn: 'AMANHECER', day: 'DIA', dusk: 'ENTARDECER', night: 'NOITE' };
+
+/** O exterior (grama, árvores e vista das janelas) nos 4 períodos do dia, em volta da salinha de exemplo. */
+export function exteriorCells(): Cell[] {
+  const map = sampleRoom();
+  return DAY_PERIODS.map((period) => ({ canvas: renderScene(map, { period, margin: 5 }), lines: [PERIOD_LABEL[period], `EXTERIOR ${period.toUpperCase()}`] }));
 }
 
 function pixelKey(c: HTMLCanvasElement): string {
@@ -221,7 +254,7 @@ export function avatarCells(): Cell[] {
   });
 }
 
-/** As três folhas (pisos, objetos, avatares), ampliadas `scale` vezes com vizinho mais próximo. */
+/** As folhas (pisos e paredes, exterior, objetos, avatares), ampliadas `scale` vezes com vizinho mais próximo. */
 export function artSheets(scale = 3): ArtSheet[] {
   const build = (name: string, title: string, cells: Cell[]): ArtSheet => ({
     name,
@@ -229,5 +262,10 @@ export function artSheets(scale = 3): ArtSheet[] {
     canvas: scaleCanvas(layout(`OFFICE-IMP VISUAL V2 - ${title} (${cells.length})`, cells), scale),
     count: cells.length,
   });
-  return [build('pisos', 'PISOS E PAREDES', floorCells()), build('objetos', 'OBJETOS', objectCells()), build('avatares', 'AVATARES', avatarCells())];
+  return [
+    build('pisos', 'PISOS E PAREDES', floorCells()),
+    build('exterior', 'EXTERIOR E PERIODOS DO DIA', exteriorCells()),
+    build('objetos', 'OBJETOS', objectCells()),
+    build('avatares', 'AVATARES', avatarCells()),
+  ];
 }
