@@ -72,11 +72,12 @@ export async function patchCurrentMap(office: OfficeRow, map: OfficeMap): Promis
 
 export async function listDesks(officeId: string): Promise<DeskInfo[]> {
   const rows = await db()
-    .select({ id: schema.desks.id, userId: schema.desks.userId, userName: schema.users.displayName })
+    .select({ id: schema.desks.id, userId: schema.desks.userId, userName: schema.users.displayName, look: schema.desks.look })
     .from(schema.desks)
     .leftJoin(schema.users, eq(schema.desks.userId, schema.users.id))
     .where(eq(schema.desks.officeId, officeId));
-  return rows.map((r) => ({ id: r.id, userId: r.userId, userName: r.userName ?? null }));
+  // o look é do ocupante: mesa livre nunca tem (a validação contra o tipo da mesa é feita ao aplicar)
+  return rows.map((r) => ({ id: r.id, userId: r.userId, userName: r.userName ?? null, ...(r.userId && r.look ? { look: r.look } : {}) }));
 }
 
 export async function desksUsed(officeId: string): Promise<number> {

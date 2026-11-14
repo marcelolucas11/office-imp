@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { bigint, boolean, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
-import type { AvatarConfig, OfficeMap, OfficeSettings, Profile, Role } from '@office-imp/shared';
+import type { AvatarConfig, DeskLook, OfficeMap, OfficeSettings, Profile, Role } from '@office-imp/shared';
 
 const ts = (name: string) => bigint(name, { mode: 'number' });
 
@@ -82,6 +82,8 @@ export const desks = pgTable(
     officeId: text('office_id').notNull(),
     id: text('id').notNull(), // id do objeto "desk" no mapa
     userId: text('user_id'),
+    /** Cor e setup escolhidos pelo ocupante (visual v2, Fase E); some quando a mesa fica livre. */
+    look: jsonb('look').$type<DeskLook>(),
   },
   (t) => [primaryKey({ columns: [t.officeId, t.id] })],
 );

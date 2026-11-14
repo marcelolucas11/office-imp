@@ -10,6 +10,7 @@ import {
   objectGroup,
   rectsOverlap,
   validateMapShape,
+  wallMountError,
   type OfficeMap,
 } from '@office-imp/shared';
 
@@ -42,6 +43,8 @@ export function validateOffice(map: OfficeMap): ValidationResult {
   for (const o of map.objects) {
     const { w, h } = objSize(o);
     if (o.x < 0 || o.y < 0 || o.x + w > map.width || o.y + h > map.height) errors.push(`Objeto "${OBJECT_DEFS[o.type]?.label ?? o.type}" fora do mapa.`);
+    // objeto de parede posto no chão: só aviso (mapas salvos antes da Fase E continuam publicáveis)
+    else if (wallMountError(map, o)) warnings.push(`"${OBJECT_DEFS[o.type]?.label ?? o.type}" em (${o.x}, ${o.y}) não está na face de uma parede.`);
   }
 
   for (const d of mapDesks(map)) {

@@ -137,6 +137,8 @@ export async function officeRoutes(app: FastifyInstance) {
       office: { id: office.id, slug: office.slug, name: office.name, timezone: office.timezone, settings: publicSettings(office) },
       map: hub.room(office.id)?.map ?? cur.map,
       mapVersionId: cur.id,
+      // com os looks (cor e setup do ocupante), para o primeiro desenho já sair como o escritório vê
+      desks: await listDesks(office.id),
       ticket: signTicket({ sub: s.id, kind: s.kind, officeId: office.id }, 60),
       livekitUrl: config.livekit.url,
       canAdmin: s.kind === 'user' && canAdminOffice(actorOf(s), office.id),
@@ -239,12 +241,13 @@ export async function officeRoutes(app: FastifyInstance) {
       if (!target || (!member && target.role !== 'OWNER')) throw badRequest('Esta pessoa não pertence ao escritório.');
       await db()
         .update(schema.desks)
-        .set({ userId: null })
+        .set({ userId: null, look: null })
         .where(and(eq(schema.desks.officeId, id), eq(schema.desks.userId, body.userId)));
     }
+    // o look é do ocupante: quem recebe a mesa começa com o setup e a cor do mapa publicado
     await db()
       .update(schema.desks)
-      .set({ userId: body.userId })
+      .set(desk.userId === body.userId ? { userId: body.userId } : { userId: body.userId, look: null })
       .where(and(eq(schema.desks.officeId, id), eq(schema.desks.id, deskId)));
     await audit(u, 'desk.assign', { officeId: id, target: deskId, meta: { userId: body.userId } });
     await hub.room(id)?.reloadDesks();

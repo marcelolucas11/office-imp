@@ -21,20 +21,26 @@ import {
   can,
   computeAv,
   deskSeat,
+  deskTopAt,
   deskZone,
   isAdminRole,
   isSpotlightAt,
   mapDesks,
   musicPosition,
   nearestFree,
+  objColorError,
+  objSetupError,
+  objectColors,
   parseYouTubeUrl,
   privateAreaAt,
   rectContains,
   sanitizeAvatar,
+  sanitizeDeskLook,
   type AreaIndex,
   type AvView,
   type ChatMessage,
   type DeskInfo,
+  type DeskLook,
   type Dir,
   type MapArea,
   type MapObject,
@@ -658,13 +664,14 @@ export class OfficeRoom extends Room {
         p.client.send('notice', { code: 'desk_taken' });
         return;
       }
+      // a mesa antiga fica livre e volta ao setup e à cor do mapa publicado; a nova começa como no mapa
       await db()
         .update(schema.desks)
-        .set({ userId: null })
+        .set({ userId: null, look: null })
         .where(and(eq(schema.desks.officeId, this.officeId), eq(schema.desks.userId, p.state.id)));
       const res = await db()
         .update(schema.desks)
-        .set({ userId: p.state.id })
+        .set({ userId: p.state.id, look: null })
         .where(and(eq(schema.desks.officeId, this.officeId), eq(schema.desks.id, deskId), isNull(schema.desks.userId)))
         .returning();
       if (!res.length) {
@@ -673,11 +680,12 @@ export class OfficeRoom extends Room {
       await this.reloadDesks();
     });
 
+    // "Deixar o posto": a mesa fica livre e volta ao setup e à cor do mapa publicado
     this.on('desk:release', async (p) => {
       if (p.kind !== 'user') return;
       await db()
         .update(schema.desks)
-        .set({ userId: null })
+        .set({ userId: null, look: null })
         .where(and(eq(schema.desks.officeId, this.officeId), eq(schema.desks.userId, p.state.id)));
       await this.reloadDesks();
     });
@@ -728,8 +736,11 @@ export class OfficeRoom extends Room {
       const zone = deskZone(desk);
       const seat = deskSeat(desk);
       const mine = this.map.objects.filter((o) => o.ownerDeskId === desk.id);
-      const onDesk = y === desk.y && x >= desk.x && x < desk.x + 2;
-      if (!rectContains(zone, x, y) || (x === seat.x && y === seat.y) || mine.length >= MAX_DESK_DECOR || mine.some((o) => o.x === x && o.y === y) || (def.solid && onDesk)) {
+      // tampo de verdade: os 3 blocos da mesa grande e o retorno da L também (antes só os 2 primeiros)
+      const onDesk = deskTopAt(desk, x, y);
+      // cor (visual v2): validada como no Mapmaker; a padrão do tipo não é gravada
+      const color = d.color === undefined || d.color === null || d.color === '' ? undefined : d.color;
+      if (!rectContains(zone, x, y) || (x === seat.x && y === seat.y) || mine.length >= MAX_DESK_DECOR || mine.some((o) => o.x === x && o.y === y) || (def.solid && onDesk) || objColorError({ type, color })) {
         p.client.send('notice', { code: 'decor_invalid' });
         return;
       }
@@ -741,7 +752,7 @@ export class OfficeRoom extends Room {
         props.url = url;
         props.title = str(d.props?.title, 80);
       }
-      const obj: MapObject = { id: `decor_${newId()}`, type, x, y, ownerDeskId: desk.id, ...(Object.keys(props).length ? { props } : {}) };
+      const obj: MapObject = { id: `decor_${newId()}`, type, x, y, ownerDeskId: desk.id, ...(color && color !== objectColors(type)[0]?.id ? { color } : {}), ...(Object.keys(props).length ? { props } : {}) };
       this.map.objects.push(obj);
       this.rebuildIndexes();
       await patchCurrentMap(this.office, this.map);
@@ -757,6 +768,60 @@ export class OfficeRoom extends Room {
       this.rebuildIndexes();
       await patchCurrentMap(this.office, this.map);
       this.broadcast('map:patch', { add: [], remove: [id] });
+    });
+
+    // aba "Cor" da Build Tool: troca a cor de uma decoração que a pessoa pôs na própria mesa
+    this.on('decor:color', async (p, d) => {
+      if (!can(p.state.role, 'build.ownDesk') || !p.state.deskId) return;
+      const id = String(d.id ?? '');
+      const i = this.map.objects.findIndex((o) => o.id === id);
+      const obj = this.map.objects[i];
+      if (!obj || obj.ownerDeskId !== p.state.deskId) return;
+      const color = d.color === undefined || d.color === null || d.color === '' ? undefined : d.color;
+      if (color === undefined ? !objectColors(obj.type).length : objColorError({ type: obj.type, color })) {
+        p.client.send('notice', { code: 'decor_invalid' });
+        return;
+      }
+      const { color: _old, ...rest } = obj;
+      const next: MapObject = color && color !== objectColors(obj.type)[0]?.id ? { ...rest, color } : rest;
+      this.map.objects[i] = next;
+      await patchCurrentMap(this.office, this.map);
+      this.broadcast('map:patch', { add: [next], remove: [id] });
+    });
+
+    // aba "Cor" da Build Tool na própria mesa: cor e setup por cima do mapa publicado (Dono e Admin, em qualquer mesa ocupada)
+    this.on('desk:look', async (p, d) => {
+      const fail = () => p.client.send('notice', { code: 'desk_look_invalid' });
+      if (p.kind !== 'user') return;
+      const deskId = String(d.deskId ?? p.state.deskId ?? '');
+      const obj = mapDesks(this.map).find((o) => o.id === deskId);
+      const info = this.desks.find((x) => x.id === deskId);
+      // mesa livre não tem look: o padrão dela se muda no Mapmaker
+      if (!obj || !info?.userId) return fail();
+      const mine = info.userId === p.state.id;
+      if (mine ? !can(p.state.role, 'build.ownDesk') : !can(p.state.role, 'map.edit')) return fail();
+      const next: Record<string, unknown> = d.reset === true ? {} : { ...(sanitizeDeskLook(obj, info.look) ?? {}) };
+      for (const key of ['color', 'setup'] as const) {
+        if (!(key in d) || d.reset === true) continue;
+        const v = d[key];
+        if (v === null || v === '') delete next[key];
+        else if (typeof v !== 'string' || (key === 'color' ? objColorError({ type: obj.type, color: v }) : objSetupError({ type: obj.type, setup: v }))) return fail();
+        else next[key] = v;
+      }
+      const look: DeskLook | null = sanitizeDeskLook(obj, next);
+      // só grava se a mesa continua com o mesmo dono (alguém pode ter liberado no meio do caminho)
+      const res = await db()
+        .update(schema.desks)
+        .set({ look })
+        .where(and(eq(schema.desks.officeId, this.officeId), eq(schema.desks.id, deskId), eq(schema.desks.userId, info.userId)))
+        .returning();
+      if (!res.length) {
+        await this.reloadDesks();
+        return fail();
+      }
+      if (look) info.look = look;
+      else delete info.look;
+      this.broadcastDesks();
     });
 
     // ----- quadro branco -----

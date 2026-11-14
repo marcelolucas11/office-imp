@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Role } from './permissions';
-import type { Dir } from './map';
+import type { DeskLook, Dir } from './map';
 import { DEFAULT_INTERACTION_DISTANCE } from './constants';
 import type { AvatarConfig } from './avatar';
 
@@ -73,6 +73,11 @@ export interface DeskInfo {
   userId: string | null;
   userName: string | null;
   online?: boolean;
+  /**
+   * Cor e setup que o ocupante escolheu para a mesa (Build Tool), aplicados por cima do mapa
+   * publicado (`applyDeskLooks`). Some quando a mesa fica livre ou troca de dono.
+   */
+  look?: DeskLook | null;
 }
 
 export interface DeskItem {

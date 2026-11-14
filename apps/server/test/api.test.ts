@@ -399,6 +399,77 @@ describe('tempo real', () => {
     expect(hub.room(officeId)!.map.objects.some((o) => o.id === patch.add[0].id)).toBe(true);
   });
 
+  it('Build Tool: cor da decoração e look da própria mesa por cima do mapa publicado; "Deixar o posto" volta ao inicial', async () => {
+    const desk = mapDesks(map).find((d) => !d.props?.partner)!;
+    const room = hub.room(officeId)!;
+    const lookOf = (desks: any[]) => desks.find((x: any) => x.id === desk.id)?.look ?? null;
+    // decoração com cor: a variante é validada no servidor; a padrão não é gravada
+    a.send('decor:add', { type: 'mug', x: desk.x + 1, y: desk.y, color: 'gold' });
+    const added = (await b.next('map:patch', (d) => d.add[0]?.type === 'mug')).add[0];
+    expect(added).toMatchObject({ type: 'mug', color: 'gold', ownerDeskId: desk.id });
+    a.send('decor:add', { type: 'mug', x: desk.x + 2, y: desk.y, color: 'arco-iris' });
+    expect((await a.next('notice', (d) => d.code === 'decor_invalid')).code).toBe('decor_invalid');
+    // trocar a cor de um objeto já colocado: só quem pôs, na própria mesa
+    a.send('decor:color', { id: added.id, color: 'black' });
+    const recolor = await b.next('map:patch', (d) => d.remove[0] === added.id);
+    expect(recolor.add[0]).toMatchObject({ id: added.id, x: added.x, y: added.y, color: 'black' });
+    b.send('decor:color', { id: added.id, color: 'gold' });
+    a.send('decor:color', { id: added.id, color: 'arco-iris' });
+    expect((await a.next('notice', (d) => d.code === 'decor_invalid')).code).toBe('decor_invalid');
+    await sleep(150);
+    expect(room.map.objects.find((o) => o.id === added.id)?.color).toBe('black');
+    a.send('decor:color', { id: added.id, color: 'white' }); // a padrão da caneca: o campo sai
+    expect('color' in (await b.next('map:patch', (d) => d.remove[0] === added.id)).add[0]).toBe(false);
+
+    // decoração em mesa de 3 blocos: o 3º bloco também é tampo (a planta grande, sólida, não vai nele)
+    const live = room.map.objects.find((o) => o.id === desk.id)!;
+    live.type = 'desk_wide';
+    try {
+      a.send('decor:add', { type: 'plant', x: desk.x + 2, y: desk.y });
+      expect((await a.next('notice', (d) => d.code === 'decor_invalid')).code).toBe('decor_invalid');
+    } finally {
+      live.type = 'desk';
+    }
+
+    // look da mesa: cor e setup escolhidos pela dona, para todos, sem mudar o mapa publicado
+    a.send('desk:look', { color: 'black', setup: 'gamer' });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === 'gamer'))).toEqual({ color: 'black', setup: 'gamer' });
+    a.send('desk:look', { setup: 'tres-monitores' });
+    expect((await a.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
+    a.send('desk:look', { color: 'arco-iris' });
+    expect((await a.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
+    // funcionária não mexe na mesa de outra pessoa
+    b.send('desk:look', { deskId: desk.id, setup: 'aio' });
+    expect((await b.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
+    a.send('desk:look', { setup: 'laptop_silver' }); // só o setup: a cor escolhida continua
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === 'laptop_silver'))).toEqual({ color: 'black', setup: 'laptop_silver' });
+    expect(room.map.objects.find((o) => o.id === desk.id)).not.toHaveProperty('setup');
+    expect(room.map.objects.find((o) => o.id === desk.id)).not.toHaveProperty('color');
+    const published = (await admin.http.get(`/api/offices/${officeId}/map`)).json.map;
+    expect(published.objects.find((o: any) => o.id === desk.id)).not.toHaveProperty('setup');
+    // quem entra depois já recebe o look (na entrada e na lista de mesas)
+    expect(lookOf((await bia.http.post(`/api/offices/${slug}/enter`)).json.desks)).toEqual({ color: 'black', setup: 'laptop_silver' });
+    expect(lookOf((await bia.http.get(`/api/offices/${officeId}/desks`)).json)).toEqual({ color: 'black', setup: 'laptop_silver' });
+    // voltar um campo ao do mapa publicado: o look guarda só o que muda
+    a.send('desk:look', { color: null });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === 'laptop_silver' && !lookOf(d)?.color))).toEqual({ setup: 'laptop_silver' });
+
+    // "Deixar o posto": a mesa fica livre e volta ao setup e à cor do mapa publicado
+    a.send('desk:release');
+    const freed = await b.next('desks', (d) => d.find((x: any) => x.id === desk.id)?.userId === null);
+    expect(lookOf(freed)).toBeNull();
+    expect(lookOf((await bia.http.get(`/api/offices/${officeId}/desks`)).json)).toBeNull();
+    // mesa livre não tem look
+    a.send('desk:look', { deskId: desk.id, setup: 'gamer' });
+    expect((await a.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
+    // pegar a mesa de novo começa do setup inicial
+    a.send('desk:claim', { deskId: desk.id });
+    const back = await b.next('desks', (d) => d.find((x: any) => x.id === desk.id)?.userId === ana.id);
+    expect(lookOf(back)).toBeNull();
+    a.send('decor:remove', { id: added.id });
+    await b.next('map:patch', (d) => d.remove[0] === added.id && !d.add.length);
+  });
+
   it('rádio: abrir, entrar, fila, controles e troca de DJ', async () => {
     a.send('music:open', { url: 'https://music.youtube.com/watch?v=dQw4w9WgXcQ', name: 'Lo-fi' });
     let chs = await b.next('music', (d) => d.length === 1);
@@ -509,6 +580,20 @@ describe('tempo real', () => {
     await adm.leave();
   });
 
+  it('look da mesa: Dono e Admin mudam o de qualquer mesa ocupada; mesa livre não tem', async () => {
+    const adm = await Rt.join(srv.url, admin.http, slug);
+    const desk = mapDesks(map).find((d) => !d.props?.partner)!;
+    const free = mapDesks(map).find((d) => d.id !== desk.id && !d.props?.partner)!;
+    const lookOf = (desks: any[], id = desk.id) => desks.find((x: any) => x.id === id)?.look ?? null;
+    adm.send('desk:look', { deskId: desk.id, setup: 'aio', color: 'walnut' });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === 'aio'))).toEqual({ setup: 'aio', color: 'walnut' });
+    adm.send('desk:look', { deskId: free.id, setup: 'aio' });
+    expect((await adm.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
+    adm.send('desk:look', { deskId: desk.id, reset: true });
+    expect(lookOf(await b.next('desks', (d) => d.some((x: any) => x.id === desk.id) && !lookOf(d)))).toBeNull();
+    await adm.leave();
+  });
+
   it('Mapmaker: mapa inválido é recusado; publicar recarrega todos; versões e restauração', async () => {
     const cur = (await admin.http.get(`/api/offices/${officeId}/map`)).json;
     const broken = JSON.parse(JSON.stringify(cur.map));
@@ -574,14 +659,21 @@ describe('tempo real', () => {
     await a.next('map');
   });
 
-  it('remover funcionário libera a mesa, guarda a decoração e derruba a sessão', async () => {
+  it('remover funcionário libera a mesa, guarda a decoração, devolve o setup inicial e derruba a sessão', async () => {
+    // a mesa da Ana com cor e setup próprios
+    a.send('desk:look', { setup: 'dual', color: 'white' });
+    const anaDesk = (await b.next('desks', (d) => d.some((x: any) => x.userId === ana.id && x.look?.setup === 'dual'))).find((x: any) => x.userId === ana.id).id;
     const desksBefore = (await admin.http.get(`/api/offices/${officeId}/desks`)).json;
     expect(desksBefore.filter((d: any) => d.userId === ana.id)).toHaveLength(1);
+    expect(desksBefore.find((d: any) => d.id === anaDesk).look).toEqual({ setup: 'dual', color: 'white' });
     expect((await admin.http.del(`/api/users/${ana.id}`)).status).toBe(200);
     expect((await a.next('kick')).reason).toBe('removed');
     const desksAfter = (await admin.http.get(`/api/offices/${officeId}/desks`)).json;
     expect(desksAfter.length).toBe(desksBefore.length);
     expect(desksAfter.every((d: any) => d.userId !== ana.id)).toBe(true);
+    // volta ao setup e à cor do mapa publicado, no banco e para quem está online
+    expect(desksAfter.find((d: any) => d.id === anaDesk).look).toBeUndefined();
+    expect((await b.next('desks', (d) => d.find((x: any) => x.id === anaDesk)?.userId === null)).find((x: any) => x.id === anaDesk).look).toBeUndefined();
     const lost = (await admin.http.get(`/api/offices/${officeId}/lost-found`)).json;
     expect(lost[0]).toMatchObject({ formerOwner: 'Ana' });
     expect(lost[0].items[0].type).toBe('plant_small');

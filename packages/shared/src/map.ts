@@ -137,6 +137,11 @@ export interface ObjectDef {
   cells?: string[];
   /** Texto curto desenhado no próprio sprite (`props.text`), como no letreiro neon. */
   text?: { max: number; default: string };
+  /**
+   * Só faz sentido na face de uma parede (relógio, cortiça, neon, split, plantas de parede): vai no
+   * bloco da parede e o Mapmaker não deixa pôr em outro lugar (`wallMountError`).
+   */
+  wallOnly?: boolean;
 }
 
 /** Setup de uma mesa de trabalho: o que fica em cima do tampo (visual v2). */
@@ -305,12 +310,12 @@ const defs: ObjectDef[] = [
   { type: 'succulent_bowl', label: 'Suculentas em vaso médio', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', colors: potsWith('white') },
   { type: 'palm', label: 'Palmeira', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', tall: 1, colors: [{ id: 'basket', label: 'Cesto de palha', hex: '#b8925a' }, ...POTS] },
   { type: 'tall_vase', label: 'Vaso alto com plumas', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', tall: 1, colors: potsWith('white') },
-  { type: 'hanging_fern', label: 'Samambaia pendurada (parede)', w: 1, h: 1, solid: false, category: 'decor', group: 'plants', colors: [
+  { type: 'hanging_fern', label: 'Samambaia pendurada (parede)', w: 1, h: 1, solid: false, category: 'decor', group: 'plants', wallOnly: true, colors: [
     { id: 'macrame', label: 'Macramê', hex: '#e6dcc6' },
     { id: 'terracotta', label: 'Vaso de barro', hex: '#a85f3a' },
     { id: 'black', label: 'Vaso preto', hex: '#34353c' },
   ] },
-  { type: 'wall_garden', label: 'Planta de parede (jardim vertical)', w: 2, h: 1, solid: false, category: 'decor', group: 'plants', colors: FRAMES.slice(0, 3) },
+  { type: 'wall_garden', label: 'Planta de parede (jardim vertical)', w: 2, h: 1, solid: false, category: 'decor', group: 'plants', wallOnly: true, colors: FRAMES.slice(0, 3) },
   // ----- decoração -----
   { type: 'lamp', label: 'Luminária de chão', w: 1, h: 1, solid: false, category: 'decor', tall: 1, colors: [
     { id: 'cream', label: 'Cúpula creme', hex: '#f1e2b8' },
@@ -414,18 +419,18 @@ const defs: ObjectDef[] = [
     { id: 'wood', label: 'Móvel de madeira', hex: '#a06e45' },
     { id: 'white', label: 'Móvel branco', hex: '#d8d5cd' },
   ] },
-  { type: 'corkboard', label: 'Quadro de cortiça (parede)', w: 2, h: 1, solid: false, category: 'decor', group: 'wall', colors: [
+  { type: 'corkboard', label: 'Quadro de cortiça (parede)', w: 2, h: 1, solid: false, category: 'decor', group: 'wall', wallOnly: true, colors: [
     { id: 'wood', label: 'Moldura de madeira', hex: '#8f6340' },
     { id: 'dark', label: 'Moldura escura', hex: '#3a261c' },
     { id: 'white', label: 'Moldura branca', hex: '#e9ecf2' },
   ] },
-  { type: 'wall_clock', label: 'Relógio de parede', w: 1, h: 1, solid: false, category: 'decor', group: 'wall', colors: [
+  { type: 'wall_clock', label: 'Relógio de parede', w: 1, h: 1, solid: false, category: 'decor', group: 'wall', wallOnly: true, colors: [
     { id: 'black', label: 'Preto', hex: '#2a2b30' },
     { id: 'white', label: 'Branco', hex: '#e9ecf2' },
     { id: 'gold', label: 'Dourado', hex: '#d7b870' },
     { id: 'wood', label: 'Madeira', hex: '#8f6340' },
   ] },
-  { type: 'neon', label: 'Letreiro neon (texto editável)', w: 2, h: 1, solid: false, category: 'decor', group: 'wall', resizable: true, text: { max: 24, default: 'IMPERA' }, colors: [
+  { type: 'neon', label: 'Letreiro neon (texto editável)', w: 2, h: 1, solid: false, category: 'decor', group: 'wall', resizable: true, wallOnly: true, text: { max: 24, default: 'IMPERA' }, colors: [
     { id: 'pink', label: 'Rosa', hex: '#ff5fa8' },
     { id: 'cyan', label: 'Ciano', hex: '#4fd8f0' },
     { id: 'yellow', label: 'Amarelo', hex: '#ffd84a' },
@@ -434,7 +439,7 @@ const defs: ObjectDef[] = [
     { id: 'orange', label: 'Laranja', hex: '#ff8a3c' },
     { id: 'white', label: 'Branco', hex: '#f4f6fb' },
   ] },
-  { type: 'split_ac', label: 'Ar-condicionado split (parede)', w: 1, h: 1, solid: false, category: 'decor', group: 'wall', colors: [
+  { type: 'split_ac', label: 'Ar-condicionado split (parede)', w: 1, h: 1, solid: false, category: 'decor', group: 'wall', wallOnly: true, colors: [
     { id: 'white', label: 'Branco', hex: '#e9ecf2' },
     { id: 'graphite', label: 'Grafite', hex: '#4a4d57' },
   ] },
@@ -465,6 +470,14 @@ export const DESK_DECOR_TYPES = [
   'succulent',
   'cactus_small',
   'podcast_mic',
+  // plantas de chão do visual v2 (Fase E): mesmo bloco e mesma colisão da `plant`, que já estava aqui;
+  // as de parede ficam de fora (a zona da mesa é chão)
+  'succulent_bowl',
+  'monstera',
+  'snake_plant',
+  'cactus',
+  'palm',
+  'tall_vase',
 ];
 export const MAX_DESK_DECOR = 8;
 
@@ -717,6 +730,84 @@ export function normalizeObjectVariants(map: OfficeMap): OfficeMap {
       return rest;
     }),
   };
+}
+
+/**
+ * Personalização de uma mesa de trabalho pelo ocupante (Build Tool, visual v2 Fase E): a cor e o
+ * setup que ele escolheu. Não entra no mapa publicado: fica no registro da mesa (tabela `desks`) e
+ * é aplicada por cima do mapa (`applyDeskLooks`). Campo ausente = o do mapa publicado.
+ */
+export interface DeskLook {
+  color?: string;
+  setup?: string;
+}
+
+/**
+ * Look válido para a mesa: só os campos que existem no tipo dela e que mudam alguma coisa em
+ * relação ao mapa publicado (cor ou setup igual ao da planta sai). `null` se não sobrar nada.
+ * Aceita qualquer entrada (o que veio do banco ou de um mapa que mudou de tipo de mesa).
+ */
+export function sanitizeDeskLook(desk: Pick<MapObject, 'type' | 'color' | 'setup'>, look: unknown): DeskLook | null {
+  if (!look || typeof look !== 'object' || !isDeskType(desk.type)) return null;
+  const raw = look as Record<string, unknown>;
+  const out: DeskLook = {};
+  if (typeof raw.color === 'string' && !objColorError({ type: desk.type, color: raw.color }) && raw.color !== objColor(desk)?.id) out.color = raw.color;
+  if (typeof raw.setup === 'string' && !objSetupError({ type: desk.type, setup: raw.setup }) && raw.setup !== objSetup(desk)?.id) out.setup = raw.setup;
+  return out.color || out.setup ? out : null;
+}
+
+/**
+ * Mapa como o escritório vê: o publicado, com a cor e o setup que cada ocupante escolheu para a
+ * mesa dele. Não altera o mapa recebido; devolve o mesmo objeto se nenhuma mesa tiver look.
+ */
+export function applyDeskLooks(map: OfficeMap, desks: readonly { id: string; look?: DeskLook | null }[]): OfficeMap {
+  const looks = new Map<string, DeskLook>();
+  for (const d of desks) if (d.look) looks.set(d.id, d.look);
+  if (!looks.size) return map;
+  let changed = false;
+  const objects = map.objects.map((o) => {
+    const look = looks.get(o.id) && sanitizeDeskLook(o, looks.get(o.id));
+    if (!look) return o;
+    changed = true;
+    return { ...o, ...look };
+  });
+  return changed ? { ...map, objects } : map;
+}
+
+/** Assinatura dos looks das mesas (para saber se o mapa visto precisa ser refeito). */
+export function deskLooksKey(desks: readonly { id: string; look?: DeskLook | null }[]): string {
+  return desks
+    .filter((d) => d.look)
+    .map((d) => `${d.id}:${d.look!.color ?? ''}:${d.look!.setup ?? ''}`)
+    .sort()
+    .join('|');
+}
+
+/**
+ * O bloco (x, y) do mapa é tampo da mesa? Usa o footprint real (`objSolidAt`): os 3 blocos da mesa
+ * grande e o retorno da mesa em L contam, o vão da L não.
+ */
+export function deskTopAt(desk: MapObject, x: number, y: number): boolean {
+  return objSolidAt(desk, x - desk.x, y - desk.y);
+}
+
+/**
+ * Erro de posição de um objeto de parede (`wallOnly`), ou `null`: cada bloco da linha de cima do
+ * footprint tem que ser parede com a face à mostra (sem outra parede logo abaixo), que é onde o
+ * desenho desses objetos fica. Tipos que não são de parede sempre dão `null`.
+ */
+export function wallMountError(map: Pick<OfficeMap, 'width' | 'height' | 'layers'>, o: Pick<MapObject, 'type' | 'x' | 'y' | 'w' | 'h'>): string | null {
+  const def = OBJECT_DEFS[o.type];
+  if (!def?.wallOnly) return null;
+  const { w } = objSize(o as MapObject);
+  for (let dx = 0; dx < w; dx++) {
+    const x = o.x + dx;
+    if (!inBounds(map, x, o.y)) return `${def.label} fora do mapa`;
+    const wall = map.layers.walls[idx(map, x, o.y)] !== 0;
+    const below = inBounds(map, x, o.y + 1) && map.layers.walls[idx(map, x, o.y + 1)] !== 0;
+    if (!wall || below) return `${def.label} vai na face de uma parede (bloco de parede com chão logo abaixo)`;
+  }
+  return null;
 }
 
 export function rectContains(r: Rect, x: number, y: number): boolean {

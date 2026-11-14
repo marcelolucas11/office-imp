@@ -20,14 +20,17 @@ async function targetInfo(id: string) {
   return { user, officeIds: members.map((m) => m.officeId) };
 }
 
-/** Libera a mesa de alguém e manda a decoração dela para os achados e perdidos. */
+/**
+ * Libera a mesa de alguém e manda a decoração dela para os achados e perdidos. A mesa volta ao
+ * setup e à cor do mapa publicado (o look do ocupante é apagado).
+ */
 export async function releaseDesksOf(userId: string, userName: string, officeIds?: string[]) {
   const rows = await db()
     .select()
     .from(schema.desks)
     .where(officeIds ? and(eq(schema.desks.userId, userId), inArray(schema.desks.officeId, officeIds.length ? officeIds : ['-'])) : eq(schema.desks.userId, userId));
   for (const d of rows) {
-    await db().update(schema.desks).set({ userId: null }).where(and(eq(schema.desks.officeId, d.officeId), eq(schema.desks.id, d.id)));
+    await db().update(schema.desks).set({ userId: null, look: null }).where(and(eq(schema.desks.officeId, d.officeId), eq(schema.desks.id, d.id)));
     try {
       const office = await getOffice(d.officeId);
       const room = hub.room(d.officeId);
