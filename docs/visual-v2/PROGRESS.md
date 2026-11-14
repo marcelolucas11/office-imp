@@ -7,8 +7,8 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 | 0. Amostras de escala | pronto | Marcelo escolheu manter 32 px e o boneco no formato atual |
 | A. Base | pronto | Primitivas, paletas, cor por objeto, `pnpm art:sheet`, `/dev/arte` e testes. Cadeira e sofá já no estilo novo (5 cores). Guia de uso logo abaixo |
 | B. Pisos, paredes e exterior | pronto | 15 pisos (10 redesenhados + 5 novos), 7 paredes (4 novas), janelas com vista, exterior com grama e árvores, dia e noite pelo fuso do escritório, gerador com os pisos novos, `pnpm art:map` e `/dev/cena`. Guia logo abaixo do guia da Fase A |
-| C1. Mesas e cadeiras | pendente | |
-| C2. Setups e objetos de mesa | pendente | |
+| C1. Mesas e cadeiras | pronto | 8 mesas de trabalho (flag `desk: true`, L com máscara e espelho), 6 assentos com cores, cadeiras de mesa com encosto alto. Guia logo abaixo do guia da Fase B |
+| C2. Setups e objetos de mesa | pronto | `MapObject.setup` (7 setups), 13 objetos de mesa, 10 extras (neon com texto editável), paleta do Mapmaker em grupos. Guia logo abaixo |
 | C3. Plantas e catálogo antigo | pendente | |
 | D. Avatar: mais opções | pendente | |
 | E. Cores e setup da mesa | pendente | |
@@ -18,7 +18,8 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 ## Checklist final (andamento)
 
 - [x] Exterior com grama e árvores + dia/noite pelo fuso do escritório (Fase B)
-- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases C1 a G
+- [x] Mesas, cadeiras, setups, objetos de mesa e os 10 extras (Fases C1 e C2; as plantas são da C3)
+- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases C3 a G
 
 ## Guia da base (Fase A) para as próximas fases
 
@@ -83,10 +84,57 @@ Arquivos novos em `apps/web/src/game/art/`:
 
 **Testes novos.** `packages/shared/test/dayperiod.test.ts` (faixas, fusos, horário de verão, relógio falso), `apps/web/test/scenery.test.ts` (pisos, paredes, janelas, exterior, cena) e o bloco "pisos do visual v2 no gerador" em `packages/map-engine/test/generate.test.ts`.
 
+## Guia das Fases C1 e C2 (mesas, cadeiras, setups e objetos) para as próximas fases
+
+Arquivos novos em `apps/web/src/game/art/`:
+
+| Arquivo | O que tem |
+|---|---|
+| `desks.ts` | As 8 mesas de trabalho. Medidas comuns: tampo nas linhas `top + 3 … top + 20` do footprint, borda da frente até `top + 23`, pés até `top + 30` |
+| `setups.ts` | Os setups (`paintSetup(s, id, spot)`), peças reaproveitáveis (`monitor`, `keyboardPiece`, `mousePiece`, gabinete, notebook) e as cores `RGB` |
+| `chairs.ts` | Cadeira gamer, executiva, banqueta, poltrona e pufe (a de escritório e o sofá continuam em `seating.ts`) |
+| `deskitems.ts` | Os 13 objetos de mesa |
+| `extras.ts` | Os 10 extras |
+
+**Mesa de trabalho é um flag.** `ObjectDef.desk: true` marca o que é mesa (atribuível, com assento, área de conversa, zona de decoração e setup). Nunca compare `type === 'desk'`: use `isDesk(o)`, `isDeskType(type)`, `mapDesks(map)` e `DESK_TYPES`. O tipo `desk` continua sendo a mesa reta 2×1 (mapas salvos não mudam). Assento padrão: `ObjectDef.seat` (relativo ao canto; sem ele, logo abaixo do canto esquerdo) via `defaultDeskSeat(o)`; zona padrão de uma mesa nova: `defaultDeskZone(o)` (linha do tampo + 1 bloco à direita; na L, as duas linhas). Mapas antigos sem `props` seguem com os padrões de antes (`deskSeat`/`deskZone`).
+
+**Footprint que não é retângulo (mesa em L).** `ObjectDef.cells` (`'#'` = sólido) define os blocos que bloqueiam; `objSolidAt(o, dx, dy)` responde por bloco, e `buildCollision`, o mini-mapa e o desenho usam isso. `dir: 'right'` espelha máscara e desenho (`objMirrored`). `objDepthRows(o)` dá as linhas de cima que contam para a ordem de desenho (na L é 1: quem senta no vão fica na frente do tampo). Tipos com `cells` não podem ser `resizable` (há teste).
+
+**Setup da mesa (API).** Em `packages/shared/src/map.ts`:
+
+- `DESK_SETUPS: DeskSetup[]` (`{ id, label }`): `monitor` (padrão), `gamer`, `dual`, `laptop_silver`, `aio`, `laptop`, `none`. `DEFAULT_DESK_SETUP = 'monitor'`.
+- `MapObject.setup?: string`. Ausente = padrão. Só mesas de trabalho aceitam.
+- `deskSetups(type)`: os setups que o tipo aceita (todos nas mesas, lista vazia nos outros).
+- `objSetup(o)`: o setup em uso (o pedido, se existir; senão o padrão); `null` fora de mesa.
+- `objSetupError(o)`: mensagem de erro ou `null` (usado por `validateMapShape`, então o servidor recusa setup desconhecido ao validar e publicar).
+- `normalizeObjectVariants(map)`: como `normalizeObjectColors`, tira também o `setup` que saiu do catálogo (o servidor usa ao carregar e ao publicar).
+- No cliente: `PaintInfo.setup` chega ao desenho; `objectKey` inclui o setup (o padrão dá a mesma chave que a ausência); `objectIcon(type, color?, setup?)`. A exportação do Tiled leva a propriedade `setup`.
+- Para criar um setup: id novo **no fim** de `DESK_SETUPS` e uma função em `SETUPS` (`setups.ts`) que desenha sobre o `SetupSpot` (`cx` = centro do assento, `y` = primeira linha do tampo, `x0`/`x1` = limites). O teste cobra que todo setup tem desenho e muda os pixels de toda mesa.
+- **Para a Fase E:** a UI do Mapmaker já tem um `Select` simples de cor e de setup no painel do objeto; falta a aba "Cor" com prévia, a mensagem de tempo real para o funcionário trocar o setup da própria mesa, o "Deixar o posto" voltar ao inicial e o sorteio de setups no gerador (`addDesk` em `packages/map-engine/src/modules.ts` cria `desk` sem `setup`).
+
+**Objetos sobre a mesa.** Os objetos de mesa são 1×1, não bloqueiam e estão em `DESK_DECOR_TYPES` (a Build Tool do funcionário já lista todos). São desenhados para "pisar" entre as linhas 14 e 19 do bloco. Um objeto não sólido posto num bloco sólido de móvel é desenhado logo depois desse móvel (`surfaceIndex` e `sortedObjects` em `render.ts`; profundidade equivalente na cena), e `FLAT_ON_SURFACE` (mousepad, post-its) fica por baixo dos outros do mesmo tampo. O setup faz parte do sprite da mesa, então um objeto posto na coluna do setup fica por cima dele; para montar à mão, use o setup "Vazio" com teclado, mouse e mousepad.
+
+**Cadeiras de mesa com encosto alto.** `chair`, `chair_gamer` e `chair_exec` têm `tall: 1`: `tallChair` (em `seating.ts`) desenha a cadeira no bloco e alonga o encosto 10 px repetindo linhas lisas, então o encosto encosta na frente da mesa. Para uma cadeira nova de mesa, escreva o desenho em 32×32 e embrulhe com `tallChair(desenho, linhas)`. Sem `dir`, cadeiras de mesa ficam de costas (como a de escritório) e a poltrona fica de frente (como era).
+
+**Texto no sprite (letreiro neon).** `ObjectDef.text = { max, default }` faz o tipo desenhar `props.text` (`objText(o)` limpa e corta; `objTextError` valida; o Mapmaker mostra o campo "Texto do letreiro"). O texto entra na chave do cache. O neon usa a fonte de pixels em escala 2 quando cabe e em escala 1 quando não (cortando o que não couber na largura); a fonte ganhou `! ? ' " & * ; @ $ % < >`.
+
+**Objetos de parede** (`group: 'wall'`: cortiça, relógio, neon, split): vão no bloco da própria parede e ocupam a face dela (linhas 11 a 30).
+
+**Paleta do Mapmaker.** `ObjectDef.group` / `objectGroup(type)` / `OBJECT_GROUPS`: interativos, estrutura, mesas de trabalho, cadeiras e sofás, mesas e móveis, objetos de mesa, copa e equipamentos, de parede, plantas e decoração (seções recolhíveis; rótulos por `t()`). `category` continua existindo.
+
+**Tipos novos.** Mesas: `desk_wide`, `desk_l`, `desk_standing`, `desk_glass`, `desk_dark`, `desk_gamer`, `desk_bench` (e `desk` redesenhada). Assentos: `chair_gamer`, `chair_exec`, `stool`, `pouf` (e `armchair` redesenhada). Objetos de mesa: `keyboard`, `mousepad`, `mouse`, `mug`, `bottle`, `headphones`, `desk_lamp`, `postits`, `books`, `succulent`, `cactus_small` (e `photo`, `trophy` redesenhados). Extras: `espresso`, `podcast_mic`, `ring_light`, `printer`, `snack_machine`, `aquarium`, `corkboard`, `wall_clock`, `neon`, `split_ac`. Todos com cores em `colors`; `REDESIGNED_TYPES` (de `objects.ts`) lista os tipos com desenho novo, e o teste de contorno percorre todos eles em todas as cores, direções e setups.
+
+**Conferência.** `pnpm art:sheet --only=desk*,chair* --scale=4 --out=/tmp/folha` gera só `recorte.png` com os tipos pedidos ao lado de um avatar (nome exato ou prefixo com `*`). A folha completa mostra cada mesa em cada setup e o neon com um texto de exemplo.
+
 ## Problemas conhecidos
 
 - A página `/dev/arte` foi conferida só pelo servidor do Vite (os módulos compilam e a rota responde); não havia navegador no ambiente da Fase A para abri-la. As folhas PNG saem do mesmo código (`sheet.ts`).
 - Sofá virado para a esquerda ou direita usa o desenho de frente (já era assim na arte antiga). Se a Fase C3 quiser as 4 direções, o `SpritePainter` do sofá recebe `info.o.dir`.
+- `decor:add` (tempo real, não alterado nesta fase) considera "em cima da mesa" só os 2 primeiros blocos (`desk.x + 2`): numa mesa de 3 blocos, o funcionário consegue pôr a planta grande (sólida) no 3º bloco. Corrigir na Fase E com `objSolidAt`.
+- Objetos postos na coluna do setup ficam por cima dele (o setup é parte do sprite da mesa): um mousepad ali cobre o teclado do setup.
+- Na mesa em L, clicar no vão (onde fica a cadeira) no Mapmaker seleciona a mesa se não houver outro objeto ali; com a cadeira posta depois, a cadeira tem prioridade.
+- O relógio de parede é estático (10h10) até a Fase F.
+- O letreiro neon redimensionado em altura continua com a placa na primeira linha (só a largura muda o desenho).
 - A câmera continua presa aos limites do mapa (decisão 1 do plano: não mexer na câmera). Por isso o exterior aparece nos vazios do mapa, na faixa de 28 px acima dele e em volta quando o escritório é menor que a tela. Num escritório grande com zoom alto, quem está no meio vê pouco exterior; a vista das janelas aparece sempre.
 - Além dos 16 blocos de margem há só grama, sem árvores (aparece em telas muito largas com zoom mínimo e escritório pequeno).
 - A lua aparece em uma de cada quatro janelas (a paisagem repete a cada 4 blocos) e pode ficar atrás de um objeto alto encostado na parede.
