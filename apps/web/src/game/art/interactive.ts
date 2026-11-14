@@ -238,32 +238,33 @@ const arcade: SpritePainter = (s, info) => {
 
 const poster: SpritePainter = (s, info) => {
   const m = matOf(info, '#f08a3c');
+  // cabe na face de uma parede (linhas 10 a 30), como os objetos de parede, e também no chão
   s.piece((p) => {
     // papel com a ilustração: céu, sol na cor da variante, montanhas e o título
-    p.rect(7, 4, 18, 24, PAL.paper.base);
-    p.rect(7, 27, 18, 1, PAL.paper.dark);
-    p.rect(24, 5, 1, 22, PAL.paper.dark);
-    p.rect(9, 6, 14, 13, '#2b3c5c');
-    p.ellipse(13, 8, 7, 7, m.base);
-    p.rect(14, 9, 2, 1, m.hi);
+    p.rect(8, 8, 16, 22, PAL.paper.base);
+    p.rect(8, 29, 16, 1, PAL.paper.dark);
+    p.rect(23, 9, 1, 20, PAL.paper.dark);
+    p.rect(10, 10, 12, 12, '#2b3c5c');
+    p.ellipse(13, 12, 6, 6, m.base);
+    p.rect(14, 13, 2, 1, m.hi);
     p.poly(
       [
-        [9, 18],
-        [13, 13],
-        [16, 16],
-        [19, 12],
-        [22, 18],
+        [10, 21],
+        [13, 16],
+        [16, 19],
+        [18, 15],
+        [21, 21],
       ],
       '#1d2a40',
     );
-    p.rect(9, 21, 12, 2, INK);
-    p.rect(9, 24, 8, 1, '#9aa3b5');
-    p.rect(19, 24, 3, 1, m.base);
+    p.rect(10, 24, 10, 2, INK);
+    p.rect(10, 27, 7, 1, '#9aa3b5');
+    p.rect(19, 27, 3, 1, m.base);
   });
   s.piece((p) => {
     // fitas nos cantos
-    p.rect(6, 3, 3, 2, '#e9e1c8');
-    p.rect(23, 3, 3, 2, '#e9e1c8');
+    p.rect(7, 7, 3, 2, '#e9e1c8');
+    p.rect(22, 7, 3, 2, '#e9e1c8');
   });
 };
 
