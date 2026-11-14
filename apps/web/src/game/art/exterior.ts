@@ -434,9 +434,10 @@ export function windowView(period: DayPeriod, variant: number): Sprite {
   // grama (cobre a metade de baixo do sol)
   s.rect(0, 8, T, 1, pal.grass.light);
   s.rect(0, 9, T, 3, pal.grass.base);
-  // linha de árvores: 8 por volta, com tamanho e posição variando
+  // linha de árvores: 6 por volta, com tamanho e posição variando. Há duas clareiras, onde
+  // ficam a lua (noite) e o sol (amanhecer e entardecer)
   each((dx) => {
-    for (let k = 0; k < 8; k++) {
+    for (const k of [0, 1, 2, 4, 6, 7]) {
       const cx = dx + k * 16 + 3 + Math.floor(noise(k, 0, 311) * 8);
       const cw = 9 + Math.floor(noise(k, 1, 311) * 4);
       const ch = 6 + Math.floor(noise(k, 2, 311) * 3);

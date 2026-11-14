@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "art:sheet": "tsx scripts/art-sheet.ts"
+    "art:sheet": "tsx scripts/art-sheet.ts",
+    "art:map": "tsx scripts/art-map.ts"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",

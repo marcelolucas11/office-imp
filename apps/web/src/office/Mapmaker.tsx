@@ -2,11 +2,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DIRS,
-  FLOOR_LABEL,
+  Floor,
   MAX_MAP_SIZE,
   OBJECT_DEFS,
   OBJECT_TYPES,
-  WALL_LABEL,
   mapDesks,
   objSize,
   rectContains,
@@ -30,6 +29,7 @@ import { FLOOR_COLOR, T, tilesetCanvas } from '../game/art/tiles';
 import { useGame } from '../game/store';
 import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
+import { FLOOR_IDS, WALL_IDS, floorLabel, wallLabel } from './tileLabels';
 import { toast } from '../lib/session';
 import { uploadImage } from './Modals';
 import { Emo, EmoText } from '../lib/icons';
@@ -384,8 +384,9 @@ export default function Mapmaker() {
 
   const floorTiles = useMemo(() => tilesetCanvas('floor').toDataURL(), []);
   const wallTiles = useMemo(() => tilesetCanvas('walls').toDataURL(), []);
-  const swatch = (sheet: string, id: number, active: boolean, label: string, onClick: () => void) => (
-    <button key={id} type="button" title={label} onClick={onClick} className={cx('h-9 w-9 rounded-md border-2', active ? 'border-gold' : 'border-line')} style={{ backgroundImage: `url(${sheet})`, backgroundPosition: `-${(id - 1) * T}px 0`, backgroundColor: FLOOR_COLOR[id] }} />
+  // o fundo aparece só atrás de desenhos com transparência (a divisória de vidro)
+  const swatch = (sheet: string, id: number, active: boolean, label: string, bg: string, onClick: () => void) => (
+    <button key={id} type="button" title={label} aria-label={label} onClick={onClick} className={cx('h-9 w-9 rounded-md border-2', active ? 'border-gold' : 'border-line')} style={{ backgroundImage: `url(${sheet})`, backgroundPosition: `-${(id - 1) * T}px 0`, backgroundColor: bg }} />
   );
   const toolBtn = (id: Tool, label: string, title: string) => (
     <Button key={id} small variant={tool === id ? 'primary' : 'subtle'} title={title} onClick={() => setTool(id)}>
@@ -459,10 +460,12 @@ export default function Mapmaker() {
                 {toolBtn('spawn', t('mm.spawn', '⬤ Entrada'), t('mm.spawnTip', 'Marca/desmarca os pontos onde as pessoas aparecem ao entrar'))}
               </div>
               <Field group label={t('mm.floors', 'Chão')}>
-                <div className="flex flex-wrap gap-1.5">{Object.entries(FLOOR_LABEL).map(([id, label]) => swatch(floorTiles, Number(id), floorId === Number(id), label, () => (setFloorId(Number(id)), tool !== 'fill' && setTool('floor'))))}</div>
+                <div className="flex flex-wrap gap-1.5">{FLOOR_IDS.map((id) => swatch(floorTiles, id, floorId === id, floorLabel(id), FLOOR_COLOR[id], () => (setFloorId(id), tool !== 'fill' && setTool('floor'))))}</div>
+                <p className="mt-1 text-xs text-muted">{floorLabel(floorId)}</p>
               </Field>
               <Field group label={t('mm.walls', 'Paredes')}>
-                <div className="flex flex-wrap gap-1.5">{Object.entries(WALL_LABEL).map(([id, label]) => swatch(wallTiles, Number(id), wallId === Number(id), label, () => (setWallId(Number(id)), setTool('wall'))))}</div>
+                <div className="flex flex-wrap gap-1.5">{WALL_IDS.map((id) => swatch(wallTiles, id, wallId === id, wallLabel(id), FLOOR_COLOR[Floor.Tile], () => (setWallId(id), setTool('wall'))))}</div>
+                <p className="mt-1 text-xs text-muted">{wallLabel(wallId)}</p>
               </Field>
               <Toggle checked={eraseFloor} onChange={setEraseFloor} label={t('mm.eraseFloor', 'A borracha também apaga o chão')} />
               <div className="space-y-2 rounded-xl border border-line p-3">

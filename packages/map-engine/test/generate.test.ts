@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
-import { buildCollision, deskSeat, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type WizardInput } from '@office-imp/shared';
-import { expandOffice, generateOffice, modulesForInput, renderAscii, reserveBlankWing, toTiled, validateOffice } from '../src';
+import { buildCollision, deskSeat, emptyMap, Floor, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
+import { buildWing, CORRIDOR_H, expandOffice, FLOOR_THEMES, generateOffice, GENERATOR_VERSION, modulesForInput, renderAscii, reserveBlankWing, ROOM_H, toTiled, validateOffice } from '../src';
 
 const base: WizardInput = { name: 'Impera', size: 'small', partners: 2, partnersShareRoom: true };
 
@@ -118,6 +118,102 @@ describe('gerador de escritórios', () => {
     const txt = renderAscii(generateOffice(base));
     expect(txt).toContain('@');
     expect(txt).toContain('D');
+  });
+});
+
+/** Escritório como o gerador fazia antes do visual v2 (versão 1 do meta). */
+function legacyOffice(input: WizardInput): OfficeMap {
+  const map = emptyMap(1, ROOM_H * 2 + CORRIDOR_H);
+  const gen: GeneratorMeta = { version: 1, corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, counters: {} };
+  buildWing(map, gen, modulesForInput(input), 0, false);
+  map.meta = { gen };
+  return map;
+}
+
+const floorsOf = (map: OfficeMap, x0 = 0) => {
+  const set = new Set<number>();
+  for (let y = 0; y < map.height; y++) for (let x = x0; x < map.width; x++) set.add(map.layers.floor[y * map.width + x]);
+  set.delete(0);
+  return set;
+};
+
+/** Piso embaixo do primeiro objeto do tipo dado (identifica o cômodo: só a copa tem cafeteira, etc.). */
+const roomFloorAt = (map: OfficeMap, type: string, partner = false) => {
+  const o = map.objects.find((x) => x.type === type && Boolean(x.props?.partner) === partner)!;
+  return map.layers.floor[o.y * map.width + o.x];
+};
+
+describe('pisos do visual v2 no gerador', () => {
+  const input: WizardInput = { name: 'Impera', size: 'medium', partners: 2, partnersShareRoom: true };
+
+  it('escritório novo usa os pisos novos por tipo de cômodo', () => {
+    const map = generateOffice(input);
+    expect(map.meta?.gen?.version).toBe(GENERATOR_VERSION);
+    const used = floorsOf(map);
+    for (const f of [Floor.Herringbone, Floor.CarpetPattern, Floor.Porcelain, Floor.BurntCement]) expect(used.has(f)).toBe(true);
+    // os pisos que os novos substituíram não aparecem mais
+    for (const f of [Floor.Wood, Floor.Kitchen, Floor.Corridor]) expect(used.has(f)).toBe(false);
+    const gen = map.meta!.gen!;
+    for (let y = gen.corridorY; y < gen.corridorY + CORRIDOR_H; y++) expect(map.layers.floor[y * map.width + 3]).toBe(Floor.BurntCement);
+    expect(roomFloorAt(map, 'desk')).toBe(Floor.Herringbone); // sala de mesas
+    expect(roomFloorAt(map, 'desk', true)).toBe(Floor.CarpetGold); // sala dos sócios
+    expect(roomFloorAt(map, 'coffee')).toBe(Floor.Porcelain); // copa
+    expect(roomFloorAt(map, 'whiteboard')).toBe(Floor.CarpetPattern); // reunião
+    expect(roomFloorAt(map, 'rug_logo')).toBe(Floor.Tile); // recepção
+    expect(roomFloorAt(map, 'podium')).toBe(Floor.Stage); // palco
+  });
+
+  it('o tema antigo continua igual ao de antes do visual v2', () => {
+    const map = legacyOffice(input);
+    expect(validateOffice(map).errors).toEqual([]);
+    expect([...floorsOf(map)].sort((a, b) => a - b)).toEqual([Floor.Wood, Floor.CarpetDark, Floor.CarpetGold, Floor.Tile, Floor.Kitchen, Floor.Stage, Floor.Corridor].sort((a, b) => a - b));
+    expect(FLOOR_THEMES[1]).toEqual({
+      reception: Floor.Tile,
+      desks: Floor.Wood,
+      meeting: Floor.CarpetDark,
+      lounge: Floor.Kitchen,
+      auditorium: Floor.CarpetDark,
+      stage: Floor.Stage,
+      partners: Floor.CarpetGold,
+      blank: Floor.Wood,
+      corridor: Floor.Corridor,
+    });
+  });
+
+  it('expandir um escritório antigo não troca os pisos dele, e a ala nova segue o tema antigo', () => {
+    const before = legacyOffice(input);
+    const plan = expandOffice(before, 20);
+    const after = plan.map;
+    expect(validateOffice(after).errors).toEqual([]);
+    expect(after.meta?.gen?.version).toBe(1);
+    // o piso onde já se andava fica igual (só parede e vazio podem mudar, como em qualquer expansão)
+    for (let y = 0; y < before.height; y++) {
+      for (let x = 0; x < before.width; x++) {
+        const i = y * before.width + x;
+        if (before.layers.walls[i] === 0 && before.layers.floor[i] !== 0) expect(after.layers.floor[y * after.width + x]).toBe(before.layers.floor[i]);
+      }
+    }
+    const added = floorsOf(after, before.width);
+    for (const f of [Floor.Herringbone, Floor.CarpetPattern, Floor.Porcelain, Floor.BurntCement]) expect(added.has(f)).toBe(false);
+    expect(added.has(Floor.Wood)).toBe(true);
+    expect(added.has(Floor.Corridor)).toBe(true);
+  });
+
+  it('expandir um escritório novo segue o tema novo, mesmo sem o meta do gerador', () => {
+    const fresh = generateOffice(input);
+    const withMeta = expandOffice(fresh, 20).map;
+    expect(floorsOf(withMeta, fresh.width).has(Floor.Herringbone)).toBe(true);
+    expect(floorsOf(withMeta, fresh.width).has(Floor.Wood)).toBe(false);
+    const edited = generateOffice(input);
+    delete edited.meta;
+    const plan = expandOffice(edited, 20);
+    expect(validateOffice(plan.map).errors).toEqual([]);
+    expect(plan.map.meta?.gen?.version).toBe(GENERATOR_VERSION);
+    expect(floorsOf(plan.map, edited.width).has(Floor.BurntCement)).toBe(true);
+    // e um antigo editado à mão continua antigo
+    const old = legacyOffice(input);
+    delete old.meta;
+    expect(expandOffice(old, 20).map.meta?.gen?.version).toBe(1);
   });
 });
 

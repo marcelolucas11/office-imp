@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {
   DESKS_PER_BLOCK,
-  Floor,
   Wall,
   MAX_MAP_SIZE,
   buildCollision,
@@ -14,7 +13,7 @@ import {
   type OfficeMap,
   type WizardInput,
 } from '@office-imp/shared';
-import { AREA_NAMES, CORRIDOR_H, ROOM_H, buildChunk, type Chunk, type ModuleSpec, type Side } from './modules';
+import { AREA_NAMES, CORRIDOR_H, GENERATOR_VERSION, ROOM_H, buildChunk, floorTheme, type Chunk, type ModuleSpec, type Side } from './modules';
 
 export const MAX_CUSTOM_EMPLOYEES = 100;
 export const MAX_PARTNERS = 10;
@@ -108,12 +107,14 @@ function placeChunk(map: OfficeMap, gen: GeneratorMeta, c: Chunk, ox: number, oy
  */
 export function buildWing(map: OfficeMap, gen: GeneratorMeta, modules: ModuleSpec[], startX: number, isExpansion: boolean): void {
   const cy = gen.corridorY;
+  // os pisos seguem a versão do gerador que criou o escritório (uma ala nova combina com o que já existe)
+  const theme = floorTheme(gen.version);
   const canTop = cy - ROOM_H >= 0;
   let top = isExpansion ? gen.topX : startX;
   let bottom = isExpansion ? gen.bottomX : startX;
   for (const spec of modules) {
     const side: Side = canTop && top <= bottom ? 'top' : 'bottom';
-    const chunk = buildChunk(spec, side);
+    const chunk = buildChunk(spec, side, theme);
     const ox = side === 'top' ? top : bottom;
     const oy = side === 'top' ? cy - ROOM_H : cy + CORRIDOR_H;
     placeChunk(map, gen, chunk, ox, oy);
@@ -128,7 +129,7 @@ export function buildWing(map: OfficeMap, gen: GeneratorMeta, modules: ModuleSpe
   // piso do corredor
   for (let x = startX + 1; x < endX; x++) {
     for (let y = cy; y < cy + CORRIDOR_H; y++) {
-      map.layers.floor[y * W + x] = Floor.Corridor;
+      map.layers.floor[y * W + x] = theme.corridor;
       map.layers.walls[y * W + x] = 0;
     }
   }
@@ -138,25 +139,25 @@ export function buildWing(map: OfficeMap, gen: GeneratorMeta, modules: ModuleSpe
       if (y < 0 || y >= map.height) continue;
       const i = y * W + x;
       if (map.layers.floor[i] === 0 && map.layers.walls[i] === 0) {
-        map.layers.floor[i] = Floor.Corridor;
+        map.layers.floor[i] = theme.corridor;
         map.layers.walls[i] = Wall.Wall;
       }
     }
   }
   // fechamento leste
   for (let y = cy; y < cy + CORRIDOR_H; y++) {
-    map.layers.floor[y * W + endX] = Floor.Corridor;
+    map.layers.floor[y * W + endX] = theme.corridor;
     map.layers.walls[y * W + endX] = Wall.Wall;
   }
   if (!isExpansion) {
     for (let y = cy; y < cy + CORRIDOR_H; y++) {
-      map.layers.floor[y * W + startX] = Floor.Corridor;
+      map.layers.floor[y * W + startX] = theme.corridor;
       map.layers.walls[y * W + startX] = Wall.Wall;
     }
   } else {
     // abre a antiga parede leste e marca a passagem com uma porta
     for (let y = cy; y < cy + CORRIDOR_H; y++) {
-      map.layers.floor[y * W + startX] = Floor.Corridor;
+      map.layers.floor[y * W + startX] = theme.corridor;
       map.layers.walls[y * W + startX] = 0;
     }
     map.objects.push({ id: `obj_${nextId(gen, 'obj')}`, type: 'door', x: startX, y: cy + 1 });
@@ -169,7 +170,7 @@ export function buildWing(map: OfficeMap, gen: GeneratorMeta, modules: ModuleSpe
 /** Gera um escritório novo. Determinístico: a mesma entrada produz o mesmo mapa. */
 export function generateOffice(input: WizardInput): OfficeMap {
   const map = emptyMap(1, ROOM_H * 2 + CORRIDOR_H);
-  const gen: GeneratorMeta = { version: 1, corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, counters: {} };
+  const gen: GeneratorMeta = { version: GENERATOR_VERSION, corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, counters: {} };
   buildWing(map, gen, modulesForInput(input), 0, false);
   map.meta = { gen };
   return map;
@@ -200,6 +201,22 @@ function trustedGen(map: OfficeMap): GeneratorMeta | null {
   return JSON.parse(JSON.stringify(g));
 }
 
+/**
+ * Versão do gerador de um mapa sem meta: conta os pisos que só o tema antigo usa (corredor,
+ * madeira, copa xadrez) e os que só o novo usa (cimento queimado, espinha de peixe, porcelanato).
+ * Vence a maioria; empate ou mapa sem nenhum deles fica com a versão atual.
+ */
+function guessVersion(map: OfficeMap): number {
+  const oldTheme = floorTheme(1);
+  const newTheme = floorTheme(GENERATOR_VERSION);
+  const only = (a: typeof oldTheme, b: typeof oldTheme) => new Set([a.corridor, a.desks, a.lounge, a.meeting].filter((f) => !Object.values(b).includes(f)));
+  const oldOnly = only(oldTheme, newTheme);
+  const newOnly = only(newTheme, oldTheme);
+  let score = 0;
+  for (const f of map.layers.floor) score += newOnly.has(f) ? 1 : oldOnly.has(f) ? -1 : 0;
+  return score < 0 ? 1 : GENERATOR_VERSION;
+}
+
 /** Quando o mapa foi editado à mão: acha uma linha andável junto à borda leste para ligar a ala nova. */
 function fallbackGen(map: OfficeMap): GeneratorMeta {
   const grid = buildCollision(map);
@@ -216,12 +233,15 @@ function fallbackGen(map: OfficeMap): GeneratorMeta {
   }
   const row = best?.y ?? Math.floor(map.height / 2);
   const cy = Math.max(1, row - 1);
+  // sem o meta do gerador, a versão (e com ela os pisos da ala nova) sai dos pisos que o mapa já usa
+  const version = guessVersion(map);
+  const corridor = floorTheme(version).corridor;
   // abre um túnel da célula andável até a borda leste (só altera parede/vazio)
   if (best) {
     for (let x = best.x + 1; x < map.width; x++) {
       const i = row * map.width + x;
       map.layers.walls[i] = 0;
-      if (map.layers.floor[i] === 0) map.layers.floor[i] = Floor.Corridor;
+      if (map.layers.floor[i] === 0) map.layers.floor[i] = corridor;
       map.objects = map.objects.filter((o) => !(o.x === x && o.y === row && o.type !== 'door'));
     }
   }
@@ -233,7 +253,7 @@ function fallbackGen(map: OfficeMap): GeneratorMeta {
   counters.area = Math.max(counters.area ?? 0, maxNum('area_'));
   counters['area:meeting'] = Math.max(counters['area:meeting'] ?? 0, map.areas.filter((a) => a.meeting && !a.partners).length);
   const end = map.width - 1;
-  return { version: 1, corridorY: cy, topX: end, bottomX: end, endX: end, roomHeight: ROOM_H, counters };
+  return { version, corridorY: cy, topX: end, bottomX: end, endX: end, roomHeight: ROOM_H, counters };
 }
 
 function runExpansion(source: OfficeMap, modules: ModuleSpec[]): ExpansionPlan {

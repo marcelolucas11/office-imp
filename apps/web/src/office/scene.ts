@@ -10,6 +10,7 @@ import {
   buildAreaIndex,
   buildCollision,
   can,
+  dayPeriod,
   deskSeat,
   deskZone,
   findPath,
@@ -20,6 +21,7 @@ import {
   rectContains,
   type AreaIndex,
   type AvatarConfig,
+  type DayPeriod,
   type Dir,
   type MapObject,
   type OfficeMap,
@@ -27,11 +29,13 @@ import {
   type Point,
 } from '@office-imp/shared';
 import { AV_FRAMES, AV_H, AV_W, avatarKey, avatarSheet } from '../game/art/avatar';
+import { DECOR_SIZE, EXTERIOR, decorSprite, exteriorDecor, exteriorGrass, type DecorKind } from '../game/art/exterior';
+import { FLOOR_PATTERN } from '../game/art/floors';
 import { doorClosedSprite, objectKey, objectSprite, objectTall } from '../game/art/objects';
-import { T, drawStatic, makeCanvas } from '../game/art/tiles';
+import { T, drawStatic, hasPeriodWalls, makeCanvas } from '../game/art/tiles';
 import { bus } from '../game/bus';
 import { net } from '../game/net';
-import { useGame } from '../game/store';
+import { serverNow, useGame } from '../game/store';
 import { t } from '../lib/i18n';
 import { emojiCanvas, hasIcon } from '../lib/icons';
 
@@ -40,6 +44,12 @@ const EMOTE = 24;
 const ICON_RES = 64;
 
 const CHUNK = 24;
+/** Exterior (só fundo): a grama fica embaixo de tudo e as árvores logo acima dela, sempre atrás do chão. */
+const D_GRASS = -20;
+const D_DECOR = -10;
+/** De quanto em quanto tempo o período do dia é reavaliado e quanto dura a troca da grama. */
+const PERIOD_CHECK_MS = 60_000;
+const PERIOD_FADE_MS = 1500;
 const D_FLOOR = 0;
 const D_RUG = 2;
 const D_WORLD = 10;
@@ -110,6 +120,15 @@ export class OfficeScene extends Phaser.Scene {
   private lastAreaWarn = 0;
   /** Época de movimento: muda a cada correção do servidor; passos de épocas antigas são ignorados lá. */
   private epoch = 0;
+  /** Período do dia no fuso do escritório: muda só o exterior e a vista das janelas. */
+  private period: DayPeriod = 'day';
+  /** Período forçado (conferência visual e testes, pelo evento `period` do barramento). */
+  private forcedPeriod: DayPeriod | null = null;
+  private periodCheckedAt = 0;
+  private grass: Phaser.GameObjects.TileSprite | null = null;
+  /** Grama do período anterior, enquanto a nova aparece por cima. */
+  private grassOld: Phaser.GameObjects.TileSprite | null = null;
+  private decor: { img: Phaser.GameObjects.Image; kind: DecorKind }[] = [];
 
   constructor() {
     super('office');
@@ -124,7 +143,10 @@ export class OfficeScene extends Phaser.Scene {
 
   create() {
     const cam = this.cameras.main;
-    cam.setBackgroundColor('#0b0b0d');
+    this.period = this.currentPeriod();
+    this.periodCheckedAt = Date.now();
+    // o fundo da câmera tem a cor da grama: é o que aparece se a grama ainda não cobriu um canto
+    cam.setBackgroundColor(EXTERIOR[this.period].grass.base);
     cam.setRoundPixels(true);
     this.zoomIdx = window.innerWidth >= 1500 ? 2 : 1;
     cam.setZoom(this.effZoom);
@@ -166,9 +188,14 @@ export class OfficeScene extends Phaser.Scene {
     });
     on('goto', (pt: Point) => this.goTo(pt.x, pt.y));
     on('zoom', (dir: number) => this.zoom(dir));
+    on('period', (p: DayPeriod | null) => {
+      this.forcedPeriod = p && p in EXTERIOR ? p : null;
+      this.checkPeriod();
+    });
     this.offs.push(
       useGame.subscribe((s, prev) => {
         if (s.buildMode !== prev.buildMode) this.drawZone();
+        if (s.office?.timezone !== prev.office?.timezone || s.phase !== prev.phase) this.checkPeriod();
         if (s.following !== prev.following) {
           this.path = null;
           this.followGoal = '';
@@ -195,23 +222,8 @@ export class OfficeScene extends Phaser.Scene {
     this.map = map;
     this.grid = buildCollision(map);
     this.areaIndex = buildAreaIndex(map);
-    this.rev++;
-    for (const i of this.statics) i.destroy();
-    for (const k of this.staticKeys) this.textures.remove(k);
-    this.statics = [];
-    this.staticKeys = [];
-    for (let cy = 0; cy < map.height; cy += CHUNK) {
-      for (let cx = 0; cx < map.width; cx += CHUNK) {
-        const w = Math.min(CHUNK, map.width - cx);
-        const h = Math.min(CHUNK, map.height - cy);
-        const c = makeCanvas(w * T, h * T);
-        drawStatic(c.getContext('2d')!, map, cx, cy, w, h);
-        const key = `st:${this.rev}:${cx}:${cy}`;
-        this.textures.addCanvas(key, c);
-        this.staticKeys.push(key);
-        this.statics.push(this.add.image(cx * T, cy * T, key).setOrigin(0).setDepth(D_FLOOR));
-      }
-    }
+    this.buildStatics();
+    this.buildExterior();
     for (const o of this.objs) o.destroy();
     this.objs = [];
     this.doorImgs.clear();
@@ -239,6 +251,111 @@ export class OfficeScene extends Phaser.Scene {
     this.drawDim();
     this.drawZone();
     this.updateHint();
+  }
+
+  /** Chão e paredes pré-renderizados em blocos de CHUNK×CHUNK tiles (o vazio fica transparente). */
+  private buildStatics() {
+    const map = this.map;
+    for (const i of this.statics) i.destroy();
+    for (const k of this.staticKeys) this.textures.remove(k);
+    this.statics = [];
+    this.staticKeys = [];
+    this.rev++;
+    for (let cy = 0; cy < map.height; cy += CHUNK) {
+      for (let cx = 0; cx < map.width; cx += CHUNK) {
+        const w = Math.min(CHUNK, map.width - cx);
+        const h = Math.min(CHUNK, map.height - cy);
+        const c = makeCanvas(w * T, h * T);
+        drawStatic(c.getContext('2d')!, map, cx, cy, w, h, this.period);
+        const key = `st:${this.rev}:${cx}:${cy}`;
+        this.textures.addCanvas(key, c);
+        this.staticKeys.push(key);
+        this.statics.push(this.add.image(cx * T, cy * T, key).setOrigin(0).setDepth(D_FLOOR));
+      }
+    }
+  }
+
+  // ---------- exterior e período do dia ----------
+
+  private currentPeriod(): DayPeriod {
+    return this.forcedPeriod ?? dayPeriod(serverNow(), useGame.getState().office?.timezone ?? '');
+  }
+
+  private grassTexture(period: DayPeriod): string {
+    const key = `ext:grass:${period}`;
+    if (!this.textures.exists(key)) this.textures.addCanvas(key, exteriorGrass(period));
+    return key;
+  }
+
+  private decorTexture(kind: DecorKind, period: DayPeriod): string {
+    const key = `ext:${kind}:${period}`;
+    if (!this.textures.exists(key)) this.textures.addCanvas(key, decorSprite(kind, period));
+    return key;
+  }
+
+  /**
+   * Exterior em volta do escritório e nos vazios do mapa: um TileSprite de grama do tamanho da
+   * tela (um padrão de 256 px repetido, sem textura gigante) e um sprite por árvore ou arbusto.
+   * É só fundo: não entra no mapa nem na colisão.
+   */
+  private buildExterior() {
+    if (!this.grass) this.grass = this.add.tileSprite(0, 0, FLOOR_PATTERN, FLOOR_PATTERN, this.grassTexture(this.period)).setOrigin(0).setDepth(D_GRASS);
+    for (const d of this.decor) d.img.destroy();
+    this.decor = [];
+    for (const d of exteriorDecor(this.map)) {
+      // mesma camada para todos; a fração da profundidade mantém a ordem de cima para baixo
+      const depth = D_DECOR + (d.y + DECOR_SIZE[d.kind].h) * 1e-4;
+      this.decor.push({ img: this.add.image(d.x, d.y, this.decorTexture(d.kind, this.period)).setOrigin(0).setDepth(depth), kind: d.kind });
+    }
+    this.syncGrass();
+  }
+
+  /** Mantém a grama cobrindo a tela, sempre alinhada ao padrão de 256 px do mundo. */
+  private syncGrass() {
+    if (!this.grass) return;
+    const cam = this.cameras.main;
+    const P = FLOOR_PATTERN;
+    const vw = cam.width / cam.zoom;
+    const vh = cam.height / cam.zoom;
+    const cx = cam.scrollX + cam.width / 2;
+    const cy = cam.scrollY + cam.height / 2;
+    const x = (Math.floor((cx - vw / 2) / P) - 1) * P;
+    const y = (Math.floor((cy - vh / 2) / P) - 1) * P;
+    const w = (Math.ceil(vw / P) + 3) * P;
+    const h = (Math.ceil(vh / P) + 3) * P;
+    for (const g of [this.grass, this.grassOld]) {
+      if (!g) continue;
+      if (g.x !== x || g.y !== y) g.setPosition(x, y);
+      if (g.width !== w || g.height !== h) g.setSize(w, h);
+    }
+  }
+
+  /** Reavalia o período; se mudou, troca as texturas do exterior e refaz a vista das janelas. */
+  private checkPeriod() {
+    const next = this.currentPeriod();
+    if (next === this.period || !this.map) return;
+    this.period = next;
+    this.cameras.main.setBackgroundColor(EXTERIOR[next].grass.base);
+    // transição simples: a grama nova aparece por cima da antiga; árvores e janelas trocam na hora
+    if (this.grass) {
+      const old = this.grass;
+      this.grassOld?.destroy();
+      this.grassOld = old;
+      const fresh = this.add.tileSprite(old.x, old.y, old.width, old.height, this.grassTexture(next)).setOrigin(0).setDepth(D_GRASS + 1).setAlpha(0);
+      this.grass = fresh;
+      this.tweens.add({
+        targets: fresh,
+        alpha: 1,
+        duration: PERIOD_FADE_MS,
+        onComplete: () => {
+          if (this.grassOld === old) this.grassOld = null;
+          old.destroy();
+          fresh.setDepth(D_GRASS);
+        },
+      });
+    }
+    for (const d of this.decor) d.img.setTexture(this.decorTexture(d.kind, next));
+    if (hasPeriodWalls(this.map)) this.buildStatics();
   }
 
   private applyDoor(id: string) {
@@ -630,6 +747,12 @@ export class OfficeScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     this.updateBounds();
+    this.syncGrass();
+    // pelo relógio de verdade (não o do jogo): ao voltar de uma aba em segundo plano, confere na hora
+    if (Date.now() - this.periodCheckedAt > PERIOD_CHECK_MS) {
+      this.periodCheckedAt = Date.now();
+      this.checkPeriod();
+    }
     const dt = Math.min(delta, 100);
     const g = useGame.getState();
     for (const a of this.avas.values()) {

@@ -17,6 +17,7 @@
     "i18n:extract": "node scripts/i18n-extract.mjs",
     "spdx": "node scripts/spdx-headers.mjs",
     "art:sheet": "pnpm --filter @office-imp/web art:sheet",
+    "art:map": "pnpm --filter @office-imp/web art:map",
     "db:generate": "pnpm --filter @office-imp/server db:generate",
     "setup:owner": "pnpm --filter @office-imp/server setup:owner"
   },
