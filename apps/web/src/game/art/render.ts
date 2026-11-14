@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { OBJECT_DEFS, isDesk, objDepthRows, objSize, objSolidAt, type DayPeriod, type MapArea, type MapObject, type OfficeMap, type Rect } from '@office-imp/shared';
+import { OBJECT_DEFS, isDesk, objDepthRows, objSize, objSolidAt, objectGroup, type DayPeriod, type MapArea, type MapObject, type OfficeMap, type Rect } from '@office-imp/shared';
 import { EXTERIOR_MARGIN, drawExterior } from './exterior';
 import { objectSprite, objectTall } from './objects';
 import { FLOOR_COLOR, T, WALL_MINI, drawStatic, makeCanvas, type Ctx } from './tiles';
@@ -151,10 +151,12 @@ export function renderMini(map: OfficeMap, px: number, highlight?: Rect | null):
   }
   for (const o of map.objects) {
     const def = OBJECT_DEFS[o.type];
-    if (!def || (!def.solid && o.type !== 'chair')) continue;
+    // assentos soltos (cadeiras, banqueta, poltrona, pufe) aparecem menores e mais claros
+    const seat = !def?.solid && objectGroup(o.type) === 'seating';
+    if (!def || (!def.solid && !seat)) continue;
     const { w, h } = objSize(o);
-    ctx.fillStyle = isDesk(o) ? '#d7b870' : o.type === 'plant' ? '#22c55e' : o.type === 'chair' ? 'rgba(20,20,24,0.55)' : 'rgba(20,20,24,0.8)';
-    const pad = o.type === 'chair' ? px * 0.25 : 0;
+    ctx.fillStyle = isDesk(o) ? '#d7b870' : o.type === 'plant' ? '#22c55e' : seat ? 'rgba(20,20,24,0.55)' : 'rgba(20,20,24,0.8)';
+    const pad = seat ? px * 0.25 : 0;
     if (def.cells) {
       // footprint que não é retangular (mesa em L): só os blocos sólidos
       for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (objSolidAt(o, dx, dy)) ctx.fillRect((o.x + dx) * px, (o.y + dy) * px, px, px);

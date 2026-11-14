@@ -92,7 +92,7 @@ describe('mesa de trabalho é um flag da definição', () => {
         // logo acima do assento há tampo
         expect([type, dir, grid[(seat.y - 1) * map.width + seat.x]]).toEqual([type, dir, 1]);
         const { w } = objSize(desk);
-        expect(defaultDeskZone(desk)).toEqual({ x: 4, y: 3, w: w + 1, h: 1 });
+        expect(defaultDeskZone(desk)).toEqual({ x: 4, y: 3, w: w + 1, h: type === 'desk_l' ? 2 : 1 });
       }
     }
     expect(defaultDeskSeat({ type: 'desk', x: 4, y: 3 })).toEqual({ x: 4, y: 4 });

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Assentos da Fase C1 do visual v2: cadeira gamer, cadeira executiva de couro, banqueta,
 // poltrona e pufe. A cadeira de escritório e o sofá (Fase A) estão em `seating.ts`.
-// Todos ocupam um bloco (32×32, sem `tall`), como a cadeira de escritório: a proporção com o
-// avatar (32×48) e com as mesas é a mesma. Cor = variante de estofado, couro ou destaque.
+// As cadeiras de mesa (escritório, gamer, executiva) têm encosto alto (`tall: 1`, ver `tallChair`):
+// o encosto sobe 10 px para o bloco de cima e encosta na frente da mesa. Banqueta, poltrona e
+// pufe ocupam só o bloco. Cor = variante de estofado, couro ou destaque.
 import { PAL, ramp, type Mat } from './palette';
 import { Sprite } from './prim';
-import { swivelBase } from './seating';
+import { swivelBase, tallChair } from './seating';
 import type { PaintInfo, SpritePainter } from './sprites';
 
 const B = PAL.plasticBlack;
@@ -333,8 +334,8 @@ const pouf: SpritePainter = (s, info) => {
 };
 
 export const CHAIRS: Record<string, SpritePainter> = {
-  chair_gamer: byDir(gamerBack, gamerFront, gamerSide, '#c8383c'),
-  chair_exec: byDir(execBack, execFront, execSide, PAL.leather.base),
+  chair_gamer: tallChair(byDir(gamerBack, gamerFront, gamerSide, '#c8383c'), { up: { 9: 5, 11: 5 }, down: { 8: 5, 9: 5 }, side: { 5: 5, 6: 5 } }),
+  chair_exec: tallChair(byDir(execBack, execFront, execSide, PAL.leather.base), { up: { 5: 5, 10: 5 }, down: { 6: 5, 9: 5 }, side: { 5: 5, 9: 5 } }),
   stool,
   armchair: byDir(armchairBack, armchairFront, armchairSide, PAL.fabric.base, 'down'),
   pouf,

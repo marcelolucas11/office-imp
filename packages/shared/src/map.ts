@@ -229,9 +229,9 @@ const defs: ObjectDef[] = [
   { type: 'desk_gamer', label: 'Mesa gamer', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: ACCENTS },
   { type: 'desk_bench', label: 'Bancada compartilhada (um módulo por pessoa; encoste um no outro)', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: TOPS },
   // ----- assentos (C1) -----
-  { type: 'chair', label: 'Cadeira de escritório', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
-  { type: 'chair_gamer', label: 'Cadeira gamer', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: ACCENTS },
-  { type: 'chair_exec', label: 'Cadeira executiva de couro', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: LEATHERS },
+  { type: 'chair', label: 'Cadeira de escritório', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', tall: 1, colors: UPHOLSTERY },
+  { type: 'chair_gamer', label: 'Cadeira gamer', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', tall: 1, colors: ACCENTS },
+  { type: 'chair_exec', label: 'Cadeira executiva de couro', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', tall: 1, colors: LEATHERS },
   { type: 'stool', label: 'Banqueta', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
   { type: 'armchair', label: 'Poltrona', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
   { type: 'pouf', label: 'Pufe', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
@@ -731,9 +731,14 @@ export function defaultDeskSeat(desk: Pick<MapObject, 'type' | 'x' | 'y' | 'w' |
   return { x: desk.x + seat.x, y: desk.y + seat.y };
 }
 
-/** Zona de decoração padrão de uma mesa nova: a linha do tampo e um bloco à direita. */
+/**
+ * Zona de decoração padrão de uma mesa nova: a linha do tampo e um bloco à direita. Na mesa em L
+ * (footprint com `cells`) entra também a linha do retorno, que é tampo (o assento continua
+ * protegido: o servidor não deixa pôr objeto nele).
+ */
 export function defaultDeskZone(desk: Pick<MapObject, 'type' | 'x' | 'y' | 'w' | 'h'>): Rect {
-  return { x: desk.x, y: desk.y, w: objSize(desk as MapObject).w + 1, h: 1 };
+  const { w, h } = objSize(desk as MapObject);
+  return { x: desk.x, y: desk.y, w: w + 1, h: OBJECT_DEFS[desk.type]?.cells ? h : 1 };
 }
 
 /** Zona de decoração de uma mesa (onde o dono pode colocar objetos). */

@@ -79,6 +79,33 @@ function chairSide(s: Sprite, fab: ReturnType<typeof ramp>): void {
   });
 }
 
+/** Linhas do desenho de 32×32 que se repetem para alongar o encosto, por vista (`side` vale para esquerda e direita). */
+export type BackRows = Record<'up' | 'down' | 'side', Record<number, number>>;
+
+/**
+ * Cadeira de mesa com encosto alto (`tall: 1`): desenha a cadeira no bloco de 32×32 e alonga o
+ * encosto repetindo linhas lisas dele (`rows`: linha → quantas cópias a mais), mantendo a base no
+ * mesmo lugar. O encosto sobe para o bloco de cima e encosta na frente da mesa, como na amostra.
+ */
+export function tallChair(paint: SpritePainter, rows: BackRows, initial: 'up' | 'down' = 'up'): SpritePainter {
+  return (s, info) => {
+    const flat = new Sprite(32, 32);
+    paint(flat, { ...info, w: 32, h: 32, top: 0 });
+    const dir = info.o.dir ?? initial;
+    const extra = rows[dir === 'up' || dir === 'down' ? dir : 'side'];
+    const src: number[] = [];
+    for (let y = 0; y < flat.h; y++) for (let k = 0; k <= (extra[y] ?? 0); k++) src.push(y);
+    const y0 = info.top + 32 - src.length;
+    src.forEach((sy, i) => s.paste(rowOf(flat, sy), 0, y0 + i));
+  };
+}
+
+function rowOf(src: Sprite, y: number): Sprite {
+  const row = new Sprite(src.w, 1);
+  row.data.set(src.data.subarray(y * src.w * 4, (y + 1) * src.w * 4));
+  return row;
+}
+
 const chair: SpritePainter = (s, info) => {
   const fab = ramp(info.color?.hex ?? PAL.fabric.base);
   const dir = info.o.dir ?? 'up';
@@ -159,4 +186,7 @@ const sofa: SpritePainter = (s, info) => {
   });
 };
 
-export const SEATING: Record<string, SpritePainter> = { chair, sofa };
+export const SEATING: Record<string, SpritePainter> = {
+  chair: tallChair(chair, { up: { 7: 5, 12: 5 }, down: { 7: 5, 10: 5 }, side: { 6: 5, 9: 5 } }),
+  sofa,
+};
