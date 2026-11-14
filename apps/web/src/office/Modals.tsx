@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  AVATAR_ACCESSORIES,
-  AVATAR_OPTIONS,
-  sanitizeAvatar,
-  toggleAccessory,
   DESK_DECOR_TYPES,
   MAX_DESK_DECOR,
   MAX_INTERACTION_DISTANCE,
@@ -17,7 +13,6 @@ import {
   areaCenter,
   can,
   parseYouTubeUrl,
-  type AvatarConfig,
   type MapObject,
 } from '@office-imp/shared';
 import { Badge, Button, Empty, Field, Input, Modal, Select, Spinner, Tabs, Textarea, Toggle, cx } from '@office-imp/ui';
@@ -420,64 +415,6 @@ export function ProfileModal({ playerId }: { playerId: string }) {
             </Button>
           </>
         )}
-      </div>
-    </Modal>
-  );
-}
-
-// ---------- avatar ----------
-export function AvatarModal() {
-  const me = useGame((s) => s.players[s.meId]);
-  const [cfg, setCfg] = useState<AvatarConfig>(sanitizeAvatar(me?.avatar ?? {}));
-  const swatches = (key: keyof AvatarConfig, colors: string[]) => (
-    <div className="flex flex-wrap gap-1.5">
-      {colors.map((c, i) => (
-        <button key={c + i} type="button" aria-label={`${key} ${i + 1}`} onClick={() => setCfg({ ...cfg, [key]: i })} className={cx('h-7 w-7 rounded-full border-2', cfg[key] === i ? 'border-gold' : 'border-line')} style={{ background: c }} />
-      ))}
-    </div>
-  );
-  const names = (key: keyof AvatarConfig, list: string[]) => (
-    <div className="flex flex-wrap gap-1.5">
-      {list.map((n, i) => (
-        <button key={n} type="button" onClick={() => setCfg({ ...cfg, [key]: i })} className={cx('rounded-lg border px-2 py-1 text-xs', cfg[key] === i ? 'border-gold bg-gold/15 text-gold' : 'border-line hover:border-muted')}>
-          {n}
-        </button>
-      ))}
-    </div>
-  );
-  return (
-    <Modal
-      title={t('avatar.title', 'Personalizar o avatar')}
-      onClose={close}
-      footer={
-        <Button
-          onClick={() => {
-            net.send('avatar', cfg);
-            close();
-          }}
-        >
-          {t('app.save', 'Salvar')}
-        </Button>
-      }
-    >
-      <div className="flex gap-5">
-        <img src={avatarPortrait(cfg, 4)} alt="" className="pixel h-48 shrink-0 rounded-xl bg-panel-2 p-2" />
-        <div className="space-y-3">
-          <Field group label={t('avatar.skin', 'Pele')}>{swatches('skin', AVATAR_OPTIONS.skin)}</Field>
-          <Field group label={t('avatar.hair', 'Cabelo')}>{names('hair', AVATAR_OPTIONS.hairStyles)}</Field>
-          <Field group label={t('avatar.hairColor', 'Cor do cabelo')}>{swatches('hairColor', AVATAR_OPTIONS.hairColor)}</Field>
-          <Field group label={t('avatar.shirt', 'Camisa')}>{swatches('shirt', AVATAR_OPTIONS.shirt)}</Field>
-          <Field group label={t('avatar.pants', 'Calça')}>{swatches('pants', AVATAR_OPTIONS.pants)}</Field>
-          <Field group label={t('avatar.accessory', 'Acessório')}>
-            <div className="flex flex-wrap gap-1.5">
-              {AVATAR_ACCESSORIES.map((a) => (
-                <button key={a.id} type="button" onClick={() => setCfg({ ...cfg, accessories: toggleAccessory(cfg.accessories, a.id) })} className={cx('rounded-lg border px-2 py-1 text-xs', cfg.accessories.includes(a.id) ? 'border-gold bg-gold/15 text-gold' : 'border-line hover:border-muted')}>
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          </Field>
-        </div>
       </div>
     </Modal>
   );

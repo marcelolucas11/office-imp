@@ -802,26 +802,27 @@ export function avatarSheet(cfg: AvatarConfig): HTMLCanvasElement {
   return c;
 }
 
-/** Retrato (parado, de frente ou na direção pedida) para listas e menus. */
+/** Retratos (data URL) para listas, menus e o editor. */
 const portraitCache = new Map<string, string>();
 
-/** Retrato do avatar em data URL. Em cache: é chamado em toda renderização dos painéis. */
-export function avatarPortrait(cfg: AvatarConfig, scale = 2, dir: Dir = 'down'): string {
-  const key = `${avatarKey(cfg)}@${scale}:${dir}`;
+/** Retrato do avatar em data URL (quadro 0 = parado). Em cache: é chamado em toda renderização dos painéis. */
+export function avatarPortrait(cfg: AvatarConfig, scale = 2, dir: Dir = 'down', frame = 0): string {
+  const key = `${avatarKey(cfg)}@${scale}:${dir}:${frame}`;
   const hit = portraitCache.get(key);
   if (hit) return hit;
-  const url = drawPortrait(cfg, scale, dir);
+  const url = drawPortrait(cfg, scale, dir, frame);
   if (portraitCache.size > 400) portraitCache.clear();
   portraitCache.set(key, url);
   return url;
 }
 
-function drawPortrait(cfg: AvatarConfig, scale: number, dir: Dir): string {
+function drawPortrait(cfg: AvatarConfig, scale: number, dir: Dir, frame: number): string {
   const sheet = avatarSheet(cfg);
   const row = Math.max(0, DIRS.indexOf(dir));
   const c = makeCanvas(AV_W * scale, AV_H * scale);
   const ctx = c.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(sheet, 0, row * AV_H, AV_W, AV_H, 0, 0, AV_W * scale, AV_H * scale);
+  const f = Math.max(0, Math.min(AV_FRAMES - 1, Math.floor(frame)));
+  ctx.drawImage(sheet, f * AV_W, row * AV_H, AV_W, AV_H, 0, 0, AV_W * scale, AV_H * scale);
   return c.toDataURL();
 }
