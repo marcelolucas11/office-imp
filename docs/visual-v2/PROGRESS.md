@@ -11,7 +11,7 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 | C2. Setups e objetos de mesa | pronto | `MapObject.setup` (7 setups), 13 objetos de mesa, 10 extras (neon com texto editável), paleta do Mapmaker em grupos. Guia logo abaixo |
 | C3. Plantas e catálogo antigo | pronto | 8 plantas novas + `plant`/`plant_small` redesenhadas (grupo "Plantas"), o resto do catálogo redesenhado com cores, desenho antigo removido de `objects.ts`, gerador com as plantas novas. Guia logo abaixo do guia das Fases C1 e C2 |
 | D. Avatar: mais opções | pronto | `AvatarConfig` v2 (acessórios múltiplos, 16 cores por peça, 15 cabelos, barba, roupa de cima, estampa, roupa de baixo, calçado, cor dos acessórios), regras de exclusão, editor com abas e prévia nas 4 direções, folha `avatares.png` em seções. Os 40 hashes dos avatares antigos não mudaram. Guia logo abaixo do guia da Fase C3 |
-| E. Cores e setup da mesa | pendente | |
+| E. Cores e setup da mesa | pronto | Aba "Cor" (com "Setup" nas mesas) no Mapmaker e na Build Tool, cor e setup da própria mesa por cima do mapa publicado (`desks.look`, migração `0001_desk_look`), `decor:color`, `desk:look`, "Deixar o posto" e remoção voltam ao inicial, `decor:add` com cor e tampo real, objetos de parede só na parede, gerador com setups e cadeiras variados (versão 2+), E2E do fluxo. Guia logo abaixo do guia da Fase D |
 | F. Animações | pendente | |
 | G. QA e release | pendente | |
 
@@ -22,7 +22,9 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 - [x] Todas as mesas, cadeiras, plantas, setups, objetos de mesa e os 10 extras (Fases C1, C2 e C3)
 - [x] Mapas e avatares antigos funcionando sem migração manual; avatar antigo idêntico (mapas nas Fases A a C3; avatares na Fase D, com os 40 hashes de antes)
 - [x] Avatar com acessórios múltiplos e 16 cores por peça (Fase D)
-- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases E a G
+- [x] Aba "Cor" por objeto, sem objetos duplicados por cor (Fase E)
+- [x] Setup da própria mesa + "Deixar o posto" volta ao inicial (Fase E)
+- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases F e G
 
 ## Guia da base (Fase A) para as próximas fases
 
@@ -55,7 +57,7 @@ Arquivos novos em `apps/web/src/game/art/`:
 
 **Testes.** `apps/web` agora tem Vitest (`apps/web/test/`, ambiente Node com `@napi-rs/canvas`): primitivas, sprites de todo o catálogo, contorno dos objetos novos e **regressão do avatar** (40 configurações com hash travado na arte de antes do v2; a Fase D deve manter esses hashes). Ao migrar um tipo para o estilo novo, acrescente-o à lista do teste "objetos redesenhados têm contorno escuro".
 
-**Para a Fase E.** A mensagem `decor:add` do servidor de tempo real ainda cria o objeto sem `color` (nesta fase o tempo real não foi alterado). A aba "Cor" vai precisar de uma mensagem que valide a variante com `objColorError`.
+**Para a Fase E** (feito: ver o guia da Fase E). A mensagem `decor:add` do servidor de tempo real ainda cria o objeto sem `color` (nesta fase o tempo real não foi alterado). A aba "Cor" vai precisar de uma mensagem que valide a variante com `objColorError`.
 
 ## Guia da Fase B (pisos, paredes, exterior e dia/noite) para as próximas fases
 
@@ -113,7 +115,7 @@ Arquivos novos em `apps/web/src/game/art/`:
 - `normalizeObjectVariants(map)`: como `normalizeObjectColors`, tira também o `setup` que saiu do catálogo (o servidor usa ao carregar e ao publicar).
 - No cliente: `PaintInfo.setup` chega ao desenho; `objectKey` inclui o setup (o padrão dá a mesma chave que a ausência); `objectIcon(type, color?, setup?)`. A exportação do Tiled leva a propriedade `setup`.
 - Para criar um setup: id novo **no fim** de `DESK_SETUPS` e uma função em `SETUPS` (`setups.ts`) que desenha sobre o `SetupSpot` (`cx` = centro do assento, `y` = primeira linha do tampo, `x0`/`x1` = limites). O teste cobra que todo setup tem desenho e muda os pixels de toda mesa.
-- **Para a Fase E:** a UI do Mapmaker já tem um `Select` simples de cor e de setup no painel do objeto; falta a aba "Cor" com prévia, a mensagem de tempo real para o funcionário trocar o setup da própria mesa, o "Deixar o posto" voltar ao inicial e o sorteio de setups no gerador (`addDesk` em `packages/map-engine/src/modules.ts` cria `desk` sem `setup`).
+- **Para a Fase E** (feito: ver o guia da Fase E)**:** a UI do Mapmaker já tinha um `Select` simples de cor e de setup no painel do objeto; falta a aba "Cor" com prévia, a mensagem de tempo real para o funcionário trocar o setup da própria mesa, o "Deixar o posto" voltar ao inicial e o sorteio de setups no gerador (`addDesk` em `packages/map-engine/src/modules.ts` cria `desk` sem `setup`).
 
 **Objetos sobre a mesa.** Os objetos de mesa são 1×1, não bloqueiam e estão em `DESK_DECOR_TYPES` (a Build Tool do funcionário já lista todos). São desenhados para "pisar" entre as linhas 14 e 19 do bloco. Um objeto não sólido posto num bloco sólido de móvel é desenhado logo depois desse móvel (`surfaceIndex` e `sortedObjects` em `render.ts`; profundidade equivalente na cena), e `FLAT_ON_SURFACE` (mousepad, post-its) fica por baixo dos outros do mesmo tampo. O setup faz parte do sprite da mesa, então um objeto posto na coluna do setup fica por cima dele; para montar à mão, use o setup "Vazio" com teclado, mouse e mousepad.
 
@@ -178,11 +180,48 @@ Arquivos:
 
 **Testes novos.** `packages/shared/test/avatar.test.ts` (conversão, cores nos mesmos índices, objeto vazio, índices fora da lista, exclusões, `toggleAccessory`), `apps/web/test/avatar.test.ts` (todas as opções, quadro de 32×48, formato antigo = novo) e "avatar: aceita o formato antigo e o novo…" em `apps/server/test/api.test.ts`. O teste de regressão de `objects.test.ts` agora congela as 40 configurações antigas (com as listas de antes) e as passa por `sanitizeAvatar`; os hashes são os mesmos.
 
+## Guia da Fase E (cores e setup da mesa) para as próximas fases
+
+Arquivos novos ou com mudança grande:
+
+| Arquivo | O que tem |
+|---|---|
+| `packages/shared/src/map.ts` | `DeskLook`, `sanitizeDeskLook`, `applyDeskLooks`, `deskLooksKey`, `deskTopAt`, `ObjectDef.wallOnly` e `wallMountError`, `GeneratorMeta.seed`, plantas de chão novas em `DESK_DECOR_TYPES` |
+| `apps/server/drizzle/0001_desk_look.sql` | `ALTER TABLE desks ADD COLUMN look jsonb` (aplicada sozinha no start pelo `migrate()` de sempre) |
+| `apps/server/src/realtime/office-room.ts` | Mensagens `desk:look` e `decor:color`; `decor:add` com `color` e tampo real; `desk:claim`/`desk:release` apagam o look |
+| `apps/web/src/office/ColorTab.tsx` | A aba "Cor" (e "Setup" nas mesas): amostras com a miniatura do sprite em cada variante |
+| `apps/web/src/office/groupLabels.ts` | Rótulos dos grupos da paleta (Mapmaker e Build Tool) |
+| `packages/map-engine/src/modules.ts` | `SETUP_WEIGHTS`, `CHAIR_COLOR_WEIGHTS`, `hash32`, `pickWeighted`, `setupFor`, `chairColorFor` |
+
+**Look da mesa (cor e setup do ocupante).** A planta (mapa publicado) não muda: a escolha do funcionário fica no registro da mesa, coluna `desks.look` (`{ color?, setup? }`), e chega aos clientes em `DeskInfo.look` (no `init`, no `desks` e também no `POST /api/offices/:slug/enter`). O mapa que o escritório vê é `applyDeskLooks(mapaPublicado, desks)`. `sanitizeDeskLook(mesa, look)` guarda só o que existe no tipo da mesa e difere da planta (escolher o que a planta já tem tira o campo); look inválido para o tipo (a mesa mudou de tipo no Mapmaker) é ignorado ao aplicar. O look é do ocupante: some em "Deixar o posto" (`desk:release`), ao pegar outra mesa (`desk:claim` limpa a antiga e a nova), na atribuição pelo admin para outra pessoa e em `releaseDesksOf` (remoção do funcionário ou do escritório dele). Mesa livre nunca tem look (o padrão dela se muda no Mapmaker). Publicar ou restaurar uma versão do mapa não mexe nos looks (as mesas que continuam no mapa mantêm o delas).
+
+**Mensagens de tempo real novas** (tudo validado no servidor):
+
+- `desk:look { deskId?, color?, setup?, reset? }`: sem `deskId`, a própria mesa. Campo string = escolhe (validado com `objColorError`/`objSetupError` contra o tipo da mesa), `null` ou `''` = volta ao da planta, `reset: true` = apaga o look. Quem pode: a dona da mesa (`build.ownDesk`) ou Dono/Admin (`map.edit`) em qualquer mesa **ocupada**. A gravação só vale se a mesa ainda é do mesmo dono. Resposta: `desks` para todos; erro: `notice { code: 'desk_look_invalid' }`.
+- `decor:color { id, color }`: troca a cor de uma decoração que a pessoa pôs na própria mesa (mesmas checagens do `decor:add`/`decor:remove`: `build.ownDesk` e `ownerDeskId === deskId`); `null`/padrão tira o campo. Resposta: `map:patch { add: [obj], remove: [id] }`; erro: `decor_invalid`.
+- `decor:add` aceita `color` (variante inválida = `decor_invalid`; a padrão não é gravada) e passou a usar o footprint real (`deskTopAt` → `objSolidAt`): os 3 blocos da mesa grande e o retorno da L são tampo, então objeto sólido (planta grande) não vai neles.
+
+**Cliente.** `useGame` tem `baseMap` (mapa publicado, é o que o **Mapmaker** edita) e `map` (o visto, com os looks: cena, mini-mapa, painéis). `net.ts` refaz o `map` quando chega mapa novo, `map:patch` ou um `desks` com look diferente (`deskLooksKey`) e então emite `map` no barramento. `buildColor` é a cor do objeto que a Build Tool vai colocar (vai no `decor:add`).
+
+**Aba "Cor".** `<ColorTab type color setup onColor onSetup note onHide testid>` mostra as variantes com `objectIcon(type, cor, setup, 48, true)` (o `crop` recorta a parte visível do sprite e amplia em pixels inteiros: uma caneca enche a amostra); o rótulo PT-BR vem no hover (`title`) e embaixo ("Cor: Nogueira"). `hasVariants(type)` diz se há o que escolher. Onde aparece:
+
+- **Mapmaker:** no canto de cima à direita do mapa (recolhível): edita o objeto selecionado; sem seleção, a ferramenta "Colocar" mostra o item da paleta e a escolha vale para os próximos daquele tipo (`placeColors`/`placeSetups`, o ícone da paleta mostra a cor escolhida). Clicar na paleta tira a seleção. Os `Select` de cor e setup da Fase C2 saíram. Mesa com look do ocupante mostra um aviso no painel do objeto.
+- **Build Tool** ("Minha mesa" → "Decorar"): à direita, para a própria mesa (cor e setup, `desk:look`, com "Voltar ao padrão da mesa"), para um objeto já posto (`decor:color`, muda na hora) ou para o item da paleta antes de colocar. Durante a colocação, a aba fica no canto de baixo à esquerda da tela. A paleta é agrupada como no Mapmaker (cada tipo uma vez). O antigo "Liberar esta mesa" virou **"Deixar o posto"** (`data-testid="leave-desk"`); os objetos continuam na mesa, como antes.
+
+**Objetos de parede.** `ObjectDef.wallOnly` (cortiça, relógio, neon, split, samambaia pendurada e jardim vertical) + `wallMountError(map, o)`: cada bloco da linha de cima do footprint tem que ser parede com chão logo abaixo (face à mostra). O Mapmaker não deixa colocar fora disso (aviso em toast) nem arrastar para fora; a validação do mapa só dá **aviso** (mapas salvos com esses objetos no chão continuam publicáveis). Quadro decorativo e pôster continuam livres (já estavam na decoração da mesa, no chão).
+
+**Build Tool: plantas.** `DESK_DECOR_TYPES` ganhou `succulent_bowl`, `monstera`, `snake_plant`, `cactus`, `palm` e `tall_vase` (todas 1×1 de chão, mesma colisão da `plant`, que já estava). As de parede ficam de fora.
+
+**Gerador.** `GeneratorMeta.seed` sai da entrada do assistente (`officeSeed`: nome sem espaços nas pontas e em minúsculas, tamanho, quantidade, sócios). Da versão 2 em diante, `placeChunk` sorteia o setup de cada mesa pelo número dela (`setupFor(seed, n, sócio)`; pesos em `SETUP_WEIGHTS`: monitor 10, notebook prata 3, dois monitores 3, all-in-one 2, gamer 1, notebook 1; sócios: dois monitores 2, all-in-one 2, notebook prata 1, monitor 1) e uma cor de cadeira por cômodo (`chairColorFor(seed, ox, oy)`, grafite 4, azul 2, verde, vinho e areia 1). O monitor e o grafite (padrões) não são gravados. A versão 1 não muda, nem a ala nova dela; mapa sem seed usa 0. A cor das mesas não é sorteada (fica a da planta). `pnpm art:map --size=40` mostra o resultado (`prints/mapa-40p-fase-e-day.png`).
+
+**Conferência.** `/dev/cena?abrir=mapmaker` abre o Mapmaker e `/dev/cena?abrir=mesa` abre a Build Tool (com a primeira mesa sua, uma caneca dourada e um vaso), sem servidor; `net.send` não faz nada ali. Prints em `prints/fase-e-*.png` (aba "Cor" e "Setup" na Build Tool, objeto posto, item da paleta e mesa selecionada no Mapmaker).
+
+**Testes novos.** `packages/shared/test/looks.test.ts` (look, `applyDeskLooks`, tampo da L e da mesa grande, objetos de parede, paleta sem repetição), "aba Cor" em `apps/web/test/objects.test.ts`, "setups e cadeiras do visual v2 no gerador (Fase E)" em `generate.test.ts`, e em `apps/server/test/api.test.ts`: "Build Tool: cor da decoração e look da própria mesa…" (inclui o 3º bloco da mesa grande e "Deixar o posto"), "look da mesa: Dono e Admin…" e a remoção do funcionário devolvendo o setup inicial. E2E: "Build Tool: a funcionária troca a cor de um objeto e o setup da mesa; “Deixar o posto” volta ao inicial" em `e2e/tests/office.spec.ts` (rodado aqui com o Chrome do sistema: `CHROME_PATH=/usr/bin/google-chrome pnpm e2e`, depois de `pnpm build`; o servidor do teste usa PGlite, sem Postgres nem Redis).
+
 ## Problemas conhecidos
 
 - A página `/dev/arte` foi conferida só pelo servidor do Vite (os módulos compilam e a rota responde); não havia navegador no ambiente da Fase A para abri-la. As folhas PNG saem do mesmo código (`sheet.ts`).
 - Sofá virado para a esquerda ou direita usa o desenho de frente (já era assim na arte antiga). A Fase C3 manteve: o sofá é 2×1 fixo, e um sofá de lado precisaria de um footprint 1×2 (mudaria a colisão de mapas salvos).
-- `decor:add` (tempo real, não alterado nesta fase) considera "em cima da mesa" só os 2 primeiros blocos (`desk.x + 2`): numa mesa de 3 blocos, o funcionário consegue pôr a planta grande (sólida) no 3º bloco. Corrigir na Fase E com `objSolidAt`.
 - Objetos postos na coluna do setup ficam por cima dele (o setup é parte do sprite da mesa): um mousepad ali cobre o teclado do setup.
 - Na mesa em L, clicar no vão (onde fica a cadeira) no Mapmaker seleciona a mesa se não houver outro objeto ali; com a cadeira posta depois, a cadeira tem prioridade.
 - O relógio de parede é estático (10h10) até a Fase F.
@@ -193,10 +232,13 @@ Arquivos:
 - Janela num trecho vertical de parede (parede com outra embaixo) vira só um filete de vidro no topo: o modelo de parede não tem face lateral.
 - A troca de período refaz os blocos estáticos do mapa de uma vez (4 vezes por dia). Em mapas muito grandes pode custar alguns quadros; a Fase G deve medir.
 - `/dev/cena` foi conferida com o Chrome sem janela (WebGL por software); o FPS real fica para a Fase G.
-- As plantas de parede (`hanging_fern`, `wall_garden`), como os outros objetos de parede, foram feitas para o bloco da parede; o Mapmaker não impede pôr num bloco de chão (aparecem "flutuando" na altura da face). O gerador não usa plantas de parede.
-- As plantas novas não entraram em `DESK_DECOR_TYPES` (a Build Tool do funcionário continua com `plant` e `plant_small`); a Fase E pode decidir se o funcionário escolhe outras.
 - Pôsteres postos sobre um bloco de chão ficam com o desenho um pouco mais baixo que antes (o pôster agora cabe na face da parede).
 - Avatar: um cliente aberto numa versão anterior à Fase D (aba antiga, app desktop sem atualizar) desenha os avatares novos sem acessórios, porque só conhece o campo `accessory`. Some quando o cliente atualiza; o servidor aceita os dois formatos.
 - Avatar: a saia não balança ao andar (só as pernas animam, como a calça); a gravata aparece só de frente (como antes); o relógio aparece nos dois lados de perfil.
 - Avatar: o topete (cabelo 4) continua aparecendo acima do boné e os fones de antes, de perfil, continuam com a concha na frente do rosto: é o desenho de antes, que não pode mudar. Os cabelos novos ficam recortados debaixo do boné.
 - Avatar: com a cor do acessório igual à da roupa (ex.: gravata azul em camisa azul) a gravata some; o editor não impede.
+- Fase E: objetos de parede já postos no chão em mapas salvos continuam onde estão (a validação só avisa); o Mapmaker só impede colocar e arrastar para fora da parede.
+- Fase E: um cliente aberto numa versão anterior à Fase E (aba antiga, app desktop sem atualizar) não conhece o look e mostra as mesas como no mapa publicado, até atualizar.
+- Fase E: a aba "Cor" do Mapmaker fica por cima do canto de cima à direita do mapa (dá para recolher com "–"; volta pelo botão "🎨 Cor").
+- Fase E: só a dona da mesa vê a aba da própria mesa na Build Tool; Dono e Admin mudam o look de outra mesa ocupada pela mensagem `desk:look` (o servidor aceita), mas não há tela para isso: para eles, o caminho é o Mapmaker (que muda o padrão da mesa).
+- Fase E: no E2E rodado aqui (Chrome com WebGL por software, três páginas com a cena aberta), o teste do convidado chegou perto do limite de 60 s para entrar e falhou uma vez por tempo; passou ao repetir. O teste novo leva ~50 s.
