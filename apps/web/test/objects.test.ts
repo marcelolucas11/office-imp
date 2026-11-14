@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createCanvas } from '@napi-rs/canvas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { AVATAR_OPTIONS, DIRS, OBJECT_DEFS, OBJECT_TYPES, deskSetups, objectColors, type AvatarConfig, type Dir, type MapObject } from '@office-imp/shared';
+import { AVATAR_OPTIONS, DESK_SETUPS, DESK_TYPES, DIRS, OBJECT_DEFS, OBJECT_TYPES, deskSetups, emptyMap, objectColors, type AvatarConfig, type Dir, type MapObject } from '@office-imp/shared';
 import { AV_FRAMES, AV_H, AV_W, avatarSheet } from '../src/game/art/avatar';
 import { setCanvasFactory } from '../src/game/art/canvas';
 import { REDESIGNED_TYPES, objectIcon, objectKey, objectSprite } from '../src/game/art/objects';
 import { Sprite, rgba } from '../src/game/art/prim';
+import { sortedObjects } from '../src/game/art/render';
+import { SETUP_IDS } from '../src/game/art/setups';
 import { artSheets, sampleAvatars } from '../src/game/art/sheet';
 import { T } from '../src/game/art/tiles';
 
@@ -74,6 +76,54 @@ describe('cor na chave do cache de sprite', () => {
   });
 });
 
+describe('setup da mesa e texto no sprite (Fase C2)', () => {
+  it('todo setup do catálogo tem desenho', () => {
+    expect([...SETUP_IDS].sort()).toEqual(DESK_SETUPS.map((st) => st.id).sort());
+  });
+
+  it('o setup entra na chave e no desenho de toda mesa; o padrão é igual a não ter setup', () => {
+    for (const type of DESK_TYPES) {
+      expect(objectKey(obj(type))).toBe(objectKey(obj(type, { setup: 'monitor' })));
+      expect(objectKey(obj(type))).toBe(objectKey(obj(type, { setup: 'saiu-do-catalogo' })));
+      const keys = new Set(DESK_SETUPS.map((st) => objectKey(obj(type, { setup: st.id }))));
+      expect([type, keys.size]).toEqual([type, DESK_SETUPS.length]);
+      const base = pixels(obj(type));
+      for (const st of DESK_SETUPS.slice(1)) expect([type, st.id, same(base, pixels(obj(type, { setup: st.id })))]).toEqual([type, st.id, false]);
+    }
+    // fora de mesa o campo é ignorado
+    expect(objectKey(obj('chair', { setup: 'gamer' }))).toBe(objectKey(obj('chair')));
+  });
+
+  it('a mesa em L com dir "right" sai espelhada', () => {
+    const left = pixels(obj('desk_l', { setup: 'none' }));
+    const right = pixels(obj('desk_l', { setup: 'none', dir: 'right' }));
+    expect(same(left.flipX(), right)).toBe(true);
+    expect(same(left, right)).toBe(false);
+  });
+
+  it('o letreiro neon desenha o texto de props.text, que entra na chave', () => {
+    const def = OBJECT_DEFS.neon.text!.default;
+    expect(objectKey(obj('neon'))).toBe(objectKey(obj('neon', { props: { text: def } })));
+    expect(objectKey(obj('neon', { props: { text: 'CAFE' } }))).not.toBe(objectKey(obj('neon')));
+    expect(same(pixels(obj('neon')), pixels(obj('neon', { props: { text: 'CAFE' } })))).toBe(false);
+    // texto longo num letreiro estreito não estoura o sprite
+    const long = pixels(obj('neon', { props: { text: 'X'.repeat(24) } }));
+    expect([long.w, long.h]).toEqual([64, 32]);
+  });
+
+  it('objeto solto em cima da mesa é desenhado logo depois dela; o mousepad fica por baixo do teclado', () => {
+    const map = emptyMap(8, 6);
+    map.objects.push(
+      { id: 'kb', type: 'keyboard', x: 2, y: 1 },
+      { id: 'pad', type: 'mousepad', x: 2, y: 1 },
+      { id: 'desk', type: 'desk', x: 1, y: 1 },
+      { id: 'chair', type: 'chair', x: 1, y: 2 },
+      { id: 'behind', type: 'plant_small', x: 3, y: 0 },
+    );
+    expect(sortedObjects(map).map((o) => o.id)).toEqual(['behind', 'desk', 'pad', 'kb', 'chair']);
+  });
+});
+
 describe('sprites dos objetos', () => {
   it('todo tipo do catálogo desenha algo, no tamanho certo, em todas as cores e direções', () => {
     for (const type of OBJECT_TYPES) {
@@ -90,7 +140,7 @@ describe('sprites dos objetos', () => {
 
   it('objetos redesenhados têm contorno escuro em toda a borda e nenhum pixel suavizado', () => {
     // todo tipo com desenho do visual v2: cadeira e sofá (Fase A), mesas e assentos (C1), objetos de mesa e extras (C2)
-    expect(REDESIGNED_TYPES).toEqual(expect.arrayContaining(['chair', 'sofa', 'desk', 'armchair', 'photo', 'trophy']));
+    expect(REDESIGNED_TYPES).toEqual(expect.arrayContaining(['chair', 'sofa', 'armchair', 'photo', 'trophy', ...DESK_TYPES, 'keyboard', 'neon', 'aquarium', 'split_ac']));
     const bad: string[] = [];
     for (const type of REDESIGNED_TYPES) {
       const colors = objectColors(type).length ? objectColors(type).map((c) => c.id) : [undefined];

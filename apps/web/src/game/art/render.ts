@@ -25,6 +25,9 @@ export function surfaceIndex(map: OfficeMap): Map<number, MapObject> {
   return out;
 }
 
+/** Objetos chatos que ficam por baixo dos outros quando dividem o tampo (o mousepad sob o teclado). */
+export const FLAT_ON_SURFACE = new Set(['mousepad', 'postits']);
+
 /** Ordem de desenho: itens de chão, depois por profundidade; o que está em cima de um móvel vem logo depois dele. */
 export function sortedObjects(map: OfficeMap) {
   const surfaces = surfaceIndex(map);
@@ -32,7 +35,7 @@ export function sortedObjects(map: OfficeMap) {
     if (FLOOR_LEVEL(o.type)) return [0, o.y + objSize(o).h, 0];
     if (OBJECT_DEFS[o.type]?.solid) return [1, o.y + objDepthRows(o), 1];
     const under = surfaces.get(o.y * map.width + o.x);
-    return under ? [1, under.y + objDepthRows(under), 2] : [1, o.y + objSize(o).h, 0];
+    return under ? [1, under.y + objDepthRows(under), FLAT_ON_SURFACE.has(o.type) ? 2 : 3] : [1, o.y + objSize(o).h, 0];
   };
   const keyed = map.objects.map((o, i) => ({ o, i, k: key(o) }));
   keyed.sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2] || a.i - b.i);

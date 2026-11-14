@@ -34,7 +34,7 @@ import { AV_FRAMES, AV_H, AV_W, avatarKey, avatarSheet } from '../game/art/avata
 import { DECOR_SIZE, EXTERIOR, decorSprite, exteriorDecor, exteriorGrass, type DecorKind } from '../game/art/exterior';
 import { FLOOR_PATTERN } from '../game/art/floors';
 import { doorClosedSprite, objectKey, objectSprite, objectTall } from '../game/art/objects';
-import { surfaceIndex } from '../game/art/render';
+import { FLAT_ON_SURFACE, surfaceIndex } from '../game/art/render';
 import { T, drawStatic, hasPeriodWalls, makeCanvas } from '../game/art/tiles';
 import { bus } from '../game/bus';
 import { net } from '../game/net';
@@ -256,7 +256,8 @@ export class OfficeScene extends Phaser.Scene {
       else {
         // objeto solto em cima de um móvel (caneca na mesa): logo acima do móvel, abaixo de quem está na frente
         const under = surfaces.get(o.y * map.width + o.x);
-        img.setDepth(under ? D_WORLD + (under.y + objDepthRows(under)) * T - 0.5 : D_WORLD + o.y * T + 1);
+        const lift = FLAT_ON_SURFACE.has(o.type) ? 0.75 : 0.5;
+        img.setDepth(under ? D_WORLD + (under.y + objDepthRows(under)) * T - lift : D_WORLD + o.y * T + 1);
       }
       this.objs.push(img);
     }
