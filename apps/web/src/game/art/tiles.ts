@@ -20,7 +20,8 @@ export function r(ctx: Ctx, x: number, y: number, w: number, h: number, c: strin
 
 /**
  * Sombreado ADITIVO da arte antiga (soma `255 * amt` em cada canal e devolve `rgb()`).
- * A arte nova usa o `shade` de `prim.ts` (proporcional, devolve hex).
+ * A arte nova usa o `shade` de `prim.ts` (proporcional, devolve hex). Desde a Fase C3, só o
+ * avatar usa este e o `r` acima: o boneco tem que sair pixel a pixel igual ao de antes do v2.
  */
 export function shade(hex: string, amt: number): string {
   const n = parseInt(hex.slice(1), 16);

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AVATAR_OPTIONS, DESK_SETUPS, DESK_TYPES, DIRS, OBJECT_DEFS, OBJECT_TYPES, deskSetups, emptyMap, objectColors, type AvatarConfig, type Dir, type MapObject } from '@office-imp/shared';
 import { AV_FRAMES, AV_H, AV_W, avatarSheet } from '../src/game/art/avatar';
 import { setCanvasFactory } from '../src/game/art/canvas';
-import { REDESIGNED_TYPES, objectIcon, objectKey, objectSprite } from '../src/game/art/objects';
+import { REDESIGNED_TYPES, doorClosedKey, doorClosedSprite, objectIcon, objectKey, objectSprite } from '../src/game/art/objects';
 import { Sprite, rgba } from '../src/game/art/prim';
 import { sortedObjects } from '../src/game/art/render';
 import { SETUP_IDS } from '../src/game/art/setups';
@@ -146,6 +146,7 @@ describe('sprites dos objetos', () => {
         ...['chair', 'sofa', 'armchair', 'photo', 'trophy', ...DESK_TYPES, 'keyboard', 'neon', 'aquarium', 'split_ac'],
         ...['plant', 'plant_small', 'monstera', 'snake_plant', 'cactus', 'succulent_bowl', 'palm', 'tall_vase', 'hanging_fern', 'wall_garden'],
         ...['table', 'table_round', 'counter', 'bookshelf', 'cabinet', 'lamp', 'podium', 'rug', 'rug_logo', 'frame', 'coffee', 'cooler', 'fridge'],
+        ...['whiteboard', 'tv', 'kiosk', 'arcade', 'poster', 'note', 'door', 'portal'],
       ]),
     );
     const bad: string[] = [];
@@ -169,7 +170,36 @@ describe('sprites dos objetos', () => {
         }
       }
     }
+    // a porta fechada não é um tipo, mas segue a mesma regra (em todas as cores)
+    for (const c of objectColors('door')) {
+      const s = Sprite.fromCanvas(doorClosedSprite({ color: c.id }));
+      for (let y = 0; y < s.h; y++) {
+        for (let x = 0; x < s.w; x++) {
+          if (s.alpha(x, y) === 0) continue;
+          const onEdge = s.alpha(x - 1, y) === 0 || s.alpha(x + 1, y) === 0 || s.alpha(x, y - 1) === 0 || s.alpha(x, y + 1) === 0;
+          const i = (y * s.w + x) * 4;
+          if (onEdge && Math.max(s.data[i], s.data[i + 1], s.data[i + 2]) >= 96) bad.push(`door closed/${c.id} (${x},${y}): borda sem contorno`);
+        }
+      }
+    }
     expect(bad.slice(0, 20)).toEqual([]);
+  });
+
+  it('nenhum tipo do catálogo usa o desenho antigo (Fase C3)', () => {
+    // todo tipo de OBJECT_DEFS tem desenho do visual v2; o caminho antigo (retângulos no canvas) não existe mais
+    expect(OBJECT_TYPES.filter((type) => !REDESIGNED_TYPES.includes(type))).toEqual([]);
+  });
+
+  it('a porta fechada tem uma textura por cor, do tamanho de um bloco', () => {
+    const keys = new Set(objectColors('door').map((c) => doorClosedKey({ color: c.id })));
+    expect(keys.size).toBe(objectColors('door').length);
+    expect(doorClosedKey({})).toBe(doorClosedKey({ color: objectColors('door')[0].id }));
+    expect(doorClosedKey({ color: 'nao-existe' })).toBe(doorClosedKey({}));
+    const def = Sprite.fromCanvas(doorClosedSprite());
+    expect([def.w, def.h]).toEqual([T, T]);
+    for (const c of objectColors('door').slice(1)) expect([c.id, same(def, Sprite.fromCanvas(doorClosedSprite({ color: c.id })))]).toEqual([c.id, false]);
+    // aberta e fechada são desenhos diferentes
+    expect(same(def, pixels(obj('door')))).toBe(false);
   });
 
   it('as folhas de conferência cobrem o catálogo inteiro', () => {

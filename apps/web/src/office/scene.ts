@@ -33,7 +33,7 @@ import {
 import { AV_FRAMES, AV_H, AV_W, avatarKey, avatarSheet } from '../game/art/avatar';
 import { DECOR_SIZE, EXTERIOR, decorSprite, exteriorDecor, exteriorGrass, type DecorKind } from '../game/art/exterior';
 import { FLOOR_PATTERN } from '../game/art/floors';
-import { doorClosedSprite, objectKey, objectSprite, objectTall } from '../game/art/objects';
+import { doorClosedKey, doorClosedSprite, objectKey, objectSprite, objectTall } from '../game/art/objects';
 import { FLAT_ON_SURFACE, surfaceIndex } from '../game/art/render';
 import { T, drawStatic, hasPeriodWalls, makeCanvas } from '../game/art/tiles';
 import { bus } from '../game/bus';
@@ -237,7 +237,6 @@ export class OfficeScene extends Phaser.Scene {
     this.objs = [];
     this.doorImgs.clear();
     this.doorAt.clear();
-    if (!this.textures.exists('door:closed')) this.textures.addCanvas('door:closed', doorClosedSprite());
     const surfaces = surfaceIndex(map);
     for (const o of map.objects) {
       const def = OBJECT_DEFS[o.type];
@@ -246,6 +245,9 @@ export class OfficeScene extends Phaser.Scene {
       if (!this.textures.exists(key)) this.textures.addCanvas(key, objectSprite(o));
       const img = this.add.image(o.x * T, (o.y - objectTall(o.type)) * T, key).setOrigin(0);
       if (o.type === 'door') {
+        // porta fechada: textura própria, uma por cor de porta
+        const closed = doorClosedKey(o);
+        if (!this.textures.exists(closed)) this.textures.addCanvas(closed, doorClosedSprite(o));
         this.doorImgs.set(o.id, img);
         this.doorAt.set(o.y * map.width + o.x, o.id);
         // fechada fica na altura dos avatares (bloqueia, como uma parede); aberta fica no chão
@@ -377,7 +379,7 @@ export class OfficeScene extends Phaser.Scene {
     const o = this.map.objects.find((x) => x.id === id);
     if (!img || !o) return;
     const open = Boolean(useGame.getState().doors[id]);
-    img.setTexture(open ? `obj:${objectKey(o)}` : 'door:closed');
+    img.setTexture(open ? `obj:${objectKey(o)}` : doorClosedKey(o));
     img.setDepth(open ? D_RUG : D_WORLD + (o.y + 1) * T - 1);
   }
 

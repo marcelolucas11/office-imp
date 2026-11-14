@@ -333,15 +333,40 @@ const defs: ObjectDef[] = [
   { type: 'rug', label: 'Tapete', w: 3, h: 2, solid: false, category: 'decor', resizable: true, colors: RUGS },
   { type: 'rug_logo', label: 'Tapete com logo', w: 4, h: 2, solid: false, category: 'decor', colors: RUGS },
   { type: 'podium', label: 'Púlpito', w: 1, h: 1, solid: false, category: 'decor', colors: CABINET_WOODS },
-  { type: 'door', label: 'Porta', w: 1, h: 1, solid: false, category: 'structure' },
-  { type: 'portal', label: 'Portal', w: 1, h: 1, solid: false, category: 'structure' },
+  { type: 'door', label: 'Porta', w: 1, h: 1, solid: false, category: 'structure', colors: [
+    { id: 'wood', label: 'Madeira', hex: '#8a5a3a' },
+    { id: 'oak', label: 'Madeira clara', hex: '#b98a5c' },
+    { id: 'white', label: 'Branca', hex: '#dcd9d2' },
+    { id: 'black', label: 'Preta', hex: '#34353c' },
+  ] },
+  { type: 'portal', label: 'Portal', w: 1, h: 1, solid: false, category: 'structure', colors: [
+    { id: 'cyan', label: 'Ciano', hex: '#22c3dd' },
+    { id: 'gold', label: 'Dourado', hex: '#d7b870' },
+    { id: 'purple', label: 'Roxo', hex: '#9a6cf0' },
+    { id: 'green', label: 'Verde', hex: '#4fcf7a' },
+  ] },
   // ----- interativos: só o desenho mudou na C3; `interact` e `props` continuam iguais -----
   { type: 'whiteboard', label: 'Quadro branco', w: 2, h: 1, solid: true, category: 'interactive', interact: 'whiteboard', tall: 1 },
   { type: 'tv', label: 'TV (vídeo do YouTube)', w: 2, h: 1, solid: true, category: 'interactive', interact: 'tv', tall: 1 },
   { type: 'kiosk', label: 'Site incorporado', w: 1, h: 1, solid: true, category: 'interactive', interact: 'website', tall: 1 },
-  { type: 'arcade', label: 'Jogo', w: 1, h: 1, solid: true, category: 'interactive', interact: 'game', tall: 1 },
-  { type: 'poster', label: 'Pôster / imagem', w: 1, h: 1, solid: false, category: 'interactive', interact: 'poster' },
-  { type: 'note', label: 'Nota / placa', w: 1, h: 1, solid: false, category: 'interactive', interact: 'note' },
+  { type: 'arcade', label: 'Jogo', w: 1, h: 1, solid: true, category: 'interactive', interact: 'game', tall: 1, colors: [
+    { id: 'purple', label: 'Roxo', hex: '#4b1d7a' },
+    { id: 'red', label: 'Vermelho', hex: '#9c2630' },
+    { id: 'blue', label: 'Azul', hex: '#24448a' },
+    { id: 'black', label: 'Preto', hex: '#2a2b31' },
+  ] },
+  { type: 'poster', label: 'Pôster / imagem', w: 1, h: 1, solid: false, category: 'interactive', interact: 'poster', colors: [
+    { id: 'orange', label: 'Laranja', hex: '#f08a3c' },
+    { id: 'blue', label: 'Azul', hex: '#4a86c9' },
+    { id: 'green', label: 'Verde', hex: '#58b97a' },
+    { id: 'pink', label: 'Rosa', hex: '#e3709e' },
+  ] },
+  { type: 'note', label: 'Nota / placa', w: 1, h: 1, solid: false, category: 'interactive', interact: 'note', colors: [
+    { id: 'yellow', label: 'Amarela', hex: '#f2d95c' },
+    { id: 'white', label: 'Branca', hex: '#f1ede2' },
+    { id: 'green', label: 'Verde', hex: '#9fd67a' },
+    { id: 'pink', label: 'Rosa', hex: '#f08fb4' },
+  ] },
   // ----- objetos de mesa (C2): pequenos, para ficar em cima do tampo -----
   { type: 'keyboard', label: 'Teclado mecânico', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [
     { id: 'rgb', label: 'Preto com RGB', hex: '#2a2b30' },

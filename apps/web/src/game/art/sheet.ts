@@ -197,8 +197,9 @@ function objectCell(o: MapObject, lines: string[]): Cell {
 /** Todos os tipos de `OBJECT_DEFS`, em todas as cores, em cada direção que muda o desenho e, nas mesas, em cada setup. */
 export function objectCells(only?: string[]): Cell[] {
   const cells: Cell[] = [];
+  const wants = (type: string) => !only || only.some((name) => (name.endsWith('*') ? type.startsWith(name.slice(0, -1)) : type === name));
   for (const type of OBJECT_TYPES) {
-    if (only && !only.some((name) => (name.endsWith('*') ? type.startsWith(name.slice(0, -1)) : type === name))) continue;
+    if (!wants(type)) continue;
     const def = OBJECT_DEFS[type];
     const colors = objectColors(type);
     const sizes: { w?: number; h?: number }[] = [{}];
@@ -224,15 +225,17 @@ export function objectCells(only?: string[]): Cell[] {
     // tipos com texto no sprite (letreiro neon): um texto diferente do padrão, num tamanho maior
     if (def.text) cells.push(objectCell({ id: 'sheet', type, x: 0, y: 0, w: def.w + 1, props: { text: 'Bom dia, time!' } }, [type, 'texto']));
   }
-  if (only) return cells;
-  // sprite especial: a porta fechada não é um tipo de objeto
-  const closed = doorClosedSprite();
-  const canvas = makeCanvas(closed.width, closed.height);
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#8f8c85';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(closed, 0, 0);
-  cells.push({ canvas, lines: ['door', 'closed'] });
+  if (!wants('door')) return cells;
+  // sprite especial: a porta fechada não é um tipo de objeto (uma por cor de porta)
+  for (const color of objectColors('door')) {
+    const closed = doorClosedSprite({ color: color.id });
+    const canvas = makeCanvas(closed.width, closed.height);
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#8f8c85';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(closed, 0, 0);
+    cells.push({ canvas, lines: ['door', `closed ${color.id}`] });
+  }
   return cells;
 }
 
