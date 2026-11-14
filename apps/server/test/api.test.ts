@@ -204,6 +204,20 @@ describe('tempo real', () => {
     expect(hub.onlineCount(officeId)).toBe(2);
   });
 
+  it('avatar: aceita o formato antigo e o novo, repassa normalizado e grava', async () => {
+    // formato antigo (antes do visual v2): `accessory` vira `accessories`
+    a.send('avatar', { skin: 2, hair: 3, hairColor: 1, shirt: 4, pants: 2, accessory: 2 });
+    const old = await b.next('update', (d) => d.id === ana.id && d.patch.avatar);
+    expect(old.patch.avatar).toEqual({ skin: 2, hair: 3, hairColor: 1, shirt: 4, pants: 2, accessories: [2] });
+    // formato novo, com combinação impossível (chapéu + fones) e índice fora da lista
+    const neu = { skin: 15, hair: 14, hairColor: 15, shirt: 15, pants: 15, accessories: [7, 3, 11, 9], beard: 4, top: 3, pattern: 3, bottom: 2, shoes: 3, shoeColor: 15, accColor: 1, extra: 'x', bottomColor: 99 };
+    a.send('avatar', { ...neu, top: 99 });
+    const got = await b.next('update', (d) => d.id === ana.id && d.patch.avatar?.skin === 15);
+    expect(got.patch.avatar).toEqual({ skin: 15, hair: 14, hairColor: 15, shirt: 15, pants: 15, accessories: [7, 9, 11], beard: 4, pattern: 3, bottom: 2, shoes: 3, shoeColor: 15, accColor: 1 });
+    await sleep(100);
+    expect((await ana.http.get('/api/auth/me')).json.avatar).toEqual(got.patch.avatar);
+  });
+
   it('servidor valida o movimento: passo livre aceito, parede e salto recusados', async () => {
     const spot = openSpot();
     a.send('teleport', spot);

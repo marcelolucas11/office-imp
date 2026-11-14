@@ -10,7 +10,7 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 | C1. Mesas e cadeiras | pronto | 8 mesas de trabalho (flag `desk: true`, L com máscara e espelho), 6 assentos com cores, cadeiras de mesa com encosto alto. Guia logo abaixo do guia da Fase B |
 | C2. Setups e objetos de mesa | pronto | `MapObject.setup` (7 setups), 13 objetos de mesa, 10 extras (neon com texto editável), paleta do Mapmaker em grupos. Guia logo abaixo |
 | C3. Plantas e catálogo antigo | pronto | 8 plantas novas + `plant`/`plant_small` redesenhadas (grupo "Plantas"), o resto do catálogo redesenhado com cores, desenho antigo removido de `objects.ts`, gerador com as plantas novas. Guia logo abaixo do guia das Fases C1 e C2 |
-| D. Avatar: mais opções | pendente | |
+| D. Avatar: mais opções | pronto | `AvatarConfig` v2 (acessórios múltiplos, 16 cores por peça, 15 cabelos, barba, roupa de cima, estampa, roupa de baixo, calçado, cor dos acessórios), regras de exclusão, editor com abas e prévia nas 4 direções, folha `avatares.png` em seções. Os 40 hashes dos avatares antigos não mudaram. Guia logo abaixo do guia da Fase C3 |
 | E. Cores e setup da mesa | pendente | |
 | F. Animações | pendente | |
 | G. QA e release | pendente | |
@@ -20,7 +20,9 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 - [x] Arte de cenário e objetos refeita com traço de 1 px, nenhum sprite antigo sobrando (Fase C3; o avatar fica como é, pela decisão 2)
 - [x] Exterior com grama e árvores + dia/noite pelo fuso do escritório (Fase B)
 - [x] Todas as mesas, cadeiras, plantas, setups, objetos de mesa e os 10 extras (Fases C1, C2 e C3)
-- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases D a G
+- [x] Mapas e avatares antigos funcionando sem migração manual; avatar antigo idêntico (mapas nas Fases A a C3; avatares na Fase D, com os 40 hashes de antes)
+- [x] Avatar com acessórios múltiplos e 16 cores por peça (Fase D)
+- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases E a G
 
 ## Guia da base (Fase A) para as próximas fases
 
@@ -153,6 +155,29 @@ Arquivos novos em `apps/web/src/game/art/`:
 
 **Conferência.** `pnpm art:map --json=docs/visual-v2/catalogo-c3.json --margin=3 --scale=2` gera `prints/mapa-catalogo-c3-day.png`, uma sala com todo o catálogo da C3 (plantas, móveis, copa, interativos, decoração de parede, portas e portal). `prints/cena-15p-portas-fechadas.png` é a cena real com as portas fechadas.
 
+## Guia da Fase D (avatar) para as próximas fases
+
+Arquivos:
+
+| Arquivo | O que tem |
+|---|---|
+| `packages/shared/src/avatar.ts` | `AvatarConfig` v2, `LegacyAvatarConfig`, `DEFAULT_AVATAR`, `AVATAR_OPTIONS` (paletas e listas), `AVATAR_ACCESSORIES` e `ACC` (ids), `accessoriesConflict`, `accessoryBlockers`, `toggleAccessory`, `sanitizeAccessories`, `sanitizeAvatar`, `avatarConfigKey` (saiu de `types.ts`; o `index.ts` exporta tudo) |
+| `apps/web/src/game/art/avatar.ts` | `paintAvatarFrame` (um quadro), `avatarSheet` (4 direções × 3 quadros), `avatarKey`, `avatarPortrait(cfg, escala, direção, quadro)` |
+| `apps/web/src/office/AvatarEditor.tsx` | O editor (`AvatarModal`), que saiu de `Modals.tsx` |
+| `apps/web/src/office/avatarLabels.ts` | Rótulos das opções pelo i18n |
+
+**Formato.** `{ skin, hair, hairColor, shirt, pants, accessories: number[], beard?, top?, pattern?, bottom?, shoes?, shoeColor?, accColor? }`. `shirt` e `pants` continuam sendo a cor da roupa de cima e de baixo (nomes de antes). Campo opcional ausente ou 0 = visual de antes, e `sanitizeAvatar` omite os que estão no padrão. `sanitizeAvatar` aceita qualquer coisa: formato antigo (`accessory` 1 a 4 vira `[n]`, 0 vira `[]`), formato novo (vale `accessories` se vierem os dois), índice inválido vira 0, id de acessório desconhecido ou repetido sai, conflito fica com o primeiro da lista, e a lista sai em ordem crescente. O servidor normaliza ao entrar na sala, no `/api/auth/me` e na mensagem `avatar`; o banco guarda o JSON normalizado (sem migração: o que está salvo no formato antigo é convertido ao ler). `avatarSheet`/`avatarKey` também normalizam, então o formato antigo desenha igual.
+
+**Acessórios (ids estáveis).** 1 óculos, 2 boné, 3 fones, 4 gravata (os 4 de antes, com o mesmo número), 5 óculos escuros, 6 óculos redondos, 7 chapéu, 8 headset gamer, 9 relógio, 10 brinco, 11 crachá Impera. Regras: um óculos só; boné ou chapéu; fones ou headset; chapéu não combina com fones nem headset; brinco não combina com fones nem headset; gravata, relógio e crachá combinam com tudo (boné + fones e boné + headset podem). A regra mora em `slot`/`excludes` de `AVATAR_ACCESSORIES`; o editor e o `sanitizeAvatar` usam a mesma função. `accColor` (0 = cor original de cada um) vale para boné, chapéu, gravata e o detalhe do headset (`colorable`).
+
+**Para acrescentar uma opção.** Cor: no fim da paleta (nunca no meio: os índices são gravados). Estilo de cabelo: id novo no fim de `hairStyles`, um `case` em `paintHair` (frente, lado com `s` e costas) e o rótulo em `avatarLabels.ts` (`pnpm i18n:extract`). Acessório: id novo em `ACC` e `AVATAR_ACCESSORIES` (com `slot`/`excludes` se precisar), desenho no fim de `paintAvatarFrame` e rótulo. Campo novo: em `AvatarConfig`, `AVATAR_EXTRA_FIELDS` e `AVATAR_EXTRA_OPTIONS` (o `sanitizeAvatar` e a chave já o tratam). O teste `apps/web/test/avatar.test.ts` cobra que toda opção desenha nas 4 direções e 3 quadros, sem vazar dos 32×48, e que cada uma muda o desenho; ele percorre as listas sozinho.
+
+**Desenho.** O caminho de antes (`r` e o `shade` aditivo de `tiles.ts`) ficou intacto: as camadas novas só desenham quando escolhidas. Ordem: sombra, pernas (bermuda põe pele abaixo do joelho, saia deixa a perna de fora e vem por cima), calçados, tronco com estampa e acabamento da roupa (antes do braço, no lado), braços, gola de antes, gravata, crachá, relógio, cabeça, barba, cabelo (recortado debaixo do chapéu; debaixo do boné, só os cabelos novos), brinco, óculos, boné/chapéu, fones/headset. Os desenhos de lado são escritos olhando para a esquerda (`s`) e espelhados (`32 − x − w`), como os de antes. Cores novas usam `prim.ts` (`tint`, `mix`); não passe a saída do `shade` antigo (`rgb()`) para elas.
+
+**Conferência.** `pnpm art:sheet` gera `avatares.png` em seções: formato antigo (os 10 de antes), cabelos, barbas, roupa de cima × estampa, roupa de baixo e calçados andando (3 quadros), acessórios sozinhos e em combinações, e as paletas de 16. `/dev/arte?editor=1` abre o editor sem servidor (o "Salvar" não faz nada ali). Prints do editor em `prints/editor-avatar-*.png`.
+
+**Testes novos.** `packages/shared/test/avatar.test.ts` (conversão, cores nos mesmos índices, objeto vazio, índices fora da lista, exclusões, `toggleAccessory`), `apps/web/test/avatar.test.ts` (todas as opções, quadro de 32×48, formato antigo = novo) e "avatar: aceita o formato antigo e o novo…" em `apps/server/test/api.test.ts`. O teste de regressão de `objects.test.ts` agora congela as 40 configurações antigas (com as listas de antes) e as passa por `sanitizeAvatar`; os hashes são os mesmos.
+
 ## Problemas conhecidos
 
 - A página `/dev/arte` foi conferida só pelo servidor do Vite (os módulos compilam e a rota responde); não havia navegador no ambiente da Fase A para abri-la. As folhas PNG saem do mesmo código (`sheet.ts`).
@@ -171,3 +196,7 @@ Arquivos novos em `apps/web/src/game/art/`:
 - As plantas de parede (`hanging_fern`, `wall_garden`), como os outros objetos de parede, foram feitas para o bloco da parede; o Mapmaker não impede pôr num bloco de chão (aparecem "flutuando" na altura da face). O gerador não usa plantas de parede.
 - As plantas novas não entraram em `DESK_DECOR_TYPES` (a Build Tool do funcionário continua com `plant` e `plant_small`); a Fase E pode decidir se o funcionário escolhe outras.
 - Pôsteres postos sobre um bloco de chão ficam com o desenho um pouco mais baixo que antes (o pôster agora cabe na face da parede).
+- Avatar: um cliente aberto numa versão anterior à Fase D (aba antiga, app desktop sem atualizar) desenha os avatares novos sem acessórios, porque só conhece o campo `accessory`. Some quando o cliente atualiza; o servidor aceita os dois formatos.
+- Avatar: a saia não balança ao andar (só as pernas animam, como a calça); a gravata aparece só de frente (como antes); o relógio aparece nos dois lados de perfil.
+- Avatar: o topete (cabelo 4) continua aparecendo acima do boné e os fones de antes, de perfil, continuam com a concha na frente do rosto: é o desenho de antes, que não pode mudar. Os cabelos novos ficam recortados debaixo do boné.
+- Avatar: com a cor do acessório igual à da roupa (ex.: gravata azul em camisa azul) a gravata some; o editor não impede.
