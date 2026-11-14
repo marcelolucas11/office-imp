@@ -2,6 +2,7 @@
 export * from './permissions';
 export * from './map';
 export * from './types';
+export * from './avatar';
 export * from './constants';
 export * from './proximity';
 export * from './pathfinding';

@@ -3,7 +3,7 @@
 // direções) e avatares de exemplo. Tudo sai das definições de `@office-imp/shared`, então
 // um tipo novo de piso, parede ou objeto aparece aqui sozinho.
 // Usado por `pnpm art:sheet` (Node, gera PNG) e pela página /dev/arte (navegador).
-import { AVATAR_OPTIONS, DAY_PERIODS, DEFAULT_DESK_SETUP, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, deskSetups, emptyMap, objectColors, type AvatarConfig, type DayPeriod, type Dir, type MapObject, type OfficeMap } from '@office-imp/shared';
+import { DAY_PERIODS, LEGACY_ACCESSORY_COUNT, sanitizeAvatar, DEFAULT_DESK_SETUP, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, deskSetups, emptyMap, objectColors, type AvatarConfig, type DayPeriod, type Dir, type MapObject, type OfficeMap } from '@office-imp/shared';
 import { avatarSheet } from './avatar';
 import { makeCanvas } from './canvas';
 import { doorClosedSprite, objectSprite } from './objects';
@@ -239,18 +239,19 @@ export function objectCells(only?: string[]): Cell[] {
   return cells;
 }
 
-/** Avatares de exemplo que, juntos, passam por todas as opções de cada peça. */
+/** Os 10 avatares de exemplo de antes do visual v2 (formato antigo), já normalizados. */
 export function sampleAvatars(): AvatarConfig[] {
-  const O = AVATAR_OPTIONS;
-  const n = Math.max(O.skin.length, O.hairStyles.length, O.hairColor.length, O.shirt.length, O.pants.length, O.accessories.length);
-  return Array.from({ length: n }, (_, i) => ({
-    skin: i % O.skin.length,
-    hair: (i + 1) % O.hairStyles.length,
-    hairColor: i % O.hairColor.length,
-    shirt: i % O.shirt.length,
-    pants: i % O.pants.length,
-    accessory: i % O.accessories.length,
-  }));
+  const L = { skin: 5, hair: 6, hairColor: 7, shirt: 10, pants: 6, accessory: LEGACY_ACCESSORY_COUNT };
+  return Array.from({ length: 10 }, (_, i) =>
+    sanitizeAvatar({
+      skin: i % L.skin,
+      hair: (i + 1) % L.hair,
+      hairColor: i % L.hairColor,
+      shirt: i % L.shirt,
+      pants: i % L.pants,
+      accessory: i % L.accessory,
+    }),
+  );
 }
 
 /** Folha completa de cada avatar: 4 direções (linhas) × 3 quadros de caminhada. */
@@ -262,7 +263,7 @@ export function avatarCells(): Cell[] {
     ctx.fillStyle = '#8f8c85';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(sheet, 0, 0);
-    return { canvas, lines: [`PELE ${cfg.skin} CABELO ${cfg.hair}/${cfg.hairColor}`, `ROUPA ${cfg.shirt}/${cfg.pants} ACESS ${cfg.accessory}`] };
+    return { canvas, lines: [`PELE ${cfg.skin} CABELO ${cfg.hair}/${cfg.hairColor}`, `ROUPA ${cfg.shirt}/${cfg.pants} ACESS ${cfg.accessories.join('+') || 0}`] };
   });
 }
 

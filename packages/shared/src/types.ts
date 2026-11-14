@@ -2,6 +2,7 @@
 import type { Role } from './permissions';
 import type { Dir } from './map';
 import { DEFAULT_INTERACTION_DISTANCE } from './constants';
+import type { AvatarConfig } from './avatar';
 
 export type Status = 'AVAILABLE' | 'BUSY' | 'DND';
 export type TrackedStatus = Status | 'AWAY';
@@ -19,38 +20,6 @@ export const STATUS_COLOR: Record<TrackedStatus, string> = {
   DND: '#ef4444',
   AWAY: '#9ca3af',
 };
-
-export interface AvatarConfig {
-  skin: number;
-  hair: number;
-  hairColor: number;
-  shirt: number;
-  pants: number;
-  accessory: number;
-}
-
-export const DEFAULT_AVATAR: AvatarConfig = { skin: 1, hair: 1, hairColor: 0, shirt: 0, pants: 0, accessory: 0 };
-
-export const AVATAR_OPTIONS = {
-  skin: ['#f6d3b3', '#e8b88f', '#c98d5f', '#9a6238', '#6b4226'],
-  hairStyles: ['Careca', 'Curto', 'Médio', 'Longo', 'Topete', 'Rabo de cavalo'],
-  hairColor: ['#1c1917', '#4a2c17', '#8a5a2b', '#d7b870', '#b91c1c', '#9ca3af', '#f5f5f4'],
-  shirt: ['#d7b870', '#111827', '#f5f5f4', '#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#ea580c', '#0891b2', '#db2777'],
-  pants: ['#1f2937', '#374151', '#1e3a8a', '#44403c', '#0f172a', '#78350f'],
-  accessories: ['Nenhum', 'Óculos', 'Boné', 'Fones', 'Gravata'],
-};
-
-export function sanitizeAvatar(a: any): AvatarConfig {
-  const clamp = (v: any, max: number) => (Number.isInteger(v) && v >= 0 && v < max ? v : 0);
-  return {
-    skin: clamp(a?.skin, AVATAR_OPTIONS.skin.length),
-    hair: clamp(a?.hair, AVATAR_OPTIONS.hairStyles.length),
-    hairColor: clamp(a?.hairColor, AVATAR_OPTIONS.hairColor.length),
-    shirt: clamp(a?.shirt, AVATAR_OPTIONS.shirt.length),
-    pants: clamp(a?.pants, AVATAR_OPTIONS.pants.length),
-    accessory: clamp(a?.accessory, AVATAR_OPTIONS.accessories.length),
-  };
-}
 
 export interface CustomStatus {
   emoji: string;

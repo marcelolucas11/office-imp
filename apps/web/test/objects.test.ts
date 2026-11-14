@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createCanvas } from '@napi-rs/canvas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { AVATAR_OPTIONS, DESK_SETUPS, DESK_TYPES, DIRS, OBJECT_DEFS, OBJECT_TYPES, deskSetups, emptyMap, objectColors, type AvatarConfig, type Dir, type MapObject } from '@office-imp/shared';
+import { DESK_SETUPS, DESK_TYPES, DIRS, OBJECT_DEFS, OBJECT_TYPES, deskSetups, emptyMap, objectColors, sanitizeAvatar, type Dir, type LegacyAvatarConfig, type MapObject } from '@office-imp/shared';
 import { AV_FRAMES, AV_H, AV_W, avatarSheet } from '../src/game/art/avatar';
 import { setCanvasFactory } from '../src/game/art/canvas';
 import { REDESIGNED_TYPES, doorClosedKey, doorClosedSprite, objectIcon, objectKey, objectSprite } from '../src/game/art/objects';
 import { Sprite, rgba } from '../src/game/art/prim';
 import { sortedObjects } from '../src/game/art/render';
 import { SETUP_IDS } from '../src/game/art/setups';
-import { artSheets, sampleAvatars } from '../src/game/art/sheet';
+import { artSheets } from '../src/game/art/sheet';
 import { T } from '../src/game/art/tiles';
 
 beforeAll(() => setCanvasFactory((w, h) => createCanvas(w, h) as unknown as HTMLCanvasElement));
@@ -228,19 +228,29 @@ describe('avatar', () => {
     '0.5.3.5.5.0': '5de8f427', '1.5.4.8.0.1': '38b7e933', '2.5.5.1.1.2': 'ee70c2bf', '3.5.6.4.2.3': '2b5035d5', '4.5.0.7.3.4': '25ac87ff',
   };
 
-  const key = (c: AvatarConfig) => `${c.skin}.${c.hair}.${c.hairColor}.${c.shirt}.${c.pants}.${c.accessory}`;
-  const configs: AvatarConfig[] = [...sampleAvatars()];
-  const O = AVATAR_OPTIONS;
-  for (let hair = 0; hair < O.hairStyles.length; hair++) for (let accessory = 0; accessory < O.accessories.length; accessory++) configs.push({ skin: (hair + accessory) % O.skin.length, hair, hairColor: (hair * 2 + accessory) % O.hairColor.length, shirt: (hair + accessory * 3) % O.shirt.length, pants: (hair + accessory) % O.pants.length, accessory });
+  // As 40 configurações do formato antigo (`accessory`), congeladas com as listas de antes do v2
+  // (5 peles, 6 cabelos, 7 cores de cabelo, 10 camisas, 6 calças, 5 acessórios). Elas passam por
+  // `sanitizeAvatar`, como um avatar salvo no banco passa pelo servidor.
+  const L = { skin: 5, hair: 6, hairColor: 7, shirt: 10, pants: 6, accessory: 5 };
+  const key = (c: LegacyAvatarConfig) => `${c.skin}.${c.hair}.${c.hairColor}.${c.shirt}.${c.pants}.${c.accessory}`;
+  const configs: LegacyAvatarConfig[] = Array.from({ length: 10 }, (_, i) => ({
+    skin: i % L.skin,
+    hair: (i + 1) % L.hair,
+    hairColor: i % L.hairColor,
+    shirt: i % L.shirt,
+    pants: i % L.pants,
+    accessory: i % L.accessory,
+  }));
+  for (let hair = 0; hair < L.hair; hair++) for (let accessory = 0; accessory < L.accessory; accessory++) configs.push({ skin: (hair + accessory) % L.skin, hair, hairColor: (hair * 2 + accessory) % L.hairColor, shirt: (hair + accessory * 3) % L.shirt, pants: (hair + accessory) % L.pants, accessory });
 
   it('a folha tem 4 direções × 3 quadros de 32×48', () => {
-    const c = avatarSheet(configs[0]);
+    const c = avatarSheet(sanitizeAvatar(configs[0]));
     expect([c.width, c.height]).toEqual([AV_W * AV_FRAMES, AV_H * DIRS.length]);
     expect([AV_W, AV_H]).toEqual([32, 48]);
   });
 
   it('avatares salvos renderizam idênticos aos de antes do visual v2', () => {
-    const got = Object.fromEntries(configs.map((c) => [key(c), stableHash(avatarSheet(c))]));
+    const got = Object.fromEntries(configs.map((c) => [key(c), stableHash(avatarSheet(sanitizeAvatar(c)))]));
     if (process.env.PRINT_AVATAR_HASHES) console.log(JSON.stringify(got));
     expect(got).toEqual(expected);
   });

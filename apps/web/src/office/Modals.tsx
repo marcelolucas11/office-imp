@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
+  AVATAR_ACCESSORIES,
   AVATAR_OPTIONS,
+  sanitizeAvatar,
+  toggleAccessory,
   DESK_DECOR_TYPES,
   MAX_DESK_DECOR,
   MAX_INTERACTION_DISTANCE,
@@ -425,7 +428,7 @@ export function ProfileModal({ playerId }: { playerId: string }) {
 // ---------- avatar ----------
 export function AvatarModal() {
   const me = useGame((s) => s.players[s.meId]);
-  const [cfg, setCfg] = useState<AvatarConfig>(me?.avatar ?? { skin: 0, hair: 0, hairColor: 0, shirt: 0, pants: 0, accessory: 0 });
+  const [cfg, setCfg] = useState<AvatarConfig>(sanitizeAvatar(me?.avatar ?? {}));
   const swatches = (key: keyof AvatarConfig, colors: string[]) => (
     <div className="flex flex-wrap gap-1.5">
       {colors.map((c, i) => (
@@ -465,7 +468,15 @@ export function AvatarModal() {
           <Field group label={t('avatar.hairColor', 'Cor do cabelo')}>{swatches('hairColor', AVATAR_OPTIONS.hairColor)}</Field>
           <Field group label={t('avatar.shirt', 'Camisa')}>{swatches('shirt', AVATAR_OPTIONS.shirt)}</Field>
           <Field group label={t('avatar.pants', 'Calça')}>{swatches('pants', AVATAR_OPTIONS.pants)}</Field>
-          <Field group label={t('avatar.accessory', 'Acessório')}>{names('accessory', AVATAR_OPTIONS.accessories)}</Field>
+          <Field group label={t('avatar.accessory', 'Acessório')}>
+            <div className="flex flex-wrap gap-1.5">
+              {AVATAR_ACCESSORIES.map((a) => (
+                <button key={a.id} type="button" onClick={() => setCfg({ ...cfg, accessories: toggleAccessory(cfg.accessories, a.id) })} className={cx('rounded-lg border px-2 py-1 text-xs', cfg.accessories.includes(a.id) ? 'border-gold bg-gold/15 text-gold' : 'border-line hover:border-muted')}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </Field>
         </div>
       </div>
     </Modal>
