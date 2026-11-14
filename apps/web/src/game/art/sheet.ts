@@ -156,7 +156,7 @@ export function sampleRoom(): OfficeMap {
   for (const x of [1, 2, 3, 6, 7]) map.layers.walls[at(x, 0)] = Wall.Window;
   for (const x of [2, 6]) map.layers.walls[at(x, H - 1)] = Wall.Window;
   for (let y = 1; y < H - 2; y++) map.layers.walls[at(4, y)] = Wall.Glass;
-  map.objects.push({ id: 'p1', type: 'plant', x: 1, y: 1 }, { id: 'c1', type: 'chair', x: 2, y: 3 }, { id: 's1', type: 'sofa', x: 6, y: 2, dir: 'down' });
+  map.objects.push({ id: 'p1', type: 'plant', x: 1, y: 4 }, { id: 'c1', type: 'chair', x: 2, y: 3 }, { id: 's1', type: 'sofa', x: 6, y: 2, dir: 'down' });
   map.spawns.push({ x: 2, y: 2 });
   return map;
 }
