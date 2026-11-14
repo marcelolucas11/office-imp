@@ -241,4 +241,4 @@ Arquivos novos ou com mudança grande:
 - Fase E: um cliente aberto numa versão anterior à Fase E (aba antiga, app desktop sem atualizar) não conhece o look e mostra as mesas como no mapa publicado, até atualizar.
 - Fase E: a aba "Cor" do Mapmaker fica por cima do canto de cima à direita do mapa (dá para recolher com "–"; volta pelo botão "🎨 Cor").
 - Fase E: só a dona da mesa vê a aba da própria mesa na Build Tool; Dono e Admin mudam o look de outra mesa ocupada pela mensagem `desk:look` (o servidor aceita), mas não há tela para isso: para eles, o caminho é o Mapmaker (que muda o padrão da mesa).
-- Fase E: no E2E rodado aqui (Chrome com WebGL por software, três páginas com a cena aberta), o teste do convidado chegou perto do limite de 60 s para entrar e falhou uma vez por tempo; passou ao repetir. O teste novo leva ~50 s.
+- Fase E: no E2E rodado aqui (Chrome com WebGL por software, três páginas com a cena aberta) a suíte inteira passou (18 de 18, 6,8 min), mas o teste do convidado chega perto do limite de 60 s para entrar e falhou uma vez por tempo numa rodada anterior. O teste novo leva de 50 s a 2 min nesse ambiente (limite de 5 min).
