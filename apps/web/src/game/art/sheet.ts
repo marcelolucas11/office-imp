@@ -3,8 +3,8 @@
 // direções) e avatares de exemplo. Tudo sai das definições de `@office-imp/shared`, então
 // um tipo novo de piso, parede ou objeto aparece aqui sozinho.
 // Usado por `pnpm art:sheet` (Node, gera PNG) e pela página /dev/arte (navegador).
-import { DAY_PERIODS, LEGACY_ACCESSORY_COUNT, sanitizeAvatar, DEFAULT_DESK_SETUP, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, deskSetups, emptyMap, objectColors, type AvatarConfig, type DayPeriod, type Dir, type MapObject, type OfficeMap } from '@office-imp/shared';
-import { avatarSheet } from './avatar';
+import { ACC, AVATAR_ACCESSORIES, AVATAR_OPTIONS, DAY_PERIODS, LEGACY_ACCESSORY_COUNT, avatarAccessory, sanitizeAvatar, DEFAULT_DESK_SETUP, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, deskSetups, emptyMap, objectColors, type AvatarConfig, type DayPeriod, type Dir, type MapObject, type OfficeMap } from '@office-imp/shared';
+import { AV_H, AV_W, avatarSheet } from './avatar';
 import { makeCanvas } from './canvas';
 import { doorClosedSprite, objectSprite } from './objects';
 import { FONT_H, drawText, textWidth } from './pixfont';
@@ -43,13 +43,13 @@ function cellHeight(c: Cell): number {
 }
 
 /** Distribui as células em linhas (da esquerda para a direita) e devolve a folha em escala 1×. */
-function layout(title: string, cells: Cell[]): HTMLCanvasElement {
+function layout(title: string, cells: Cell[], sheetW = SHEET_W): HTMLCanvasElement {
   const rows: Cell[][] = [];
   let row: Cell[] = [];
   let x = PAD;
   for (const c of cells) {
     const w = cellWidth(c);
-    if (row.length && x + w + PAD > SHEET_W) {
+    if (row.length && x + w + PAD > sheetW) {
       rows.push(row);
       row = [];
       x = PAD;
@@ -58,7 +58,7 @@ function layout(title: string, cells: Cell[]): HTMLCanvasElement {
     x += w + PAD;
   }
   if (row.length) rows.push(row);
-  const width = Math.max(SHEET_W, ...cells.map((c) => cellWidth(c) + PAD * 2));
+  const width = Math.max(sheetW, ...cells.map((c) => cellWidth(c) + PAD * 2));
   const headerH = PAD + LINE_H + 2;
   const height = headerH + rows.reduce((sum, r) => sum + Math.max(...r.map(cellHeight)) + PAD, 0);
   const canvas = makeCanvas(width, height);
@@ -254,17 +254,146 @@ export function sampleAvatars(): AvatarConfig[] {
   );
 }
 
-/** Folha completa de cada avatar: 4 direções (linhas) × 3 quadros de caminhada. */
+const AV_BG = '#8f8c85';
+/** Largura da folha de avatares (cabem 4 tiras de 4 direções por linha). */
+const AVATAR_SHEET_W = 560;
+
+const plain = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+
+/** Folha completa do avatar: 4 direções (linhas) × 3 quadros de caminhada. */
+function avatarFull(cfg: AvatarConfig): HTMLCanvasElement {
+  const sheet = avatarSheet(cfg);
+  const canvas = makeCanvas(sheet.width, sheet.height);
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = AV_BG;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(sheet, 0, 0);
+  return canvas;
+}
+
+/** As 4 direções paradas lado a lado (frente, esquerda, direita, costas). */
+function avatarStrip(cfg: AvatarConfig): HTMLCanvasElement {
+  const sheet = avatarSheet(cfg);
+  const canvas = makeCanvas(AV_W * DIRS.length, AV_H);
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = AV_BG;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  DIRS.forEach((_, i) => ctx.drawImage(sheet, 0, i * AV_H, AV_W, AV_H, i * AV_W, 0, AV_W, AV_H));
+  return canvas;
+}
+
+/** Grade 8×2 de avatares de frente (uma cor da paleta em cada). */
+function avatarGrid(cfgs: AvatarConfig[]): HTMLCanvasElement {
+  const cols = 8;
+  const canvas = makeCanvas(AV_W * cols, AV_H * Math.ceil(cfgs.length / cols));
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = AV_BG;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  cfgs.forEach((cfg, i) => ctx.drawImage(avatarSheet(cfg), 0, 0, AV_W, AV_H, (i % cols) * AV_W, Math.floor(i / cols) * AV_H, AV_W, AV_H));
+  return canvas;
+}
+
+/** Folha completa de cada avatar de exemplo do formato antigo. */
 export function avatarCells(): Cell[] {
-  return sampleAvatars().map((cfg) => {
-    const sheet = avatarSheet(cfg);
-    const canvas = makeCanvas(sheet.width, sheet.height);
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#8f8c85';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(sheet, 0, 0);
-    return { canvas, lines: [`PELE ${cfg.skin} CABELO ${cfg.hair}/${cfg.hairColor}`, `ROUPA ${cfg.shirt}/${cfg.pants} ACESS ${cfg.accessories.join('+') || 0}`] };
+  return sampleAvatars().map((cfg) => ({
+    canvas: avatarFull(cfg),
+    lines: [`PELE ${cfg.skin} CABELO ${cfg.hair}/${cfg.hairColor}`, `ROUPA ${cfg.shirt}/${cfg.pants} ACESS ${cfg.accessories.join('+') || 0}`],
+  }));
+}
+
+const BASE: AvatarConfig = { skin: 1, hair: 1, hairColor: 1, shirt: 3, pants: 0, accessories: [] };
+const av = (extra: Partial<AvatarConfig>): AvatarConfig => sanitizeAvatar({ ...BASE, ...extra });
+const accName = (ids: number[]) => ids.map((id) => plain(avatarAccessory(id)?.label ?? `#${id}`)).join(' + ');
+
+/** Seções da folha de avatares do visual v2: cada opção nova aparece pelo menos uma vez. */
+export function avatarSections(): { title: string; cells: Cell[] }[] {
+  const O = AVATAR_OPTIONS;
+  const hairColors = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+  const hairs: Cell[] = O.hairStyles.map((name, i) => {
+    const cfg = av({ hair: i, hairColor: hairColors[i % hairColors.length], skin: [1, 0, 2, 3, 4, 5, 6, 8][i % 8], shirt: i % O.shirt.length });
+    return { canvas: avatarStrip(cfg), lines: [`CABELO ${i} ${plain(name)}`, `COR ${cfg.hairColor} PELE ${cfg.skin}`] };
   });
+  const beards: Cell[] = [];
+  O.beards.forEach((name, i) => {
+    for (const [skin, hairColor, hair] of [
+      [0, 1, 1],
+      [4, 0, 6],
+      [2, 10, 14],
+    ]) {
+      const cfg = av({ beard: i, skin, hairColor, hair });
+      beards.push({ canvas: avatarStrip(cfg), lines: [`BARBA ${i} ${plain(name)}`, `PELE ${skin} COR ${hairColor}`] });
+    }
+  });
+  const tops: Cell[] = [];
+  const topColors = [0, 2, 12, 5, 1, 4, 14, 9];
+  O.tops.forEach((top, t) =>
+    O.patterns.forEach((pattern, k) => {
+      const cfg = av({ top: t, pattern: k, shirt: topColors[(t * 2 + k) % topColors.length] });
+      tops.push({ canvas: avatarStrip(cfg), lines: [`${plain(top)} ${plain(pattern)}`, `COR ${cfg.shirt}`] });
+    }),
+  );
+  const legs: Cell[] = [];
+  const legCfgs: [string, Partial<AvatarConfig>][] = [
+    ['BERMUDA + TENIS', { bottom: 1, pants: 8, shoes: 2, shoeColor: 7 }],
+    ['SAIA + SOCIAL', { bottom: 2, pants: 12, shoes: 1, shoeColor: 1, hair: 10, hairColor: 2 }],
+    ['CALCA + BOTA', { shoes: 3, shoeColor: 2, pants: 6 }],
+    ['SAIA + BOTA', { bottom: 2, pants: 0, shoes: 3, shoeColor: 0, hair: 3, hairColor: 13, skin: 3 }],
+    ['CALCA + TENIS', { shoes: 2, shoeColor: 4, pants: 6, top: 2, shirt: 13 }],
+  ];
+  for (const [name, extra] of legCfgs) {
+    const cfg = av(extra);
+    legs.push({ canvas: avatarFull(cfg), lines: [name, `CALCA ${cfg.pants} SAPATO ${cfg.shoes ?? 0}/${cfg.shoeColor ?? 0}`] });
+  }
+  const accs: Cell[] = AVATAR_ACCESSORIES.map((a) => ({ canvas: avatarStrip(av({ accessories: [a.id], hair: a.id === ACC.Earring ? 13 : 1 })), lines: [`${a.id} ${plain(a.label)}`, a.slot ? `LUGAR ${{ eyes: 'OLHOS', head: 'CABECA', ears: 'ORELHAS' }[a.slot]}` : 'COMBINA COM TUDO'] }));
+  const combos: [number[], Partial<AvatarConfig>][] = [
+    [[ACC.Cap, ACC.Headphones], { hair: 3, hairColor: 2 }],
+    [[ACC.Cap, ACC.Headset, ACC.Sunglasses], { accColor: 5, hair: 7, hairColor: 0, skin: 4 }],
+    [[ACC.Hat, ACC.RoundGlasses, ACC.Tie, ACC.Watch], { top: 3, shirt: 1, hair: 10, hairColor: 9 }],
+    [[ACC.Headset, ACC.Glasses, ACC.Watch], { top: 2, shirt: 14, beard: 1, hair: 9 }],
+    [[ACC.Earring, ACC.RoundGlasses, ACC.Badge, ACC.Tie], { top: 1, shirt: 2, hair: 8, hairColor: 3 }],
+    [[ACC.Badge, ACC.Tie, ACC.Sunglasses], { top: 3, shirt: 12, beard: 4, hair: 14, hairColor: 5 }],
+    [[ACC.Hat, ACC.Earring, ACC.Watch], { accColor: 1, hair: 12, hairColor: 0, skin: 3, bottom: 2, pants: 4 }],
+    [[ACC.Cap, ACC.Tie, ACC.Badge], { accColor: 7, hair: 11, hairColor: 10, shirt: 2 }],
+  ];
+  for (const [ids, extra] of combos) {
+    const cfg = av({ ...extra, accessories: ids });
+    accs.push({ canvas: avatarStrip(cfg), lines: [accName(cfg.accessories), extra.accColor ? `COR ${extra.accColor}` : 'COR ORIGINAL'] });
+  }
+  const palette = (label: string, n: number, make: (i: number) => AvatarConfig): Cell => ({ canvas: avatarGrid(Array.from({ length: n }, (_, i) => make(i))), lines: [label, `${n} CORES (0 A ${n - 1})`] });
+  const colors: Cell[] = [
+    palette('PELE', O.skin.length, (i) => av({ skin: i })),
+    palette('CABELO E BARBA', O.hairColor.length, (i) => av({ hairColor: i, beard: 4 })),
+    palette('ROUPA DE CIMA', O.shirt.length, (i) => av({ shirt: i })),
+    palette('ROUPA DE BAIXO', O.pants.length, (i) => av({ pants: i })),
+    palette('CALCADO (TENIS)', O.shoeColor.length, (i) => av({ shoeColor: i, shoes: 2 })),
+    palette('ACESSORIOS (0 = ORIGINAL)', O.accColor.length, (i) => av({ accColor: i, accessories: [ACC.Cap, ACC.Tie] })),
+  ];
+  return [
+    { title: 'FORMATO ANTIGO (IGUAL AO DE ANTES)', cells: avatarCells() },
+    { title: `CABELOS (${hairs.length})`, cells: hairs },
+    { title: 'BARBA E BIGODE', cells: beards },
+    { title: 'ROUPA DE CIMA E ESTAMPA', cells: tops },
+    { title: 'ROUPA DE BAIXO E CALCADOS (CAMINHADA)', cells: legs },
+    { title: 'ACESSORIOS E COMBINACOES', cells: accs },
+    { title: 'PALETAS (16 POR PECA)', cells: colors },
+  ];
+}
+
+/** Empilha as seções numa folha só, em escala 1×. */
+function avatarSheetCanvas(): { canvas: HTMLCanvasElement; count: number } {
+  const sections = avatarSections();
+  const count = sections.reduce((n, sec) => n + sec.cells.length, 0);
+  const parts = sections.map((sec, i) => layout(i === 0 ? `OFFICE-IMP VISUAL V2 - AVATARES (${count}) - ${sec.title}` : sec.title, sec.cells, AVATAR_SHEET_W));
+  const canvas = makeCanvas(Math.max(...parts.map((c) => c.width)), parts.reduce((h, c) => h + c.height, 0));
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let y = 0;
+  for (const c of parts) {
+    ctx.drawImage(c, 0, y);
+    y += c.height;
+  }
+  return { canvas, count };
 }
 
 /**
@@ -291,10 +420,14 @@ export function artSheets(scale = 3): ArtSheet[] {
     canvas: scaleCanvas(layout(`OFFICE-IMP VISUAL V2 - ${title} (${cells.length})`, cells), scale),
     count: cells.length,
   });
+  const avatars = (): ArtSheet => {
+    const { canvas, count } = avatarSheetCanvas();
+    return { name: 'avatares', title: 'AVATARES', canvas: scaleCanvas(canvas, scale), count };
+  };
   return [
     build('pisos', 'PISOS E PAREDES', floorCells()),
     build('exterior', 'EXTERIOR E PERIODOS DO DIA', exteriorCells()),
     build('objetos', 'OBJETOS', objectCells()),
-    build('avatares', 'AVATARES', avatarCells()),
+    avatars(),
   ];
 }

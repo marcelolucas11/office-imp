@@ -58,14 +58,14 @@ export function paintAvatarFrame(ctx: Ctx, ox: number, oy: number, cfg: AvatarCo
   // pernas (calça de antes; bermuda e saia deixam a perna de fora)
   const lA = frame === 1 ? -2 : 0;
   const lB = frame === 2 ? -2 : 0;
-  const leg = (x: number, l: number, cloth: string, bare: string) => {
+  const leg = (x: number, l: number, cloth: string, bare: string, hem: string) => {
     if (bottom === 2) {
       p(x, 34, 5, 9 + l, bare);
       return;
     }
     p(x, 34, 5, 9 + l, cloth);
     if (bottom === 1) {
-      p(x, 38, 5, 1, tint(cloth, -0.18));
+      p(x, 38, 5, 1, hem);
       p(x, 39, 5, 4 + l, bare);
     }
   };
@@ -95,8 +95,8 @@ export function paintAvatarFrame(ctx: Ctx, ox: number, oy: number, cfg: AvatarCo
     const f = dir === 'left' ? -1 : 1;
     const xa = 13 + (frame === 1 ? -2 * f : 0);
     const xb = 14 + (frame === 2 ? 2 * f : 0);
-    leg(xa, lA, pants, skin);
-    leg(xb, lB, shade(pants, -0.08), tint(skin, -0.08));
+    leg(xa, lA, pants, skin, tint(pants, -0.2));
+    leg(xb, lB, shade(pants, -0.08), tint(skin, -0.08), tint(pants, -0.28));
     if (shoes === 0) {
       p(xa + (f < 0 ? -1 : 0), 43 + lA, 6, 2, shoe);
       p(xb + (f < 0 ? -1 : 0), 43 + lB, 6, 2, shoe);
@@ -105,8 +105,8 @@ export function paintAvatarFrame(ctx: Ctx, ox: number, oy: number, cfg: AvatarCo
       foot(xb, 43 + lB);
     }
   } else {
-    leg(10, lA, pants, skin);
-    leg(17, lB, pants, skin);
+    leg(10, lA, pants, skin, tint(pants, -0.2));
+    leg(17, lB, pants, skin, tint(pants, -0.2));
     if (shoes === 0) {
       p(10, 43 + lA, 5, 2, shoe);
       p(17, 43 + lB, 5, 2, shoe);
@@ -145,8 +145,9 @@ export function paintAvatarFrame(ctx: Ctx, ox: number, oy: number, cfg: AvatarCo
     if (acc.has(ACC.Watch)) watch(p, ax, by + 10, 4, dir === 'left' ? ax : ax + 3);
     if (acc.has(ACC.Badge)) {
       s(12, by, 1, 5, GOLD_DARK);
-      s(10, by + 5, 2, 4, GOLD);
-      s(10, by + 8, 2, 1, GOLD_DARK);
+      s(10, by + 5, 2, 4, '#f5f5f4');
+      s(10, by + 5, 2, 1, GOLD);
+      s(10, by + 8, 2, 1, GOLD);
     }
   } else {
     p(9, by, 14, 14, shirt);
@@ -180,10 +181,10 @@ export function paintAvatarFrame(ctx: Ctx, ox: number, oy: number, cfg: AvatarCo
         p(18, by, 1, 2, GOLD_DARK);
         p(14, by + 2, 1, 2, GOLD_DARK);
         p(17, by + 2, 1, 2, GOLD_DARK);
-        p(14, by + 4, 4, 5, '#7a5f2a');
-        p(14, by + 4, 4, 4, GOLD);
-        p(15, by + 5, 2, 2, '#f5f5f4');
-        p(15, by + 8, 2, 1, GOLD);
+        p(14, by + 4, 4, 5, Math.abs(lum(shirt) - lum(GOLD)) < 0.18 ? '#8a6d33' : GOLD);
+        p(15, by + 5, 2, 3, '#f5f5f4');
+        p(15, by + 5, 1, 1, GOLD_DARK);
+        p(15, by + 7, 2, 1, '#b5b0a8');
       }
       if (acc.has(ACC.Watch)) watch(p, 23, by + 10 + (frame === 2 ? 1 : 0), 3, 24);
     } else {
@@ -349,8 +350,8 @@ function torsoDetails(p: Rect, s: Rect, cfg: AvatarConfig, view: 'front' | 'back
     p(17, by + 5, 5, 1, c);
   }
   if (top === 1) {
-    // camisa social: gola branca de pontas, carcela e botões
-    const col = lum(shirt) > 0.8 ? '#d6d3d1' : detail(shirt, 0.45);
+    // camisa social: gola de pontas (um tom mais clara), carcela e botões
+    const col = lum(shirt) > 0.8 ? '#cfcac4' : tint(shirt, 0.42);
     if (view === 'front') {
       p(12, by, 3, 1, col);
       p(17, by, 3, 1, col);
@@ -360,7 +361,7 @@ function torsoDetails(p: Rect, s: Rect, cfg: AvatarConfig, view: 'front' | 'back
       p(17, by + 2, 1, 1, col);
       p(15, by, 2, 2, mix(skin, '#000000', 0.25));
       p(15, by + 2, 2, 12, tint(shirt, lum(shirt) > 0.42 ? -0.1 : 0.1));
-      for (const dy of [4, 7, 10]) p(16, by + dy, 1, 1, col);
+      for (const dy of [4, 7, 10]) p(16, by + dy, 1, 1, lum(shirt) > 0.8 ? '#9a958e' : col);
     } else if (view === 'back') {
       p(12, by, 8, 1, col);
     } else {
@@ -469,15 +470,16 @@ function paintBeard(p: Rect, s: Rect, kind: number, dir: Dir, hy: number, hair: 
     }
   } else if (kind === 4) {
     if (dir === 'down') {
-      p(9, hy + 6, 2, 6, b);
-      p(21, hy + 6, 2, 6, b);
-      p(9, hy + 11, 14, 3, b);
-      p(10, hy + 14, 12, 1, b);
-      p(12, hy + 10, 8, 1, b);
+      p(9, hy + 7, 1, 3, b);
+      p(22, hy + 7, 1, 3, b);
+      p(9, hy + 9, 2, 1, b);
+      p(21, hy + 9, 2, 1, b);
+      p(9, hy + 10, 14, 4, b);
+      p(11, hy + 14, 10, 1, b);
       p(14, hy + 11, 4, 1, mix(skin, '#000000', 0.35));
-      p(12, hy + 14, 8, 1, bd);
+      p(13, hy + 14, 6, 1, bd);
     } else {
-      s(14, hy + 6, 3, 5, b);
+      s(15, hy + 7, 2, 3, b);
       s(9, hy + 10, 8, 4, b);
       s(10, hy + 14, 6, 1, bd);
     }
@@ -494,7 +496,7 @@ function paintHair(p: Rect, s: Rect, style: number, dir: Dir, hy: number, hair: 
   switch (style) {
     case 6: {
       // raspado: só a sombra do cabelo, rente à cabeça
-      const z = mix(skin, hair, 0.62);
+      const z = mix(skin, hair, 0.55);
       if (up) p(9, hy - 1, 14, 11, z);
       else if (down) {
         p(9, hy - 1, 14, 3, z);
@@ -584,10 +586,12 @@ function paintHair(p: Rect, s: Rect, style: number, dir: Dir, hy: number, hair: 
       } else {
         s(9, hy - 1, 14, 3, z);
         s(15, hy + 2, 8, 5, z);
-        s(10, hy - 4, 12, 3, H);
-        for (const x of [11, 15, 19]) s(x, hy - 5, 2, 1, H);
+        s(11, hy - 6, 2, 1, H);
+        s(11, hy - 5, 5, 1, H);
+        s(11, hy - 4, 9, 1, H);
+        s(11, hy - 3, 11, 2, H);
         s(20, hy - 1, 3, 7, H);
-        s(10, hy - 2, 12, 1, hd);
+        s(12, hy - 4, 1, 3, hl);
       }
       break;
     }
@@ -604,48 +608,50 @@ function paintHair(p: Rect, s: Rect, style: number, dir: Dir, hy: number, hair: 
         p(22, hy + 3, 2, 10, H);
         p(10, hy + 11, 1, 2, H);
         p(21, hy + 11, 1, 2, H);
-        p(11, hy + 1, 3, 1, hl);
       } else {
         s(8, hy - 2, 16, 5, H);
         s(9, hy + 3, 4, 3, H);
         s(9, hy + 5, 4, 1, hd);
         s(14, hy + 3, 10, 10, H);
         s(14, hy + 12, 10, 1, hd);
-        s(11, hy, 4, 1, hl);
       }
       break;
     }
     case 11: {
-      // cacheado: volume médio com a borda em ondas
-      const wave = (x: number, y: number, w: number, h: number) => {
-        p(x, y, w, h, H);
-        for (let i = 0; i < h; i += 2) {
-          p(x - 1, y + i, 1, 1, H);
-          p(x + w, y + i, 1, 1, H);
-        }
+      // cacheado: volume médio, contorno em ondas (2 px dentro, 1 fora) e cachos em "c"
+      const bumps = (x: number, y: number, h: number) => {
+        for (let i = 0; i < h; i++) if (i % 3 !== 2) p(x, y + i, 1, 1, H);
       };
       if (up) {
         p(9, hy - 3, 14, 1, H);
-        wave(8, hy - 2, 16, 13);
+        p(8, hy - 2, 16, 13, H);
+        bumps(7, hy - 1, 11);
+        bumps(24, hy - 1, 11);
         for (let x = 8; x < 24; x += 3) p(x, hy + 11, 2, 1, H);
       } else if (down) {
         p(9, hy - 3, 14, 1, H);
-        wave(8, hy - 2, 16, 5);
-        wave(8, hy + 3, 2, 8);
-        wave(22, hy + 3, 2, 8);
+        p(8, hy - 2, 16, 5, H);
+        p(8, hy + 3, 2, 8, H);
+        p(22, hy + 3, 2, 8, H);
+        bumps(7, hy - 1, 11);
+        bumps(24, hy - 1, 11);
         p(10, hy + 3, 2, 1, H);
         p(20, hy + 3, 2, 1, H);
+        p(8, hy + 11, 1, 1, H);
+        p(23, hy + 11, 1, 1, H);
       } else {
         s(9, hy - 3, 14, 1, H);
         s(8, hy - 2, 16, 5, H);
         s(9, hy + 3, 2, 1, H);
         s(14, hy + 3, 10, 8, H);
-        for (let i = 0; i < 9; i += 2) s(24, hy - 2 + i, 1, 1, H);
-        for (let i = 0; i < 8; i += 2) s(24, hy + 4 + i, 1, 1, H);
+        bumps(dir === 'left' ? 24 : 7, hy - 1, 11);
         for (let x = 15; x < 24; x += 3) s(x, hy + 11, 2, 1, H);
       }
-      const dots = up ? [[10, 0], [14, 2], [18, -1], [21, 3], [12, 6], [17, 7], [20, 9], [10, 9]] : down ? [[10, -1], [14, 0], [18, -2], [21, 1], [8, 6], [23, 8]] : [[10, -1], [14, 0], [18, -2], [21, 1], [17, 5], [21, 8]];
-      for (const [x, y] of dots) (side(dir) ? s : p)(x, hy + y, 1, 1, hd);
+      const curls = up ? [[10, 0], [15, 2], [19, -1], [11, 5], [18, 6], [14, 9], [21, 8]] : down ? [[11, -2], [16, -1], [20, -2], [13, 1], [18, 1]] : [[11, -2], [16, -1], [20, 0], [17, 4], [21, 7], [16, 8]];
+      for (const [x, y] of curls) {
+        (side(dir) ? s : p)(x, hy + y, 1, 1, hl);
+        (side(dir) ? s : p)(x + 1, hy + y + 1, 1, 1, hd);
+      }
       break;
     }
     case 12: {
@@ -764,7 +770,7 @@ function paintHeadset(p: Rect, s: Rect, dir: Dir, hy: number, accent: string) {
   p(9, hy - 3, 14, 1, hi);
   p(5, hy + 2, 4, 9, b);
   p(23, hy + 2, 4, 9, b);
-  p(dir === 'up' ? 5 : 5, hy + 4, 1, 5, accent);
+  p(5, hy + 4, 1, 5, accent);
   p(26, hy + 4, 1, 5, accent);
   if (dir === 'down') {
     p(9, hy + 10, 1, 1, b);
