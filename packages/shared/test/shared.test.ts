@@ -165,9 +165,9 @@ describe('cor por objeto', () => {
 
   it('cor desconhecida cai na padrão; tipo sem cores devolve null', () => {
     expect(objColor({ type: 'chair', color: 'nao-existe' })).toBe(objectColors('chair')[0]);
-    expect(objectColors('door')).toEqual([]);
-    expect(objColor({ type: 'door' })).toBeNull();
-    expect(objColor({ type: 'door', color: 'blue' })).toBeNull();
+    expect(objectColors('whiteboard')).toEqual([]);
+    expect(objColor({ type: 'whiteboard' })).toBeNull();
+    expect(objColor({ type: 'whiteboard', color: 'blue' })).toBeNull();
     expect(objColor({ type: 'tipo-que-nao-existe', color: 'blue' })).toBeNull();
   });
 

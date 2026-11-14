@@ -7,6 +7,7 @@ import {
   floodFill,
   mapDesks,
   objSize,
+  objectGroup,
   rectsOverlap,
   validateMapShape,
   type OfficeMap,
@@ -96,7 +97,7 @@ export function renderAscii(map: OfficeMap): string {
   const sym: Record<string, string> = { desk: 'D', chair: 'c', table: 'T', table_round: 'o', door: '+', plant: 'p', sofa: 's', whiteboard: 'W', tv: 'V' };
   for (const o of map.objects) {
     const { w, h } = objSize(o);
-    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (rows[o.y + dy]?.[o.x + dx] !== undefined) rows[o.y + dy][o.x + dx] = sym[o.type] ?? 'x';
+    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (rows[o.y + dy]?.[o.x + dx] !== undefined) rows[o.y + dy][o.x + dx] = sym[o.type] ?? (objectGroup(o.type) === 'plants' ? 'p' : 'x');
   }
   for (const s of map.spawns) if (rows[s.y]?.[s.x] !== undefined) rows[s.y][s.x] = '@';
   return rows.map((r) => r.join('')).join('\n');

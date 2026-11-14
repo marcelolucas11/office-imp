@@ -115,7 +115,7 @@ export function buildWing(map: OfficeMap, gen: GeneratorMeta, modules: ModuleSpe
   let bottom = isExpansion ? gen.bottomX : startX;
   for (const spec of modules) {
     const side: Side = canTop && top <= bottom ? 'top' : 'bottom';
-    const chunk = buildChunk(spec, side, theme);
+    const chunk = buildChunk(spec, side, theme, gen.version);
     const ox = side === 'top' ? top : bottom;
     const oy = side === 'top' ? cy - ROOM_H : cy + CORRIDOR_H;
     placeChunk(map, gen, chunk, ox, oy);

@@ -65,8 +65,10 @@ function groupLabel(id: ObjectGroup): string {
       return t('mm.grpAppliances', 'Copa e equipamentos');
     case 'wall':
       return t('mm.grpWall', 'De parede');
+    case 'plants':
+      return t('mm.grpPlants', 'Plantas');
     default:
-      return t('mm.grpDecor', 'Plantas e decoração');
+      return t('mm.grpDecor', 'Decoração');
   }
 }
 const rid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;

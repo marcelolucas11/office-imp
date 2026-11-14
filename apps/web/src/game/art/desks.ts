@@ -23,7 +23,7 @@ function seatCx(info: PaintInfo, seatCol: number): number {
 }
 
 /** Tampo de madeira (ou laminado): face de cima com veios, filete de luz no fundo e borda da frente. */
-function woodTop(p: Sprite, x: number, y: number, w: number, depth: number, edge: number, m: Mat, seed: number): void {
+export function woodTop(p: Sprite, x: number, y: number, w: number, depth: number, edge: number, m: Mat, seed: number): void {
   p.rect(x, y, w, depth, m.base);
   p.rect(x, y, w, 1, m.hi);
   p.rect(x, y + 1, w, 1, m.light);
@@ -40,7 +40,7 @@ function woodTop(p: Sprite, x: number, y: number, w: number, depth: number, edge
 }
 
 /** Pé de metal reto, de 3 px. */
-function leg(p: Sprite, x: number, y: number, h: number, m: Mat = PAL.metal): void {
+export function leg(p: Sprite, x: number, y: number, h: number, m: Mat = PAL.metal): void {
   p.rect(x, y, 3, h, m.base);
   p.rect(x, y, 1, h, m.light);
   p.rect(x + 2, y, 1, h, m.dark);

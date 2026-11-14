@@ -139,8 +139,15 @@ describe('sprites dos objetos', () => {
   });
 
   it('objetos redesenhados têm contorno escuro em toda a borda e nenhum pixel suavizado', () => {
-    // todo tipo com desenho do visual v2: cadeira e sofá (Fase A), mesas e assentos (C1), objetos de mesa e extras (C2)
-    expect(REDESIGNED_TYPES).toEqual(expect.arrayContaining(['chair', 'sofa', 'armchair', 'photo', 'trophy', ...DESK_TYPES, 'keyboard', 'neon', 'aquarium', 'split_ac']));
+    // todo tipo com desenho do visual v2: cadeira e sofá (Fase A), mesas e assentos (C1), objetos de mesa e extras (C2),
+    // plantas, móveis, copa, interativos e estrutura (C3)
+    expect(REDESIGNED_TYPES).toEqual(
+      expect.arrayContaining([
+        ...['chair', 'sofa', 'armchair', 'photo', 'trophy', ...DESK_TYPES, 'keyboard', 'neon', 'aquarium', 'split_ac'],
+        ...['plant', 'plant_small', 'monstera', 'snake_plant', 'cactus', 'succulent_bowl', 'palm', 'tall_vase', 'hanging_fern', 'wall_garden'],
+        ...['table', 'table_round', 'counter', 'bookshelf', 'cabinet', 'lamp', 'podium', 'rug', 'rug_logo', 'frame', 'coffee', 'cooler', 'fridge'],
+      ]),
+    );
     const bad: string[] = [];
     for (const type of REDESIGNED_TYPES) {
       const colors = objectColors(type).length ? objectColors(type).map((c) => c.id) : [undefined];

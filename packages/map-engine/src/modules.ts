@@ -55,6 +55,30 @@ export function floorTheme(version: number | undefined): FloorTheme {
   return FLOOR_THEMES[version ?? 1] ?? FLOOR_THEMES[GENERATOR_VERSION];
 }
 
+/**
+ * Plantas dos cômodos a partir da versão 2 (visual v2, Fase C3): um par por tipo de cômodo,
+ * alternado em diagonal pelos quadrantes do cômodo (nos cantos da recepção, costela-de-adão e
+ * espada-de-são-jorge se cruzam). A versão 1 continua só com a planta de sempre, então a ala nova
+ * de um escritório antigo combina com o resto. Mapas salvos nunca mudam: só cômodos novos usam isto.
+ */
+export const PLANT_PAIRS: Record<ModuleSpec['kind'], [string, string]> = {
+  reception: ['monstera', 'snake_plant'],
+  desks: ['snake_plant', 'monstera'],
+  meeting: ['palm', 'monstera'],
+  lounge: ['cactus', 'palm'],
+  auditorium: ['palm', 'snake_plant'],
+  partnersShared: ['tall_vase', 'monstera'],
+  partnerSolo: ['monstera', 'tall_vase'],
+  blank: ['plant', 'plant'],
+};
+
+/** Tipo da planta que o gerador põe em (x, y) de um cômodo `w × h` do tipo `kind`. */
+export function plantFor(version: number | undefined, kind: ModuleSpec['kind'], x: number, y: number, w: number, h: number): string {
+  if ((version ?? 1) < 2) return 'plant';
+  const quadrant = (x < w / 2 ? 0 : 1) + (y < h / 2 ? 0 : 1);
+  return PLANT_PAIRS[kind][quadrant % 2];
+}
+
 export type ModuleSpec =
   | { kind: 'reception'; officeName?: string }
   | { kind: 'desks' }
@@ -237,8 +261,17 @@ function buildBlank(side: Side, f: FloorTheme, width = 14): Chunk {
   return shell('blank', Math.max(6, Math.min(40, width)), f.blank, side);
 }
 
-/** `theme` = pisos do cômodo; sem ele, valem os dos escritórios novos. */
-export function buildChunk(spec: ModuleSpec, side: Side, theme: FloorTheme = floorTheme(GENERATOR_VERSION)): Chunk {
+/**
+ * `theme` = pisos do cômodo; sem ele, valem os dos escritórios novos. `version` = versão do
+ * gerador (escolhe as plantas, ver `plantFor`).
+ */
+export function buildChunk(spec: ModuleSpec, side: Side, theme: FloorTheme = floorTheme(GENERATOR_VERSION), version: number = GENERATOR_VERSION): Chunk {
+  const c = buildRoom(spec, side, theme);
+  for (const o of c.objects) if (o.type === 'plant') o.type = plantFor(version, spec.kind, o.x, o.y, c.w, c.h);
+  return c;
+}
+
+function buildRoom(spec: ModuleSpec, side: Side, theme: FloorTheme): Chunk {
   switch (spec.kind) {
     case 'reception':
       return buildReception(side, theme, spec.officeName);

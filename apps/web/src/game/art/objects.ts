@@ -1,195 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { OBJECT_DEFS, objColor, objSetup, objSize, objText, type MapObject } from '@office-imp/shared';
+import { APPLIANCES } from './appliances';
 import { CHAIRS } from './chairs';
 import { DESK_ITEMS } from './deskitems';
 import { DESKS } from './desks';
 import { EXTRAS } from './extras';
+import { FURNITURE } from './furniture';
+import { PLANTS } from './plants';
 import { Sprite } from './prim';
 import { SEATING } from './seating';
 import type { SpritePainter } from './sprites';
-import { T, makeCanvas, noise, r, shade, type Ctx } from './tiles';
+import { T, makeCanvas, r, shade, type Ctx } from './tiles';
 
-const WOOD = '#9c6b43';
 const GOLD = '#d7b870';
 
 /** Desenho antigo (retângulos direto no canvas). Vai sumindo conforme os tipos migram para `SpritePainter`. */
 type Painter = (ctx: Ctx, w: number, h: number, top: number, o: MapObject) => void;
 
 /** Desenhos do visual v2 (primitivas de `prim.ts`). Têm prioridade sobre os antigos. */
-const spritePainters: Record<string, SpritePainter> = { ...SEATING, ...CHAIRS, ...DESKS, ...DESK_ITEMS, ...EXTRAS };
+const spritePainters: Record<string, SpritePainter> = { ...SEATING, ...CHAIRS, ...DESKS, ...DESK_ITEMS, ...EXTRAS, ...PLANTS, ...FURNITURE, ...APPLIANCES };
 
 /** Tipos já redesenhados no visual v2 (os outros ainda usam o desenho antigo, até a Fase C3). */
 export const REDESIGNED_TYPES = Object.keys(spritePainters);
 
 const painters: Record<string, Painter> = {
-  table(ctx, w, h, top) {
-    const hh = h * T;
-    const y = top;
-    r(ctx, 2, y + 3, w - 4, hh - 8, WOOD);
-    r(ctx, 2, y + 3, w - 4, 2, shade(WOOD, 0.14));
-    r(ctx, 2, y + hh - 5, w - 4, 5, shade(WOOD, -0.2));
-    for (let x = 8; x < w - 8; x += 13) r(ctx, x, y + 8 + Math.floor(noise(x, 3) * (hh - 22)), 6, 1, shade(WOOD, -0.07));
-    r(ctx, 6, y + 5, w - 12, 1, shade(WOOD, 0.06));
-    r(ctx, Math.floor(w / 2) - 10, y + Math.floor(hh / 2) - 7, 20, 3, '#e5e7eb');
-    r(ctx, Math.floor(w / 2) - 10, y + Math.floor(hh / 2) - 4, 20, 1, '#9ca3af');
-  },
-  table_round(ctx, _w, _h, top) {
-    const y = top;
-    const rows = [10, 16, 20, 22, 24, 24, 26, 26, 26, 26, 26, 26, 24, 24, 22, 20, 16, 10];
-    rows.forEach((len, i) => r(ctx, 16 - len / 2, y + 5 + i, len, 1, i > 13 ? shade(WOOD, -0.18) : WOOD));
-    r(ctx, 9, y + 8, 10, 1, shade(WOOD, 0.14));
-    r(ctx, 14, y + 12, 4, 4, '#f3f4f6');
-    r(ctx, 13, y + 23, 6, 6, shade(WOOD, -0.3));
-  },
-  counter(ctx, w, h, top) {
-    const hh = h * T;
-    r(ctx, 0, top + 2, w, hh - 4, '#44403c');
-    r(ctx, 0, top + 2, w, Math.max(10, hh - 14), '#d6d3d1');
-    r(ctx, 0, top + 2, w, 2, '#f5f5f4');
-    r(ctx, 0, top + hh - 4, w, 2, '#292524');
-    for (let x = 6; x < w - 4; x += 16) r(ctx, x, top + hh - 10, 6, 1, GOLD);
-  },
-  bookshelf(ctx, w, _h, top) {
-    const y = top - T;
-    r(ctx, 2, y + 4, w - 4, 58, '#4a2f20');
-    const colors = ['#b91c1c', '#1d4ed8', GOLD, '#15803d', '#7c3aed', '#e5e7eb', '#ea580c'];
-    for (let s = 0; s < 3; s++) {
-      const sy = y + 8 + s * 18;
-      r(ctx, 4, sy, w - 8, 14, '#2a1a12');
-      let x = 5;
-      let i = 0;
-      while (x < w - 8) {
-        const bw = 2 + Math.floor(noise(s, i, 4) * 3);
-        const bh = 9 + Math.floor(noise(i, s, 6) * 5);
-        r(ctx, x, sy + 14 - bh, bw, bh, colors[Math.floor(noise(s * 7, i * 3, 2) * colors.length)]);
-        x += bw + 1;
-        i++;
-      }
-    }
-    r(ctx, 2, y + 4, w - 4, 2, '#6b4530');
-  },
-  cabinet(ctx, w, _h, top) {
-    r(ctx, 3, top + 4, w - 6, 26, '#57534e');
-    r(ctx, 3, top + 4, w - 6, 2, '#78716c');
-    r(ctx, 5, top + 9, w - 10, 8, '#44403c');
-    r(ctx, 5, top + 19, w - 10, 8, '#44403c');
-    r(ctx, 14, top + 12, 4, 1, GOLD);
-    r(ctx, 14, top + 22, 4, 1, GOLD);
-  },
-  coffee(ctx, w, _h, top) {
-    r(ctx, 1, top + 6, w - 2, 24, '#44403c');
-    r(ctx, 1, top + 6, w - 2, 3, '#d6d3d1');
-    const y = top - 18;
-    r(ctx, 7, y + 2, 18, 22, '#16181d');
-    r(ctx, 9, y + 4, 14, 5, '#30343f');
-    r(ctx, 20, y + 5, 2, 2, '#ef4444');
-    r(ctx, 11, y + 12, 10, 9, '#0b0c0f');
-    r(ctx, 13, y + 16, 6, 5, '#f5f5f4');
-    r(ctx, 14, y + 17, 4, 1, '#7c4a1e');
-  },
-  cooler(ctx, _w, _h, top) {
-    const y = top - 22;
-    r(ctx, 10, y + 2, 12, 16, '#7dd3fc');
-    r(ctx, 11, y + 3, 3, 12, '#bae6fd');
-    r(ctx, 12, y, 8, 3, '#38bdf8');
-    r(ctx, 8, y + 18, 16, 32, '#e5e7eb');
-    r(ctx, 8, y + 18, 16, 2, '#f9fafb');
-    r(ctx, 11, y + 24, 3, 3, '#3b82f6');
-    r(ctx, 18, y + 24, 3, 3, '#ef4444');
-    r(ctx, 8, y + 46, 16, 4, '#9ca3af');
-  },
-  fridge(ctx, _w, _h, top) {
-    const y = top - 26;
-    r(ctx, 4, y + 2, 24, 54, '#cbd5e1');
-    r(ctx, 4, y + 2, 24, 2, '#f1f5f9');
-    r(ctx, 4, y + 22, 24, 1, '#64748b');
-    r(ctx, 23, y + 8, 2, 10, '#475569');
-    r(ctx, 23, y + 27, 2, 14, '#475569');
-    r(ctx, 4, y + 52, 24, 4, '#64748b');
-  },
-  plant(ctx, _w, _h, top) {
-    const y = top - 20;
-    const g = ['#166534', '#15803d', '#22c55e'];
-    const blobs: [number, number, number, number, number][] = [
-      [9, 6, 14, 12, 1],
-      [4, 14, 10, 12, 0],
-      [18, 12, 10, 14, 0],
-      [11, 2, 9, 9, 2],
-      [8, 20, 16, 10, 1],
-    ];
-    for (const [x, by, w, h, c] of blobs) r(ctx, x, y + by, w, h, g[c]);
-    r(ctx, 13, y + 9, 3, 3, g[2]);
-    r(ctx, 20, y + 17, 3, 3, g[2]);
-    r(ctx, 7, y + 18, 2, 2, g[2]);
-    r(ctx, 15, y + 28, 2, 8, '#365314');
-    r(ctx, 9, y + 34, 14, 14, '#9a3412');
-    r(ctx, 8, y + 34, 16, 3, '#c2410c');
-    r(ctx, 11, y + 46, 10, 2, '#7c2d12');
-  },
-  plant_small(ctx, _w, _h, top) {
-    const y = top;
-    r(ctx, 12, y + 6, 8, 6, '#15803d');
-    r(ctx, 10, y + 9, 5, 5, '#166534');
-    r(ctx, 17, y + 8, 5, 6, '#22c55e');
-    r(ctx, 12, y + 14, 8, 7, '#9a3412');
-    r(ctx, 11, y + 14, 10, 2, '#c2410c');
-  },
-  lamp(ctx, _w, _h, top) {
-    const y = top - 20;
-    r(ctx, 8, y + 2, 16, 12, '#fde68a');
-    r(ctx, 10, y, 12, 3, '#fcd34d');
-    r(ctx, 15, y + 14, 2, 30, '#44403c');
-    r(ctx, 10, y + 44, 12, 4, '#292524');
-  },
-  frame(ctx, _w, _h, top) {
-    r(ctx, 9, top + 6, 14, 14, '#7c5a2e');
-    r(ctx, 11, top + 8, 10, 10, '#bfdbfe');
-    r(ctx, 11, top + 14, 10, 4, '#4ade80');
-    r(ctx, 17, top + 9, 3, 3, '#fde047');
-  },
-  photo(ctx, _w, _h, top) {
-    r(ctx, 10, top + 8, 12, 13, '#1f2937');
-    r(ctx, 12, top + 10, 8, 9, '#fef3c7');
-    r(ctx, 14, top + 11, 4, 4, '#e8b88f');
-    r(ctx, 13, top + 15, 6, 4, '#2563eb');
-  },
-  trophy(ctx, _w, _h, top) {
-    r(ctx, 11, top + 6, 10, 8, GOLD);
-    r(ctx, 8, top + 7, 3, 4, shade(GOLD, -0.1));
-    r(ctx, 21, top + 7, 3, 4, shade(GOLD, -0.1));
-    r(ctx, 13, top + 14, 6, 2, shade(GOLD, -0.1));
-    r(ctx, 15, top + 16, 2, 4, GOLD);
-    r(ctx, 11, top + 20, 10, 3, '#292524');
-    r(ctx, 13, top + 8, 2, 4, '#f5e6b8');
-  },
-  rug(ctx, w, h, top) {
-    const hh = h * T;
-    r(ctx, 3, top + 3, w - 6, hh - 6, '#22232b');
-    r(ctx, 5, top + 5, w - 10, 1, GOLD);
-    r(ctx, 5, top + hh - 6, w - 10, 1, GOLD);
-    r(ctx, 5, top + 5, 1, hh - 10, GOLD);
-    r(ctx, w - 6, top + 5, 1, hh - 10, GOLD);
-    for (let x = 12; x < w - 12; x += 8) for (let y = 12; y < hh - 10; y += 8) r(ctx, x, top + y, 2, 2, '#34363f');
-  },
-  rug_logo(ctx, w, h, top) {
-    painters.rug(ctx, w, h, top, {} as MapObject);
-    // coroa dourada genérica no centro
-    const cx = Math.floor(w / 2);
-    const cy = top + Math.floor((h * T) / 2);
-    r(ctx, cx - 16, cy + 4, 32, 6, GOLD);
-    for (const dx of [-16, -8, 0, 8]) {
-      r(ctx, cx + dx, cy - 4, 8, 8, GOLD);
-      r(ctx, cx + dx + 2, cy - 8, 4, 4, GOLD);
-    }
-    r(ctx, cx - 2, cy - 12, 4, 4, '#f5e6b8');
-    r(ctx, cx - 14, cy + 6, 28, 1, shade(GOLD, -0.2));
-  },
-  podium(ctx, _w, _h, top) {
-    r(ctx, 9, top + 6, 14, 22, '#4a2f20');
-    r(ctx, 7, top + 4, 18, 5, '#6b4530');
-    r(ctx, 7, top + 4, 18, 1, GOLD);
-    r(ctx, 14, top + 14, 4, 4, GOLD);
-  },
   door(ctx, _w, _h, top) {
     r(ctx, 0, top, 3, T, '#5b3a29');
     r(ctx, T - 3, top, 3, T, '#5b3a29');

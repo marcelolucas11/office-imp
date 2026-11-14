@@ -91,9 +91,9 @@ export interface Rect {
 export type InteractKind = 'whiteboard' | 'website' | 'tv' | 'poster' | 'game' | 'note';
 export type ObjectCategory = 'structure' | 'furniture' | 'decor' | 'interactive';
 /** Grupo do objeto na paleta do Mapmaker (subdivisão das categorias, que ficaram longas no visual v2). */
-export type ObjectGroup = 'interactive' | 'structure' | 'desks' | 'seating' | 'furniture' | 'deskitems' | 'appliances' | 'wall' | 'decor';
+export type ObjectGroup = 'interactive' | 'structure' | 'desks' | 'seating' | 'furniture' | 'deskitems' | 'appliances' | 'wall' | 'plants' | 'decor';
 /** Grupos na ordem em que aparecem na paleta. */
-export const OBJECT_GROUPS: ObjectGroup[] = ['interactive', 'structure', 'desks', 'seating', 'furniture', 'deskitems', 'appliances', 'wall', 'decor'];
+export const OBJECT_GROUPS: ObjectGroup[] = ['interactive', 'structure', 'desks', 'seating', 'furniture', 'deskitems', 'appliances', 'wall', 'plants', 'decor'];
 
 /** Variante de cor de um objeto (visual v2). */
 export interface ObjectColor {
@@ -218,6 +218,34 @@ const POTS: ObjectColor[] = [
   { id: 'blue', label: 'Vaso azul', hex: '#4a6fa5' },
 ];
 
+/** A lista de vasos com outra variante na frente (a padrão do tipo). */
+const potsWith = (first: string): ObjectColor[] => [...POTS.filter((c) => c.id === first), ...POTS.filter((c) => c.id !== first)];
+
+/** Molduras (quadro decorativo, jardim vertical). A de madeira é a padrão. */
+const FRAMES: ObjectColor[] = [
+  { id: 'wood', label: 'Moldura de madeira', hex: '#8f6340' },
+  { id: 'black', label: 'Moldura preta', hex: '#2a2b30' },
+  { id: 'white', label: 'Moldura branca', hex: '#e9ecf2' },
+  { id: 'gold', label: 'Moldura dourada', hex: '#d7b870' },
+];
+
+/** Madeira de móveis escuros (estante, púlpito). A nogueira escura é a cor de antes do visual v2. */
+const CABINET_WOODS: ObjectColor[] = [
+  { id: 'walnut', label: 'Nogueira escura', hex: '#5c4130' },
+  { id: 'oak', label: 'Carvalho', hex: '#a06e45' },
+  { id: 'white', label: 'Branco', hex: '#d8d5cd' },
+  { id: 'black', label: 'Preto', hex: '#3a3b43' },
+];
+
+/** Tecido de tapete. O grafite com borda dourada é o tapete de antes do visual v2. */
+const RUGS: ObjectColor[] = [
+  { id: 'graphite', label: 'Grafite com dourado', hex: '#2b2c35' },
+  { id: 'blue', label: 'Azul', hex: '#34507a' },
+  { id: 'wine', label: 'Vinho', hex: '#6e2f3a' },
+  { id: 'green', label: 'Verde', hex: '#335c47' },
+  { id: 'sand', label: 'Areia', hex: '#c2ad86' },
+];
+
 const defs: ObjectDef[] = [
   // ----- mesas de trabalho (C1) -----
   { type: 'desk', label: 'Mesa de trabalho', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: TOPS },
@@ -236,21 +264,61 @@ const defs: ObjectDef[] = [
   { type: 'armchair', label: 'Poltrona', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
   { type: 'pouf', label: 'Pufe', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
   { type: 'sofa', label: 'Sofá', w: 2, h: 1, solid: true, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
-  // ----- mesas e móveis -----
-  { type: 'table', label: 'Mesa de reunião', w: 4, h: 2, solid: true, category: 'furniture', resizable: true },
-  { type: 'table_round', label: 'Mesa redonda', w: 1, h: 1, solid: true, category: 'furniture' },
-  { type: 'counter', label: 'Balcão', w: 2, h: 1, solid: true, category: 'furniture', resizable: true },
-  { type: 'bookshelf', label: 'Estante', w: 1, h: 1, solid: true, category: 'furniture', tall: 1 },
-  { type: 'cabinet', label: 'Armário', w: 1, h: 1, solid: true, category: 'furniture' },
+  // ----- mesas e móveis (redesenhados na C3) -----
+  { type: 'table', label: 'Mesa de reunião', w: 4, h: 2, solid: true, category: 'furniture', resizable: true, colors: TOPS },
+  { type: 'table_round', label: 'Mesa redonda', w: 1, h: 1, solid: true, category: 'furniture', colors: TOPS },
+  { type: 'counter', label: 'Balcão', w: 2, h: 1, solid: true, category: 'furniture', resizable: true, colors: [
+    { id: 'graphite', label: 'Grafite', hex: '#46423e' },
+    { id: 'wood', label: 'Madeira', hex: '#a06e45' },
+    { id: 'white', label: 'Branco', hex: '#d8d5cd' },
+    { id: 'navy', label: 'Azul-marinho', hex: '#2f3f5c' },
+  ] },
+  { type: 'bookshelf', label: 'Estante', w: 1, h: 1, solid: true, category: 'furniture', tall: 1, colors: CABINET_WOODS },
+  { type: 'cabinet', label: 'Armário (gaveteiro)', w: 1, h: 1, solid: true, category: 'furniture', colors: [
+    { id: 'graphite', label: 'Grafite', hex: '#57534e' },
+    { id: 'white', label: 'Branco', hex: '#d9dce0' },
+    { id: 'wood', label: 'Madeira', hex: '#a06e45' },
+    { id: 'blue', label: 'Azul', hex: '#3d5a8a' },
+  ] },
   // ----- copa e equipamentos -----
-  { type: 'coffee', label: 'Máquina de café', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1 },
-  { type: 'cooler', label: 'Bebedouro', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1 },
-  { type: 'fridge', label: 'Geladeira', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1 },
-  // ----- plantas e decoração -----
-  { type: 'plant', label: 'Planta', w: 1, h: 1, solid: true, category: 'decor', tall: 1 },
-  { type: 'plant_small', label: 'Vaso pequeno', w: 1, h: 1, solid: false, category: 'decor' },
-  { type: 'lamp', label: 'Luminária', w: 1, h: 1, solid: false, category: 'decor', tall: 1 },
-  { type: 'frame', label: 'Quadro decorativo', w: 1, h: 1, solid: false, category: 'decor', group: 'wall' },
+  { type: 'coffee', label: 'Máquina de café', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1, colors: [
+    { id: 'black', label: 'Preta', hex: '#2a2b30' },
+    { id: 'steel', label: 'Inox', hex: '#9da2aa' },
+    { id: 'white', label: 'Branca', hex: '#d9dce0' },
+  ] },
+  { type: 'cooler', label: 'Bebedouro', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1, colors: [
+    { id: 'white', label: 'Branco', hex: '#e3e5e9' },
+    { id: 'graphite', label: 'Grafite', hex: '#4a4d57' },
+  ] },
+  { type: 'fridge', label: 'Geladeira', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1, colors: [
+    { id: 'steel', label: 'Inox', hex: '#c3cad3' },
+    { id: 'white', label: 'Branca', hex: '#e6e8ec' },
+    { id: 'black', label: 'Preta', hex: '#34353c' },
+    { id: 'red', label: 'Vermelha retrô', hex: '#c8383c' },
+  ] },
+  // ----- plantas (C3): `plant` e `plant_small` são as de antes do visual v2, redesenhadas -----
+  { type: 'plant', label: 'Planta de folhagem', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', tall: 1, colors: POTS },
+  { type: 'plant_small', label: 'Vaso pequeno', w: 1, h: 1, solid: false, category: 'decor', group: 'plants', colors: POTS },
+  { type: 'monstera', label: 'Costela-de-adão', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', tall: 1, colors: potsWith('white') },
+  { type: 'snake_plant', label: 'Espada-de-são-jorge', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', tall: 1, colors: potsWith('black') },
+  { type: 'cactus', label: 'Cacto grande (mandacaru)', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', tall: 1, colors: POTS },
+  { type: 'succulent_bowl', label: 'Suculentas em vaso médio', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', colors: potsWith('white') },
+  { type: 'palm', label: 'Palmeira', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', tall: 1, colors: [{ id: 'basket', label: 'Cesto de palha', hex: '#b8925a' }, ...POTS] },
+  { type: 'tall_vase', label: 'Vaso alto com plumas', w: 1, h: 1, solid: true, category: 'decor', group: 'plants', tall: 1, colors: potsWith('white') },
+  { type: 'hanging_fern', label: 'Samambaia pendurada (parede)', w: 1, h: 1, solid: false, category: 'decor', group: 'plants', colors: [
+    { id: 'macrame', label: 'Macramê', hex: '#e6dcc6' },
+    { id: 'terracotta', label: 'Vaso de barro', hex: '#a85f3a' },
+    { id: 'black', label: 'Vaso preto', hex: '#34353c' },
+  ] },
+  { type: 'wall_garden', label: 'Planta de parede (jardim vertical)', w: 2, h: 1, solid: false, category: 'decor', group: 'plants', colors: FRAMES.slice(0, 3) },
+  // ----- decoração -----
+  { type: 'lamp', label: 'Luminária de chão', w: 1, h: 1, solid: false, category: 'decor', tall: 1, colors: [
+    { id: 'cream', label: 'Cúpula creme', hex: '#f1e2b8' },
+    { id: 'white', label: 'Cúpula branca', hex: '#eef0f3' },
+    { id: 'black', label: 'Cúpula preta', hex: '#2f3036' },
+    { id: 'gold', label: 'Cúpula dourada', hex: '#d7b870' },
+  ] },
+  { type: 'frame', label: 'Quadro decorativo', w: 1, h: 1, solid: false, category: 'decor', group: 'wall', colors: FRAMES },
   { type: 'photo', label: 'Porta-retrato', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [
     { id: 'wood', label: 'Moldura de madeira', hex: '#8f6340' },
     { id: 'black', label: 'Moldura preta', hex: '#2a2b30' },
@@ -262,11 +330,12 @@ const defs: ObjectDef[] = [
     { id: 'silver', label: 'Prata', hex: '#b8bcc4' },
     { id: 'bronze', label: 'Bronze', hex: '#b5774a' },
   ] },
-  { type: 'rug', label: 'Tapete', w: 3, h: 2, solid: false, category: 'decor', resizable: true },
-  { type: 'rug_logo', label: 'Tapete com logo', w: 4, h: 2, solid: false, category: 'decor' },
-  { type: 'podium', label: 'Púlpito', w: 1, h: 1, solid: false, category: 'decor' },
+  { type: 'rug', label: 'Tapete', w: 3, h: 2, solid: false, category: 'decor', resizable: true, colors: RUGS },
+  { type: 'rug_logo', label: 'Tapete com logo', w: 4, h: 2, solid: false, category: 'decor', colors: RUGS },
+  { type: 'podium', label: 'Púlpito', w: 1, h: 1, solid: false, category: 'decor', colors: CABINET_WOODS },
   { type: 'door', label: 'Porta', w: 1, h: 1, solid: false, category: 'structure' },
   { type: 'portal', label: 'Portal', w: 1, h: 1, solid: false, category: 'structure' },
+  // ----- interativos: só o desenho mudou na C3; `interact` e `props` continuam iguais -----
   { type: 'whiteboard', label: 'Quadro branco', w: 2, h: 1, solid: true, category: 'interactive', interact: 'whiteboard', tall: 1 },
   { type: 'tv', label: 'TV (vídeo do YouTube)', w: 2, h: 1, solid: true, category: 'interactive', interact: 'tv', tall: 1 },
   { type: 'kiosk', label: 'Site incorporado', w: 1, h: 1, solid: true, category: 'interactive', interact: 'website', tall: 1 },

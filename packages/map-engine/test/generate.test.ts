@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
-import { buildCollision, deskSeat, emptyMap, Floor, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
-import { buildWing, CORRIDOR_H, expandOffice, FLOOR_THEMES, generateOffice, GENERATOR_VERSION, modulesForInput, renderAscii, reserveBlankWing, ROOM_H, toTiled, validateOffice } from '../src';
+import { OBJECT_DEFS, buildCollision, deskSeat, emptyMap, Floor, objectGroup, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
+import { buildWing, CORRIDOR_H, expandOffice, FLOOR_THEMES, generateOffice, GENERATOR_VERSION, modulesForInput, PLANT_PAIRS, renderAscii, reserveBlankWing, ROOM_H, toTiled, validateOffice } from '../src';
 
 const base: WizardInput = { name: 'Impera', size: 'small', partners: 2, partnersShareRoom: true };
 
@@ -214,6 +214,52 @@ describe('pisos do visual v2 no gerador', () => {
     const old = legacyOffice(input);
     delete old.meta;
     expect(expandOffice(old, 20).map.meta?.gen?.version).toBe(1);
+  });
+});
+
+describe('plantas do visual v2 no gerador', () => {
+  const input: WizardInput = { name: 'Impera', size: 'medium', partners: 2, partnersShareRoom: true };
+  const plants = (map: OfficeMap, x0 = 0) => map.objects.filter((o) => o.x >= x0 && objectGroup(o.type) === 'plants');
+
+  it('escritório novo alterna as plantas novas; os cantos da recepção cruzam costela-de-adão e espada-de-são-jorge', () => {
+    const map = generateOffice(input);
+    const used = new Set(plants(map).map((o) => o.type));
+    for (const type of ['monstera', 'snake_plant', 'palm', 'cactus', 'tall_vase']) expect([type, used.has(type)]).toEqual([type, true]);
+    expect(used.has('plant')).toBe(false);
+    // recepção: a primeira sala do escritório (a do tapete com logo)
+    const logo = map.objects.find((o) => o.type === 'rug_logo')!;
+    const corners = plants(map)
+      .filter((o) => Math.abs(o.x - logo.x) <= 6 && Math.abs(o.y - logo.y) <= 6)
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .map((o) => o.type);
+    expect(corners).toEqual(['monstera', 'snake_plant', 'snake_plant', 'monstera']);
+    expect(JSON.stringify(generateOffice(input))).toBe(JSON.stringify(map));
+  });
+
+  it('as plantas novas ocupam o mesmo bloco e bloqueiam como a planta de sempre', () => {
+    for (const type of new Set(Object.values(PLANT_PAIRS).flat())) {
+      const def = OBJECT_DEFS[type];
+      expect([type, def.w, def.h, def.solid, def.tall]).toEqual([type, 1, 1, true, 1]);
+    }
+    const fresh = generateOffice(input);
+    const legacy = legacyOffice(input);
+    // mesmas posições de planta, mesmo mapa de colisão
+    expect(plants(fresh).map((o) => [o.x, o.y])).toEqual(plants(legacy).map((o) => [o.x, o.y]));
+    const a = { ...fresh, layers: { ...fresh.layers, floor: legacy.layers.floor } };
+    expect(Array.from(buildCollision(a))).toEqual(Array.from(buildCollision(legacy)));
+  });
+
+  it('escritório antigo e a ala nova dele continuam só com a planta de sempre', () => {
+    const before = legacyOffice(input);
+    expect(new Set(plants(before).map((o) => o.type))).toEqual(new Set(['plant']));
+    const after = expandOffice(before, 20).map;
+    expect(new Set(plants(after, before.width).map((o) => o.type))).toEqual(new Set(['plant']));
+    // e as plantas que já existiam não mudam
+    expect(plants(after).filter((o) => o.x < before.width)).toEqual(plants(before));
+  });
+
+  it('o ASCII mostra toda planta como "p"', () => {
+    expect(renderAscii(generateOffice(input))).toContain('p');
   });
 });
 
