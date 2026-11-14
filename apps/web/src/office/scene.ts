@@ -86,6 +86,15 @@ const px = (tx: number) => tx * T + T / 2;
 const py = (ty: number) => ty * T + T - 3;
 const frame = (dir: Dir, f: number) => DIRS.indexOf(dir) * AV_FRAMES + f;
 
+/** Período forçado para conferência visual e testes; `null` = pelo relógio, no fuso do escritório. */
+let forcedPeriod: DayPeriod | null = null;
+
+/** Força o período do dia do exterior (ou volta ao automático com `null`). Vale para a cena aberta e para as próximas. */
+export function forcePeriod(p: DayPeriod | null): void {
+  forcedPeriod = p && p in EXTERIOR ? p : null;
+  bus.emit('period:check');
+}
+
 export function isTyping(): boolean {
   const el = document.activeElement as HTMLElement | null;
   if (!el) return false;
@@ -122,8 +131,6 @@ export class OfficeScene extends Phaser.Scene {
   private epoch = 0;
   /** Período do dia no fuso do escritório: muda só o exterior e a vista das janelas. */
   private period: DayPeriod = 'day';
-  /** Período forçado (conferência visual e testes, pelo evento `period` do barramento). */
-  private forcedPeriod: DayPeriod | null = null;
   private periodCheckedAt = 0;
   private grass: Phaser.GameObjects.TileSprite | null = null;
   /** Grama do período anterior, enquanto a nova aparece por cima. */
@@ -188,10 +195,9 @@ export class OfficeScene extends Phaser.Scene {
     });
     on('goto', (pt: Point) => this.goTo(pt.x, pt.y));
     on('zoom', (dir: number) => this.zoom(dir));
-    on('period', (p: DayPeriod | null) => {
-      this.forcedPeriod = p && p in EXTERIOR ? p : null;
-      this.checkPeriod();
-    });
+    // conferência visual e testes: window.__oi.bus.emit('period', 'night'); null volta ao automático
+    on('period', (p: DayPeriod | null) => forcePeriod(p));
+    on('period:check', () => this.checkPeriod());
     this.offs.push(
       useGame.subscribe((s, prev) => {
         if (s.buildMode !== prev.buildMode) this.drawZone();
@@ -278,7 +284,7 @@ export class OfficeScene extends Phaser.Scene {
   // ---------- exterior e período do dia ----------
 
   private currentPeriod(): DayPeriod {
-    return this.forcedPeriod ?? dayPeriod(serverNow(), useGame.getState().office?.timezone ?? '');
+    return forcedPeriod ?? dayPeriod(serverNow(), useGame.getState().office?.timezone ?? '');
   }
 
   private grassTexture(period: DayPeriod): string {

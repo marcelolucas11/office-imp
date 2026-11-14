@@ -16,6 +16,8 @@ const OfficePage = lazy(() => import('./office/OfficePage'));
 const AdminPage = lazy(() => import('./admin/AdminPage'));
 // folha de sprites para conferência visual: só existe no servidor de desenvolvimento
 const DevArt = import.meta.env.DEV ? lazy(() => import('./pages/DevArt')) : null;
+// prévia de um escritório gerado na cena de verdade (Phaser), sem servidor: também só em desenvolvimento
+const DevScene = import.meta.env.DEV ? lazy(() => import('./pages/DevScene')) : null;
 
 export function Loading({ label }: { label?: string }) {
   return (
@@ -135,6 +137,7 @@ export function App() {
             }
           />
           {DevArt ? <Route path="/dev/arte" element={<DevArt />} /> : null}
+          {DevScene ? <Route path="/dev/cena" element={<DevScene />} /> : null}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
