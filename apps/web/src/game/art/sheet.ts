@@ -6,11 +6,14 @@
 import { ACC, AVATAR_ACCESSORIES, AVATAR_OPTIONS, DAY_PERIODS, LEGACY_ACCESSORY_COUNT, avatarAccessory, sanitizeAvatar, DEFAULT_DESK_SETUP, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, deskSetups, emptyMap, objectColors, type AvatarConfig, type DayPeriod, type Dir, type MapObject, type OfficeMap } from '@office-imp/shared';
 import { AV_H, AV_W, avatarSheet } from './avatar';
 import { makeCanvas } from './canvas';
-import { doorClosedSprite, objectSprite } from './objects';
+import { ANIM_CLOUDS, ANIM_TREE, SWAY_TYPES, clockFrameSecond, objectAnim, type AnimDef } from './anim';
+import { DECOR_SIZE, decorFrames, decorSprite, viewFrames, type DecorKind } from './exterior';
+import { doorClosedSprite, objectSprite, objectStrip } from './objects';
 import { FONT_H, drawText, textWidth } from './pixfont';
 import { Sprite } from './prim';
 import { renderScene } from './render';
 import { T, drawFloor, drawStatic } from './tiles';
+import { wallCanvas } from './walls';
 
 export interface ArtSheet {
   /** Nome do arquivo, sem extensão. */
@@ -176,20 +179,24 @@ function pixelKey(c: HTMLCanvasElement): string {
   return `${c.width}x${c.height}:${h >>> 0}`;
 }
 
-/** Fundo da célula: footprint em xadrez de blocos e a parte alta (tall) mais clara. */
+/** Fundo de um sprite de objeto: footprint em xadrez de blocos e a parte alta (tall) mais clara. */
+function objectBackdrop(ctx: CanvasRenderingContext2D, x: number, w: number, h: number, tall: number): void {
+  ctx.fillStyle = '#a9a59c';
+  ctx.fillRect(x, 0, w, tall);
+  for (let ty = 0; ty * T < h - tall; ty++) {
+    for (let tx = 0; tx * T < w; tx++) {
+      ctx.fillStyle = (tx + ty) % 2 === 0 ? '#8f8c85' : '#86837c';
+      ctx.fillRect(x + tx * T, tall + ty * T, Math.min(T, w - tx * T), T);
+    }
+  }
+}
+
 function objectCell(o: MapObject, lines: string[]): Cell {
   const sprite = objectSprite(o);
   const tall = (OBJECT_DEFS[o.type]?.tall ?? 0) * T;
   const canvas = makeCanvas(sprite.width, sprite.height);
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#a9a59c';
-  ctx.fillRect(0, 0, sprite.width, tall);
-  for (let ty = 0; ty * T < sprite.height - tall; ty++) {
-    for (let tx = 0; tx * T < sprite.width; tx++) {
-      ctx.fillStyle = (tx + ty) % 2 === 0 ? '#8f8c85' : '#86837c';
-      ctx.fillRect(tx * T, tall + ty * T, T, T);
-    }
-  }
+  objectBackdrop(ctx, 0, sprite.width, sprite.height, tall);
   ctx.drawImage(sprite, 0, 0);
   return { canvas, lines };
 }
@@ -235,6 +242,100 @@ export function objectCells(only?: string[]): Cell[] {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(closed, 0, 0);
     cells.push({ canvas, lines: ['door', `closed ${color.id}`] });
+  }
+  return cells;
+}
+
+/** Espaço entre os quadros de uma animação na folha. */
+const FRAME_GAP = 2;
+
+const rhythm = (def: AnimDef) => `${def.frames} QUADROS ${def.ms} MS${def.flicker ? ' PISCA RARO' : ''}`;
+
+/** Quadros lado a lado, cada um com o fundo do objeto. */
+function framesCell(frames: HTMLCanvasElement[], tall: number, lines: string[], backdrop = true): Cell {
+  const w = frames[0].width;
+  const h = frames[0].height;
+  const canvas = makeCanvas(frames.length * (w + FRAME_GAP) - FRAME_GAP, h);
+  const ctx = canvas.getContext('2d')!;
+  frames.forEach((f, i) => {
+    const x = i * (w + FRAME_GAP);
+    if (backdrop) objectBackdrop(ctx, x, w, h, tall);
+    ctx.drawImage(f, x, 0);
+  });
+  return { canvas, lines };
+}
+
+function animObjectCell(o: MapObject, label: string, opts: { breeze?: boolean; time?: { hour: number; minute: number } } = {}): Cell {
+  const def = objectAnim(o, opts)!;
+  const { canvas, frames, w } = objectStrip(o, opts);
+  const list = Array.from({ length: frames }, (_, i) => {
+    const c = makeCanvas(w, canvas.height);
+    c.getContext('2d')!.drawImage(canvas, i * w, 0, w, canvas.height, 0, 0, w, canvas.height);
+    return c;
+  });
+  return framesCell(list, (OBJECT_DEFS[o.type]?.tall ?? 0) * T, [label, rhythm(def)]);
+}
+
+/**
+ * Animações de contexto (Fase F): cada objeto animado com todos os quadros lado a lado (o quadro 0,
+ * à esquerda, é o desenho estático), as árvores do exterior e as nuvens na vista das janelas.
+ */
+export function animationCells(): Cell[] {
+  const cells: Cell[] = [];
+  const o = (type: string, extra: Partial<MapObject> = {}): MapObject => ({ id: 'anim', type, x: 0, y: 0, ...extra });
+  for (const setup of deskSetups('desk')) {
+    if (setup.id === 'none') continue;
+    cells.push(animObjectCell(o('desk', { setup: setup.id }), `DESK SETUP ${setup.id.toUpperCase()}`));
+  }
+  cells.push(animObjectCell(o('desk_gamer', { setup: 'gamer' }), 'DESK_GAMER SETUP GAMER'));
+  cells.push(animObjectCell(o('keyboard'), 'KEYBOARD RGB'));
+  for (const color of ['white', 'black']) cells.push(animObjectCell(o('mug', { color }), `MUG ${color.toUpperCase()}`));
+  cells.push(animObjectCell(o('coffee'), 'COFFEE'));
+  cells.push(animObjectCell(o('coffee', { color: 'white' }), 'COFFEE WHITE'));
+  cells.push(animObjectCell(o('espresso'), 'ESPRESSO'));
+  cells.push(animObjectCell(o('espresso', { color: 'red' }), 'ESPRESSO RED'));
+  cells.push(animObjectCell(o('aquarium'), 'AQUARIUM'));
+  cells.push(animObjectCell(o('neon'), 'NEON'));
+  cells.push(animObjectCell(o('neon', { color: 'cyan', w: 3, props: { text: 'Bom dia, time!' } }), 'NEON CYAN TEXTO'));
+  cells.push(animObjectCell(o('wall_clock'), `WALL_CLOCK 10H10 (SEGUNDOS ${Array.from({ length: 8 }, (_, i) => clockFrameSecond(i)).join(' ')})`));
+  for (const [color, hour, minute] of [
+    ['white', 3, 45],
+    ['gold', 18, 0],
+    ['wood', 23, 59],
+  ] as const) {
+    cells.push(animObjectCell(o('wall_clock', { color }), `WALL_CLOCK ${color.toUpperCase()} ${hour}H${String(minute).padStart(2, '0')}`, { time: { hour, minute } }));
+  }
+  for (const type of SWAY_TYPES) cells.push(animObjectCell(o(type), `${type.toUpperCase()} PERTO DO SPLIT`, { breeze: true }));
+  // árvores do exterior: de dia e à noite
+  for (const period of ['day', 'night'] as DayPeriod[]) {
+    for (const kind of Object.keys(DECOR_SIZE) as DecorKind[]) {
+      const n = decorFrames(kind);
+      if (n < 2) continue;
+      const frames = Array.from({ length: n }, (_, i) => {
+        const sprite = decorSprite(kind, period, i);
+        const c = makeCanvas(sprite.width, sprite.height);
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = period === 'night' ? '#25493f' : '#5a9a4a';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(sprite, 0, 0);
+        return c;
+      });
+      cells.push(framesCell(frames, 0, [`${kind.toUpperCase()} ${period.toUpperCase()}`, rhythm(ANIM_TREE)], false));
+    }
+  }
+  // vista das janelas: os 4 trechos da paisagem (128 px) em cada quadro, um embaixo do outro
+  for (const period of DAY_PERIODS) {
+    const n = viewFrames(period);
+    if (n < 2) continue;
+    const canvas = makeCanvas(4 * T, n * (T + FRAME_GAP) - FRAME_GAP);
+    const ctx = canvas.getContext('2d')!;
+    for (let f = 0; f < n; f++) {
+      for (let v = 0; v < 4; v++) {
+        const tile = wallCanvas({ style: Wall.Wall, n: { below: false, above: false, left: true, right: true }, window: 'view', winLeft: v > 0, winRight: v < 3, variant: v, period, frame: f });
+        ctx.drawImage(tile, v * T, f * (T + FRAME_GAP));
+      }
+    }
+    cells.push({ canvas, lines: [`JANELAS ${period.toUpperCase()}`, rhythm(ANIM_CLOUDS)] });
   }
   return cells;
 }
@@ -414,10 +515,10 @@ export function objectCrop(only: string[], scale = 4): ArtSheet {
 
 /** As folhas (pisos e paredes, exterior, objetos, avatares), ampliadas `scale` vezes com vizinho mais próximo. */
 export function artSheets(scale = 3): ArtSheet[] {
-  const build = (name: string, title: string, cells: Cell[]): ArtSheet => ({
+  const build = (name: string, title: string, cells: Cell[], width = SHEET_W): ArtSheet => ({
     name,
     title,
-    canvas: scaleCanvas(layout(`OFFICE-IMP VISUAL V2 - ${title} (${cells.length})`, cells), scale),
+    canvas: scaleCanvas(layout(`OFFICE-IMP VISUAL V2 - ${title} (${cells.length})`, cells, width), scale),
     count: cells.length,
   });
   const avatars = (): ArtSheet => {
@@ -429,5 +530,6 @@ export function artSheets(scale = 3): ArtSheet[] {
     build('exterior', 'EXTERIOR E PERIODOS DO DIA', exteriorCells()),
     build('objetos', 'OBJETOS', objectCells()),
     avatars(),
+    build('animacoes', 'ANIMACOES DE CONTEXTO, QUADRO 0 (ESTATICO) A ESQUERDA', animationCells(), 640),
   ];
 }

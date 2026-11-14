@@ -82,6 +82,36 @@ export function dayPeriod(date: Date | number, timezone: string): DayPeriod {
   return 'dawn';
 }
 
+/** Hora, minuto e segundo locais (relógio de 24 h). */
+export interface ClockTime {
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+/**
+ * Hora local de um instante no fuso do escritório (relógio de parede do visual v2). Fuso vazio
+ * ou inválido cai em `DEFAULT_TIMEZONE`, como em `dayPeriod`.
+ */
+export function localClock(date: Date | number, timezone: string): ClockTime {
+  const ts = typeof date === 'number' ? date : date.getTime();
+  const tz = timezone && isValidTimezone(timezone) ? timezone : DEFAULT_TIMEZONE;
+  const d = new Date(ts + tzOffsetMs(ts, tz));
+  return { hour: d.getUTCHours(), minute: d.getUTCMinutes(), second: d.getUTCSeconds() };
+}
+
+/**
+ * Ângulos (graus, sentido horário a partir do 12) dos ponteiros de um relógio analógico.
+ * O das horas anda meio grau por minuto; o dos minutos só muda de minuto em minuto (o relógio
+ * do escritório é redesenhado uma vez por minuto); o dos segundos, 6 graus por segundo.
+ */
+export function clockAngles(t: Pick<ClockTime, 'hour' | 'minute'> & { second?: number }): { hour: number; minute: number; second: number } {
+  const h = ((Math.floor(t.hour) % 12) + 12) % 12;
+  const m = ((Math.floor(t.minute) % 60) + 60) % 60;
+  const s = ((Math.floor(t.second ?? 0) % 60) + 60) % 60;
+  return { hour: h * 30 + m * 0.5, minute: m * 6, second: s * 6 };
+}
+
 export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(total / 3600);

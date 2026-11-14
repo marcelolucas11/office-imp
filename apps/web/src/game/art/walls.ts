@@ -41,6 +41,8 @@ export interface WallTile {
   /** tx mod 4: varia tijolos, ripas e o trecho da paisagem. */
   variant?: number;
   period?: DayPeriod;
+  /** Quadro da vista da janela (nuvens andando, Fase F); 0 = estática. */
+  frame?: number;
 }
 
 interface Look {
@@ -187,7 +189,7 @@ function paintWindow(s: Sprite, l: Look, t: WallTile): void {
   const vx0 = t.winLeft ? 0 : fx0 + 1;
   const vx1 = t.winRight ? T - 1 : fx1 - 1;
   if (t.window === 'view') {
-    const view = windowView(period, t.variant ?? 0);
+    const view = windowView(period, t.variant ?? 0, t.frame ?? 0);
     for (let y = 0; y < VIEW_H; y++) for (let x = vx0; x <= vx1; x++) s.px(x, top + 1 + y, view.get(x, y));
   } else {
     const g = t.window === 'outside' ? EXTERIOR[period].glass : PAL.glass;
@@ -273,12 +275,14 @@ export function paintWall(t: WallTile): Sprite {
   return s;
 }
 
-function wallKey(t: WallTile): string {
+/** Chave do desenho de um bloco de parede (acabamento, vizinhança, janela, variação, período e quadro). */
+export function wallKey(t: WallTile): string {
   const n = t.n;
   const mask = (n.below ? 1 : 0) | (n.above ? 2 : 0) | (n.left ? 4 : 0) | (n.right ? 8 : 0) | (n.leftFace ? 16 : 0) | (n.rightFace ? 32 : 0);
   const usesPeriod = t.window === 'view' || t.window === 'outside';
   const variant = (((t.variant ?? 0) % VIEW_VARIANTS) + VIEW_VARIANTS) % VIEW_VARIANTS;
-  return `${t.style}:${mask}:${t.window ?? '-'}:${t.winLeft ? 1 : 0}${t.winRight ? 1 : 0}:${variant}:${usesPeriod ? (t.period ?? 'day') : '-'}`;
+  const frame = t.window === 'view' && t.frame ? `#${t.frame}` : '';
+  return `${t.style}:${mask}:${t.window ?? '-'}:${t.winLeft ? 1 : 0}${t.winRight ? 1 : 0}:${variant}:${usesPeriod ? (t.period ?? 'day') : '-'}${frame}`;
 }
 
 const cache = new Map<string, HTMLCanvasElement>();

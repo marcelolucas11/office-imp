@@ -15,6 +15,7 @@ import {
   deskZone,
   findPath,
   isDesk,
+  localClock,
   mapDesks,
   nearestFree,
   objDepthRows,
@@ -30,13 +31,17 @@ import {
   type PlayerState,
   type Point,
 } from '@office-imp/shared';
+import { Animator } from '../game/animator';
+import { ANIM_CLOUDS, ANIM_TREE, animPhase, clockFrame, objectAnim, plantsInBreeze } from '../game/art/anim';
 import { AV_FRAMES, AV_H, AV_W, avatarKey, avatarSheet } from '../game/art/avatar';
-import { DECOR_SIZE, EXTERIOR, decorSprite, exteriorDecor, exteriorGrass, type DecorKind } from '../game/art/exterior';
+import { DECOR_SIZE, EXTERIOR, decorFrames, decorSprite, decorStrip, exteriorDecor, exteriorGrass, viewFrames, type DecorKind } from '../game/art/exterior';
 import { FLOOR_PATTERN } from '../game/art/floors';
-import { doorClosedKey, doorClosedSprite, objectKey, objectSprite, objectTall } from '../game/art/objects';
+import { doorClosedKey, doorClosedSprite, objectKey, objectSprite, objectStrip, objectTall } from '../game/art/objects';
 import { FLAT_ON_SURFACE, surfaceIndex } from '../game/art/render';
-import { T, drawStatic, hasPeriodWalls, makeCanvas } from '../game/art/tiles';
+import { T, drawStatic, hasPeriodWalls, makeCanvas, wallTileAt } from '../game/art/tiles';
+import { wallCanvas, wallKey } from '../game/art/walls';
 import { bus } from '../game/bus';
+import { useMotion } from '../game/motion';
 import { net } from '../game/net';
 import { serverNow, useGame } from '../game/store';
 import { t } from '../lib/i18n';
@@ -54,6 +59,10 @@ const D_DECOR = -10;
 const PERIOD_CHECK_MS = 60_000;
 const PERIOD_FADE_MS = 1500;
 const D_FLOOR = 0;
+/** Janelas com nuvens andando: por cima dos blocos estáticos, no mesmo lugar (Fase F). */
+const D_WINDOW = 0.5;
+/** De quanto em quanto tempo o relógio das animações de contexto anda (ms). */
+const ANIM_TICK_MS = 100;
 const D_RUG = 2;
 const D_WORLD = 10;
 const D_DIM = 500000;
@@ -139,6 +148,15 @@ export class OfficeScene extends Phaser.Scene {
   /** Grama do período anterior, enquanto a nova aparece por cima. */
   private grassOld: Phaser.GameObjects.TileSprite | null = null;
   private decor: { img: Phaser.GameObjects.Image; kind: DecorKind }[] = [];
+  /** Animações de contexto (Fase F): um relógio só para todos os sprites animados. */
+  private anim = new Animator();
+  private animAt = 0;
+  /** Janelas com vista animada (por cima dos blocos estáticos). */
+  private windows: Phaser.GameObjects.Image[] = [];
+  /** Relógios de parede: a textura é a do minuto atual, no fuso do escritório. */
+  private clocks: { img: Phaser.GameObjects.Image; o: MapObject }[] = [];
+  private clockKeys = new Set<string>();
+  private clockStamp = '';
 
   constructor() {
     super('office');
@@ -235,15 +253,31 @@ export class OfficeScene extends Phaser.Scene {
     this.buildExterior();
     for (const o of this.objs) o.destroy();
     this.objs = [];
+    this.anim.clear('obj');
+    this.clocks = [];
     this.doorImgs.clear();
     this.doorAt.clear();
     const surfaces = surfaceIndex(map);
+    const breeze = plantsInBreeze(map);
+    const now = serverNow();
     for (const o of map.objects) {
       const def = OBJECT_DEFS[o.type];
       if (!def) continue;
-      const key = `obj:${objectKey(o)}`;
-      if (!this.textures.exists(key)) this.textures.addCanvas(key, objectSprite(o));
-      const img = this.add.image(o.x * T, (o.y - objectTall(o.type)) * T, key).setOrigin(0);
+      const opts = { breeze: breeze.has(o.id) };
+      const anim = objectAnim(o, opts);
+      let key = `obj:${objectKey(o)}`;
+      if (o.type === 'wall_clock') key = this.clockTexture(o, now);
+      else if (anim) key = this.stripTexture(`objA:${objectKey(o)}${opts.breeze ? ':b' : ''}`, () => objectStrip(o, opts));
+      else if (!this.textures.exists(key)) this.textures.addCanvas(key, objectSprite(o));
+      const img = this.add.image(o.x * T, (o.y - objectTall(o.type)) * T, key, anim ? 0 : undefined).setOrigin(0);
+      if (anim) {
+        // fase pela posição: vizinhos não piscam juntos; o relógio segue os segundos de verdade
+        const box = { x: img.x, y: img.y, width: img.width, height: img.height };
+        if (o.type === 'wall_clock') {
+          this.clocks.push({ img, o });
+          this.anim.add('obj', img, anim, 0, box, (t) => clockFrame(Math.floor(t / 1000) % 60));
+        } else this.anim.add('obj', img, anim, animPhase(anim, o.x, o.y), box);
+      }
       if (o.type === 'door') {
         // porta fechada: textura própria, uma por cor de porta
         const closed = doorClosedKey(o);
@@ -289,6 +323,86 @@ export class OfficeScene extends Phaser.Scene {
         this.statics.push(this.add.image(cx * T, cy * T, key).setOrigin(0).setDepth(D_FLOOR));
       }
     }
+    this.buildWindows();
+  }
+
+  /**
+   * Janelas com vista para fora, no período com nuvens: um sprite por janela, por cima do bloco
+   * estático, com as nuvens andando (Fase F). Todas na mesma fase, porque a paisagem continua de
+   * uma janela para a outra. À noite (sem nuvens) não há nada a animar.
+   */
+  private buildWindows() {
+    for (const w of this.windows) {
+      this.anim.remove(w);
+      w.destroy();
+    }
+    this.windows = [];
+    const map = this.map;
+    const frames = viewFrames(this.period);
+    if (frames < 2 || !hasPeriodWalls(map)) return;
+    for (let ty = 0; ty < map.height; ty++) {
+      for (let tx = 0; tx < map.width; tx++) {
+        const tile = wallTileAt(map, tx, ty, this.period);
+        if (tile?.window !== 'view' || tile.n.below) continue;
+        const key = this.stripTexture(`win:${wallKey(tile)}`, () => {
+          const c = makeCanvas(T * frames, T);
+          const ctx = c.getContext('2d')!;
+          for (let f = 0; f < frames; f++) ctx.drawImage(wallCanvas({ ...tile, frame: f }), f * T, 0);
+          return { canvas: c, frames, w: T, h: T };
+        });
+        const img = this.add.image(tx * T, ty * T, key, 0).setOrigin(0).setDepth(D_WINDOW);
+        this.windows.push(img);
+        this.anim.add('win', img, ANIM_CLOUDS, 0, { x: tx * T, y: ty * T, width: T, height: T });
+      }
+    }
+  }
+
+  /** Textura com quadros (tira horizontal) criada uma vez por chave; os quadros se chamam 0, 1, 2… */
+  private stripTexture(key: string, make: () => { canvas: HTMLCanvasElement; frames: number; w: number; h: number }): string {
+    if (this.textures.exists(key)) return key;
+    const strip = make();
+    const tex = this.textures.addCanvas(key, strip.canvas)!;
+    for (let f = 0; f < strip.frames; f++) tex.add(f, 0, f * strip.w, 0, strip.w, strip.h);
+    return key;
+  }
+
+  /** Textura do relógio de parede na hora do escritório (minuto atual), com os 8 quadros do ponteiro de segundos. */
+  private clockTexture(o: MapObject, now: number): string {
+    const t = localClock(now, useGame.getState().office?.timezone ?? '');
+    const key = `clock:${objectKey(o)}:${t.hour}:${t.minute}`;
+    this.clockKeys.add(key);
+    return this.stripTexture(key, () => objectStrip(o, { time: t }));
+  }
+
+  /**
+   * A cada minuto (e quando muda o fuso), troca a textura dos relógios pela do minuto novo e
+   * apaga as texturas que ninguém usa mais (fica só o minuto atual de cada cor).
+   */
+  private syncClocks(now: number) {
+    const stamp = `${Math.floor(now / 60_000)}:${useGame.getState().office?.timezone ?? ''}`;
+    if (stamp === this.clockStamp) return;
+    this.clockStamp = stamp;
+    if (!this.clocks.length) return;
+    const used = new Set<string>();
+    for (const c of this.clocks) {
+      const key = this.clockTexture(c.o, now);
+      used.add(key);
+      if (c.img.texture.key !== key) c.img.setTexture(key, this.anim.frameOf(c.img));
+    }
+    for (const key of this.clockKeys) {
+      if (used.has(key)) continue;
+      this.clockKeys.delete(key);
+      if (this.textures.exists(key)) this.textures.remove(key);
+    }
+  }
+
+  /** Um passo das animações de contexto: quadros pelo horário, só no que a câmera vê, nada com a aba oculta. */
+  private tickAnims() {
+    const now = serverNow();
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    if (hidden) return;
+    this.syncClocks(now);
+    this.anim.tick(now, { reduce: useMotion.getState().reduce, view: this.cameras.main.worldView });
   }
 
   // ---------- exterior e período do dia ----------
@@ -304,6 +418,12 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private decorTexture(kind: DecorKind, period: DayPeriod): string {
+    const n = decorFrames(kind);
+    // árvores: tira com os quadros do balanço (Fase F); o resto, um sprite só
+    if (n > 1) {
+      const { w, h } = DECOR_SIZE[kind];
+      return this.stripTexture(`extA:${kind}:${period}`, () => ({ canvas: decorStrip(kind, period), frames: n, w, h }));
+    }
     const key = `ext:${kind}:${period}`;
     if (!this.textures.exists(key)) this.textures.addCanvas(key, decorSprite(kind, period));
     return key;
@@ -318,10 +438,18 @@ export class OfficeScene extends Phaser.Scene {
     if (!this.grass) this.grass = this.add.tileSprite(0, 0, FLOOR_PATTERN, FLOOR_PATTERN, this.grassTexture(this.period)).setOrigin(0).setDepth(D_GRASS);
     for (const d of this.decor) d.img.destroy();
     this.decor = [];
+    this.anim.clear('ext');
     for (const d of exteriorDecor(this.map)) {
       // mesma camada para todos; a fração da profundidade mantém a ordem de cima para baixo
       const depth = D_DECOR + (d.y + DECOR_SIZE[d.kind].h) * 1e-4;
-      this.decor.push({ img: this.add.image(d.x, d.y, this.decorTexture(d.kind, this.period)).setOrigin(0).setDepth(depth), kind: d.kind });
+      const animated = decorFrames(d.kind) > 1;
+      const img = this.add.image(d.x, d.y, this.decorTexture(d.kind, this.period), animated ? 0 : undefined).setOrigin(0).setDepth(depth);
+      this.decor.push({ img, kind: d.kind });
+      if (!animated) continue;
+      // a rajada de vento atravessa o bosque de oeste para leste (fase pela posição), com um pouco de acaso
+      const { w, h } = DECOR_SIZE[d.kind];
+      const phase = -Math.round(d.x * 4 + d.y * 1.5) + animPhase(ANIM_TREE, d.x, d.y) / 12;
+      this.anim.add('ext', img, ANIM_TREE, phase, { x: d.x, y: d.y, width: w, height: h });
     }
     this.syncGrass();
   }
@@ -370,7 +498,7 @@ export class OfficeScene extends Phaser.Scene {
         },
       });
     }
-    for (const d of this.decor) d.img.setTexture(this.decorTexture(d.kind, next));
+    for (const d of this.decor) d.img.setTexture(this.decorTexture(d.kind, next), decorFrames(d.kind) > 1 ? this.anim.frameOf(d.img) : undefined);
     if (hasPeriodWalls(this.map)) this.buildStatics();
   }
 
@@ -764,6 +892,11 @@ export class OfficeScene extends Phaser.Scene {
   update(time: number, delta: number) {
     this.updateBounds();
     this.syncGrass();
+    // animações de contexto: um passo a cada 100 ms (trocar quadro não redesenha nada)
+    if (time - this.animAt >= ANIM_TICK_MS) {
+      this.animAt = time;
+      this.tickAnims();
+    }
     // pelo relógio de verdade (não o do jogo): ao voltar de uma aba em segundo plano, confere na hora
     if (Date.now() - this.periodCheckedAt > PERIOD_CHECK_MS) {
       this.periodCheckedAt = Date.now();

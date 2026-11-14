@@ -24,6 +24,7 @@ import {
 import { Badge, Button, Empty, Field, Input, Modal, Select, Spinner, Tabs, Textarea, Toggle, cx } from '@office-imp/ui';
 import { avatarPortrait } from '../game/art/avatar';
 import { objectIcon } from '../game/art/objects';
+import { setReduceMotion, useMotion } from '../game/motion';
 import { net } from '../game/net';
 import { useGame } from '../game/store';
 import { api, errMsg } from '../lib/api';
@@ -577,6 +578,7 @@ export function CustomStatusModal() {
 // ---------- preferências ----------
 export function SettingsModal() {
   const s = useAv();
+  const motion = useMotion();
   const me = useGame((g) => g.players[g.meId]);
   const canAdmin = useGame((g) => g.canAdmin);
   const { logout } = useSession();
@@ -622,6 +624,10 @@ export function SettingsModal() {
         {dev(t('settings.out', 'Saída de som'), outs, s.outId, 'audiooutput')}
         <Toggle checked={s.hd} onChange={(v) => void av.setPrefs({ hd: v })} label={t('settings.hd', 'Vídeo em HD (usa mais internet)')} />
         <Toggle checked={s.hearNearby} onChange={(v) => void av.setPrefs({ hearNearby: v })} label={t('settings.hear', 'Ouvir quem está por perto na área aberta')} />
+        <div className="space-y-1" data-testid="reduce-motion">
+          <Toggle checked={motion.reduce} onChange={setReduceMotion} label={t('settings.reduceMotion', 'Reduzir animações do cenário (telas, luzes, vapor, peixes, árvores e nuvens ficam paradas)')} />
+          {!motion.explicit ? <p className="pl-14 text-[11px] text-muted">{t('settings.reduceMotionSystem', 'Seguindo a opção “reduzir movimento” do sistema até você escolher aqui.')}</p> : null}
+        </div>
         {canAdmin ? (
           <Field
             label={t('settings.distanceAdmin', 'Distância de interação do escritório: {{n}} blocos', { n: me?.distance ?? DEFAULT_INTERACTION_DISTANCE })}

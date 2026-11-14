@@ -7,6 +7,7 @@
 // muda. A distribuição das árvores é determinística e ancorada nas coordenadas do mundo, então
 // continua igual quando o mapa cresce para leste ou sul.
 import type { DayPeriod, OfficeMap } from '@office-imp/shared';
+import { ANIM_CLOUDS, ANIM_TREE, swayFoliage } from './anim';
 import { makeCanvas } from './canvas';
 import { FLOOR_PATTERN, paintGrass, type GrassTones } from './floors';
 import type { Mat } from './palette';
@@ -274,14 +275,43 @@ function paintDecor(kind: DecorKind, pal: ExteriorPalette): Sprite {
   return s;
 }
 
+/**
+ * Árvores que balançam (Fase F) e a última linha da copa de cada uma (logo acima do tronco):
+ * só a copa anda, o tronco e a base ficam parados. Arbustos, flores e pedras são estáticos.
+ */
+export const TREE_FOLIAGE: Partial<Record<DecorKind, number>> = { tree_round: 39, tree_tall: 45, tree_small: 25, pine: 53 };
+
+/** Quadros de animação de um elemento do exterior (1 = estático). */
+export function decorFrames(kind: DecorKind): number {
+  return TREE_FOLIAGE[kind] === undefined ? 1 : ANIM_TREE.frames;
+}
+
 const decorCache = new Map<string, HTMLCanvasElement>();
 
-/** Sprite (com contorno) de uma árvore, arbusto ou pedra no período dado. */
-export function decorSprite(kind: DecorKind, period: DayPeriod): HTMLCanvasElement {
-  const key = `${kind}:${period}`;
+/** Sprite (com contorno) de uma árvore, arbusto ou pedra no período dado; `frame` > 0 = a copa balançando. */
+export function decorSprite(kind: DecorKind, period: DayPeriod, frame = 0): HTMLCanvasElement {
+  const f = decorFrames(kind) > 1 ? frame % decorFrames(kind) : 0;
+  const key = f ? `${kind}:${period}#${f}` : `${kind}:${period}`;
   let c = decorCache.get(key);
   if (!c) {
-    c = paintDecor(kind, EXTERIOR[period]).toCanvas();
+    const s = paintDecor(kind, EXTERIOR[period]);
+    if (f) swayFoliage(s, f, 0, TREE_FOLIAGE[kind]!);
+    c = s.toCanvas();
+    decorCache.set(key, c);
+  }
+  return c;
+}
+
+/** Todos os quadros de um elemento do exterior lado a lado (textura com quadros na cena). */
+export function decorStrip(kind: DecorKind, period: DayPeriod): HTMLCanvasElement {
+  const n = decorFrames(kind);
+  const key = `${kind}:${period}:strip`;
+  let c = decorCache.get(key);
+  if (!c) {
+    const { w, h } = DECOR_SIZE[kind];
+    c = makeCanvas(w * n, h);
+    const ctx = c.getContext('2d')!;
+    for (let f = 0; f < n; f++) ctx.drawImage(decorSprite(kind, period, f), f * w, 0);
     decorCache.set(key, c);
   }
   return c;
@@ -390,13 +420,19 @@ export const VIEW_H = 12;
 export const VIEW_VARIANTS = 4;
 const VIEW_W = VIEW_VARIANTS * T;
 
+/** Quadros da vista das janelas no período: com nuvens, elas andam (Fase F); sem nuvens (noite), 1. */
+export function viewFrames(period: DayPeriod): number {
+  return EXTERIOR[period].cloud ? ANIM_CLOUDS.frames : 1;
+}
+
 /**
  * Trecho de 32×12 px da paisagem vista pela janela: céu em duas faixas chapadas, linha de árvores
  * e grama. De dia há nuvens; ao amanhecer e ao entardecer, o sol no horizonte; à noite, estrelas
  * e a lua (ela aparece em uma de cada quatro janelas). `variant` = tx mod 4, e a paisagem é
- * contínua entre janelas vizinhas.
+ * contínua entre janelas vizinhas. `frame` (Fase F) empurra as nuvens `frame` px para a direita;
+ * o quadro 0 é a vista estática.
  */
-export function windowView(period: DayPeriod, variant: number): Sprite {
+export function windowView(period: DayPeriod, variant: number, frame = 0): Sprite {
   const pal = EXTERIOR[period];
   const s = new Sprite(T, VIEW_H);
   const off = (((variant % VIEW_VARIANTS) + VIEW_VARIANTS) % VIEW_VARIANTS) * T;
@@ -424,7 +460,9 @@ export function windowView(period: DayPeriod, variant: number): Sprite {
   }
   if (pal.cloud) {
     const cloud = pal.cloud;
-    each((dx) => {
+    const drift = frame > 0 ? frame % viewFrames(period) : 0;
+    each((lap) => {
+      const dx = lap + drift;
       for (const [cx, cy, cw] of [[14, 2, 8], [70, 1, 10], [108, 3, 7]] as const) {
         s.rect(dx + cx, cy, cw, 1, cloud);
         s.rect(dx + cx + 2, cy - 1, cw - 4, 1, cloud);

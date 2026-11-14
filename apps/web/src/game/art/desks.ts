@@ -70,7 +70,7 @@ function straight(seatCol: number): SpritePainter {
       pedestal(p, w - 16, top + 24, 13, m, PAL.metal.hi);
     });
     s.piece((p) => woodTop(p, 1, top + SURF, w - 2, DEPTH, EDGE, m, w));
-    paintSetup(s, info.setup?.id, spotOf(info, seatCol));
+    paintSetup(s, info.setup?.id, spotOf(info, seatCol), info.frame ?? 0);
   };
 }
 
@@ -102,7 +102,7 @@ const deskL: SpritePainter = (s, info) => {
     p.rect(1, top + 32 + SURF + DEPTH, 30, 1, mix(m.base, m.dark, 0.5));
   });
   s.paste(info.o.dir === 'right' ? body.flipX() : body);
-  paintSetup(s, info.setup?.id, spotOf(info, 1));
+  paintSetup(s, info.setup?.id, spotOf(info, 1), info.frame ?? 0);
 };
 
 /** Mesa de pé: tampo mais alto e mais raso, colunas telescópicas, pés em T e o controle de altura. */
@@ -129,7 +129,7 @@ const standing: SpritePainter = (s, info) => {
     p.px(w - 11, top + 14, PAL.metal.hi);
     p.px(w - 9, top + 14, PAL.metal.hi);
   });
-  paintSetup(s, info.setup?.id, spotOf(info, 0, y));
+  paintSetup(s, info.setup?.id, spotOf(info, 0, y), info.frame ?? 0);
 };
 
 /** Mesa de vidro: tampo claro com reflexos em diagonal, a estrutura cromada vista através dele e pés retos. */
@@ -172,7 +172,7 @@ const glass: SpritePainter = (s, info) => {
     p.rect(1, y + DEPTH + 1, w - 2, 1, g.dark);
     p.rect(2, y + DEPTH + 2, w - 4, 1, shade(g.dark, -0.15));
   });
-  paintSetup(s, info.setup?.id, spotOf(info, 0));
+  paintSetup(s, info.setup?.id, spotOf(info, 0), info.frame ?? 0);
 };
 
 /** Mesa executiva: madeira escura, painel frontal com gaveteiros dos dois lados e puxadores dourados. */
@@ -199,7 +199,7 @@ const executive: SpritePainter = (s, info) => {
     p.rect(4, top + SURF + 3, 1, DEPTH - 5, inlay);
     p.rect(w - 5, top + SURF + 3, 1, DEPTH - 5, inlay);
   });
-  paintSetup(s, info.setup?.id, spotOf(info, 0));
+  paintSetup(s, info.setup?.id, spotOf(info, 0), info.frame ?? 0);
 };
 
 /** Mesa gamer: tampo preto de cantos arredondados, filete na cor de destaque e pés em T. */
@@ -230,7 +230,7 @@ const gamer: SpritePainter = (s, info) => {
     // passa-fios
     p.rect(w - 12, y + 2, 4, 2, PAL.plasticBlack.dark);
   });
-  paintSetup(s, info.setup?.id, spotOf(info, 0));
+  paintSetup(s, info.setup?.id, spotOf(info, 0), info.frame ?? 0);
 };
 
 /**
@@ -260,7 +260,7 @@ const bench: SpritePainter = (s, info) => {
     p.rect(5, y + 1, 2, 2, PAL.metal.base);
     p.rect(w - 7, y + 1, 2, 2, PAL.metal.base);
   });
-  paintSetup(s, info.setup?.id, spotOf(info, 0));
+  paintSetup(s, info.setup?.id, spotOf(info, 0), info.frame ?? 0);
 };
 
 export const DESKS: Record<string, SpritePainter> = {

@@ -3,6 +3,7 @@
 // antes, redesenhados, com cores). A cafeteira expresso com moedor é um extra da C2 (`extras.ts`).
 // Todos têm `tall: 1`: a base fica no fim do bloco e o corpo sobe para o bloco de cima.
 import { GOLD, PAL, ramp, type Mat } from './palette';
+import { paintSteam } from './anim';
 import { mix } from './prim';
 import type { PaintInfo, SpritePainter } from './sprites';
 
@@ -55,6 +56,8 @@ const coffee: SpritePainter = (s, info) => {
     p.rect(8, top + 2, 11, 1, M.hi);
     p.rect(5, top + 4, 18, 1, m.dark);
   });
+  // vapor do café saindo da xícara, dentro do vão do bico (Fase F)
+  paintSteam(s, 13, top - 3, info.frame ?? 0, 4);
   s.piece((p) => {
     // pote de açúcar e copinhos ao lado
     p.rect(24, top - 4, 5, 6, PAL.ceramic.base);

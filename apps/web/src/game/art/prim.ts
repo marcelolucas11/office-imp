@@ -339,6 +339,12 @@ export class Sprite {
     return out;
   }
 
+  /** Avisa que `data` foi mexido diretamente (fora das primitivas): o canvas em cache é refeito. */
+  changed(): this {
+    this.canvas = null;
+    return this;
+  }
+
   /** Canvas com os pixels do sprite (criado pela fábrica de `canvas.ts`; fica em cache até o sprite mudar). */
   toCanvas(): HTMLCanvasElement {
     if (this.canvas) return this.canvas;

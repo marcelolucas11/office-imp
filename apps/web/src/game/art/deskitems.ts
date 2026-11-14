@@ -6,7 +6,8 @@
 // entre as linhas 14 e 19 e sobe a partir daí. O microfone de podcast (alto) está em `extras.ts`.
 import { GOLD, PAL, ramp, type Mat } from './palette';
 import { Sprite, mix } from './prim';
-import { RGB } from './setups';
+import { paintSteam } from './anim';
+import { RGB, rgbAt } from './setups';
 import type { PaintInfo, SpritePainter } from './sprites';
 
 const B = PAL.plasticBlack;
@@ -34,7 +35,8 @@ const keyboard: SpritePainter = (s, info) => {
     // quatro fileiras de teclas 2×1 com vão de 1 px; a luz aparece nos vãos (RGB)
     for (let row = 0; row < 4; row++) {
       const y = 10 + row * 2;
-      if (rgb) for (let x = 4; x < 28; x++) p.px(x, y + 1, RGB[Math.floor(((x - 4) / 24) * RGB.length + row) % RGB.length]);
+      // a luz anda uma cor por quadro (Fase F); o quadro 0 é o desenho estático
+      if (rgb) for (let x = 4; x < 28; x++) p.px(x, y + 1, rgbAt(Math.floor(((x - 4) / 24) * RGB.length + row) % RGB.length, -(info.frame ?? 0)));
       if (row === 3) {
         p.rect(6, y, 3, 1, cap);
         p.rect(10, y, 12, 1, capTop);
@@ -47,7 +49,7 @@ const keyboard: SpritePainter = (s, info) => {
       }
     }
     // tecla de destaque (Esc) na cor da marca
-    p.px(5, 10, rgb ? RGB[0] : GOLD);
+    p.px(5, 10, rgb ? rgbAt(0, info.frame ?? 0) : GOLD);
   });
 };
 
@@ -111,6 +113,8 @@ const mug: SpritePainter = (s, info) => {
     // faixa dourada (detalhe Impera) nas canecas claras
     if (info.color?.id === 'white' || !info.color) p.rect(11, 12, 9, 1, GOLD);
   });
+  // vapor do café (Fase F): só nos quadros 1 a 5
+  paintSteam(s, 15, 6, info.frame ?? 0, 5);
 };
 
 // ---------- garrafa: squeeze com tampa e alça ----------

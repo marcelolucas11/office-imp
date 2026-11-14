@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { OBJECT_DEFS, TILE, objColor, objSetup, objSize, objText, type MapObject } from '@office-imp/shared';
+import { objectAnim, swayFoliage, type AnimOptions } from './anim';
 import { APPLIANCES } from './appliances';
 import { makeCanvas } from './canvas';
 import { CHAIRS } from './chairs';
@@ -56,20 +57,63 @@ export function objectKey(o: MapObject): string {
   return `${base}${setup ? `:${setup.id}` : ''}${text === null ? '' : `:${text}`}`;
 }
 
-/** Sprite do objeto. A altura inclui a parte "alta" (tall) acima do footprint. */
-export function objectSprite(o: MapObject): HTMLCanvasElement {
-  const key = objectKey(o);
-  const hit = cache.get(key);
-  if (hit) return hit;
+/** O que muda o desenho além do objeto: a hora do relógio (só a cena passa) e a brisa do split. */
+export interface FrameOptions extends AnimOptions {
+  time?: { hour: number; minute: number } | null;
+}
+
+/** Desenha um quadro do objeto num `Sprite` novo (sem cache). */
+function paintObject(o: MapObject, frame: number, opts: FrameOptions): Sprite {
   const def = OBJECT_DEFS[o.type];
   const { w, h } = objSize(o);
   const tall = def?.tall ?? 0;
   const s = new Sprite(w * T, (h + tall) * T);
-  const info: PaintInfo = { o, w: w * T, h: h * T, top: tall * T, color: objColor(o), setup: objSetup(o), text: objText(o) };
+  const info: PaintInfo = { o, w: w * T, h: h * T, top: tall * T, color: objColor(o), setup: objSetup(o), text: objText(o), frame, time: opts.time ?? null };
   (spritePainters[o.type] ?? fallback)(s, info);
-  const c = s.toCanvas();
+  // planta perto do ar-condicionado: a folhagem (acima do vaso) balança por cima do desenho pronto
+  if (frame > 0 && objectAnim(o, opts)?.kind === 'sway') swayFoliage(s, frame, 0, tall * T + 12);
+  return s;
+}
+
+/**
+ * Sprite do objeto. A altura inclui a parte "alta" (tall) acima do footprint. `frame` = quadro da
+ * animação de contexto (Fase F; 0 = o desenho estático, o de sempre). Guardado em cache por chave.
+ */
+export function objectSprite(o: MapObject, frame = 0, opts: AnimOptions = {}): HTMLCanvasElement {
+  const n = objectFrames(o, opts);
+  const f = n > 1 ? ((Math.floor(frame) % n) + n) % n : 0;
+  const key = f ? `${objectKey(o)}#${f}${opts.breeze ? 'b' : ''}` : objectKey(o);
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const c = paintObject(o, f, opts).toCanvas();
   cache.set(key, c);
   return c;
+}
+
+/** Quantos quadros de animação o objeto tem (1 = estático). Ver `anim.ts`. */
+export function objectFrames(o: MapObject, opts: AnimOptions = {}): number {
+  return objectAnim(o, opts)?.frames ?? 1;
+}
+
+const strips = new Map<string, HTMLCanvasElement>();
+
+/**
+ * Todos os quadros do objeto lado a lado (largura = quadros × largura do sprite), para virar uma
+ * textura com quadros na cena. Com `time` (relógio de parede na cena) a tira não entra no cache
+ * daqui: a cena guarda só as dos últimos minutos.
+ */
+export function objectStrip(o: MapObject, opts: FrameOptions = {}): { canvas: HTMLCanvasElement; frames: number; w: number; h: number } {
+  const frames = objectFrames(o, opts);
+  const key = `${objectKey(o)}${opts.breeze ? ':b' : ''}`;
+  const first = opts.time ? paintObject(o, 0, opts).toCanvas() : objectSprite(o, 0, opts);
+  const { width: w, height: h } = first;
+  const hit = opts.time ? undefined : strips.get(key);
+  if (hit) return { canvas: hit, frames, w, h };
+  const c = makeCanvas(w * frames, h);
+  const ctx = c.getContext('2d')!;
+  for (let f = 0; f < frames; f++) ctx.drawImage(opts.time ? paintObject(o, f, opts).toCanvas() : objectSprite(o, f, opts), f * w, 0);
+  if (!opts.time) strips.set(key, c);
+  return { canvas: c, frames, w, h };
 }
 
 /** Chave (e nome da textura na cena) da porta fechada: uma por variante de cor. */

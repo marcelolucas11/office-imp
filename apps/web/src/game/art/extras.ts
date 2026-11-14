@@ -4,7 +4,10 @@
 // relógio de parede, letreiro neon (texto editável) e ar-condicionado split.
 // Os de parede (cortiça, relógio, neon, split) ficam no próprio bloco da parede: o desenho
 // ocupa a face dela (linhas 11 a 30; as 10 primeiras são o topo da parede).
-// O relógio é estático (10h10); a Fase F troca os ponteiros por quadros pré-gerados.
+// Animações (Fase F): vapor na xícara da expresso, peixes e bolhas no aquário, piscada do neon e
+// os ponteiros do relógio (hora do escritório e 8 posições do ponteiro de segundos).
+import { clockAngles } from '@office-imp/shared';
+import { ANIM_CLOCK, clockFrameSecond, paintSteam } from './anim';
 import { GOLD, PAL, ramp, type Mat } from './palette';
 import { Sprite, mix, noise } from './prim';
 import { FONT_ADVANCE, FONT_H, drawText, textWidth } from './pixfont';
@@ -74,6 +77,8 @@ const espresso: SpritePainter = (s, info) => {
     p.rect(23, top - 3, 5, 3, B.dark);
     p.px(27, top - 6, GOLD);
   });
+  // vapor da xícara em cima da máquina (Fase F)
+  paintSteam(s, 12, top - 20, info.frame ?? 0, 6);
 };
 
 // ---------- microfone de podcast com braço articulado (preso na borda de trás da mesa) ----------
@@ -236,6 +241,18 @@ const snackMachine: SpritePainter = (s, info) => {
 
 // ---------- aquário sobre o móvel ----------
 
+/** Quadros do aquário (Fase F). */
+export const AQUARIUM_FRAMES = 8;
+
+/**
+ * Nado de um peixe no quadro `k` (0 a 7): quanto ele andou para a frente (`speed` px por quadro)
+ * e se já virou para voltar. Ida nos quadros 0 a 3, volta nos 4 a 7, e o 7 → 0 fecha o ciclo.
+ */
+function swim(k: number, speed: number): [number, boolean] {
+  const steps = [0, 1, 2, 3, 3, 2, 1, 0];
+  return [steps[k] * speed, k >= 4];
+}
+
 const aquarium: SpritePainter = (s, info) => {
   const m = matOf(info, '#34353c');
   const { w, top } = info;
@@ -276,25 +293,32 @@ const aquarium: SpritePainter = (s, info) => {
     ] as const) {
       for (let i = 0; i < hgt; i++) p.px(px0 + (Math.floor(i / 3) % 2), yB - 3 - i, c);
     }
-    // peixes: palhaço, amarelo e dois néons
-    const fish = (fx: number, fy: number, body: string, stripe: string | null, left: boolean) => {
-      p.rect(fx, fy, 5, 3, body);
-      p.px(left ? fx + 5 : fx - 1, fy, body);
-      p.px(left ? fx + 5 : fx - 1, fy + 2, body);
-      if (stripe) p.rect(fx + 2, fy, 1, 3, stripe);
-      p.px(left ? fx + 1 : fx + 3, fy + 1, '#14161b');
+    // peixes: palhaço, amarelo e dois néons. Na animação (Fase F) cada um nada para a frente,
+    // vira e volta pelo mesmo caminho (`swim`); o quadro 0 é a posição do desenho estático
+    const k = (info.frame ?? 0) % AQUARIUM_FRAMES;
+    const fish = (fx: number, fy: number, body: string, stripe: string | null, left0: boolean, speed: number, bob: boolean) => {
+      const [ox, back] = swim(k, speed);
+      const left = back ? !left0 : left0;
+      const x = fx + (left0 ? -ox : ox);
+      const y = fy + (bob && (k === 2 || k === 3) ? 1 : 0);
+      p.rect(x, y, 5, 3, body);
+      p.px(left ? x + 5 : x - 1, y, body);
+      p.px(left ? x + 5 : x - 1, y + 2, body);
+      if (stripe) p.rect(x + 2, y, 1, 3, stripe);
+      p.px(left ? x + 1 : x + 3, y + 1, '#14161b');
     };
-    fish(16, yT + 7, '#f08a3c', '#ffffff', true);
-    fish(w - 26, yT + 12, '#f2d95c', null, false);
-    fish(24, yT + 15, '#4fd8f0', '#e0525a', true);
-    fish(w - 18, yT + 6, '#4fd8f0', '#e0525a', false);
-    // bolhas
+    fish(16, yT + 7, '#f08a3c', '#ffffff', true, 1, false);
+    fish(w - 26, yT + 12, '#f2d95c', null, false, 1, true);
+    fish(24, yT + 15, '#4fd8f0', '#e0525a', true, 2, false);
+    fish(w - 18, yT + 6, '#4fd8f0', '#e0525a', false, 1, true);
+    // bolhas: sobem 1 px a cada 2 quadros; a de cima estoura e outra nasce embaixo
+    const rise = Math.floor(k / 2);
     for (const [bx, by] of [
       [w - 14, yT + 16],
       [w - 13, yT + 12],
       [w - 14, yT + 8],
     ])
-      p.px(bx, by, '#d6eef8');
+      p.px(bx, by - rise, '#d6eef8');
     // reflexo no vidro e a moldura
     p.rect(x0 + 1, yT + 5, 1, 12, mix(water.light, '#ffffff', 0.4));
     p.rect(x0, yB + 1, x1 - x0 + 1, 1, B.base);
@@ -347,8 +371,22 @@ const corkboard: SpritePainter = (s, info) => {
   });
 };
 
-// ---------- relógio de parede (10h10, estático) ----------
+// ---------- relógio de parede ----------
 
+/** Ponta de um ponteiro de comprimento `len` no ângulo `deg` (graus, horário a partir do 12). */
+export function handEnd(deg: number, len: number): [number, number] {
+  const r = (deg * Math.PI) / 180;
+  return [Math.round(Math.sin(r) * len), Math.round(-Math.cos(r) * len)];
+}
+
+/** Comprimento (px) dos ponteiros de horas, minutos e segundos. */
+const HANDS = { hour: 3.6, minute: 5.1, second: 4 };
+
+/**
+ * Relógio de parede. Sem `info.time` mostra 10h10 (o desenho estático, da folha e do Mapmaker);
+ * na cena mostra a hora do escritório (`info.time`, trocada a cada minuto). O quadro é a posição
+ * do ponteiro de segundos: 8 posições, e o quadro 0 é o ponteiro para baixo (30 s).
+ */
 const wallClock: SpritePainter = (s, info) => {
   const m = matOf(info, '#2a2b30');
   const face = info.color?.id === 'black' || info.color?.id === 'wood' ? '#f4f1ea' : '#fbfaf6';
@@ -373,10 +411,15 @@ const wallClock: SpritePainter = (s, info) => {
       [13, 15],
     ])
       p.px(x, y, mix(ink, face, 0.5));
-    // ponteiros: horas apontando para o 10, minutos para o 2, segundos para baixo
-    p.line(16, 20, 13, 18, ink);
-    p.line(16, 20, 20, 17, ink);
-    p.line(16, 21, 16, 24, '#c8383c');
+    // ponteiros a partir do centro (16, 20); às 10h10 o das horas aponta para o 10 e o dos minutos para o 2
+    const t = info.time ?? { hour: 10, minute: 10 };
+    const a = clockAngles({ hour: t.hour, minute: t.minute, second: clockFrameSecond((info.frame ?? 0) % ANIM_CLOCK.frames) });
+    const [hx, hy] = handEnd(a.hour, HANDS.hour);
+    const [mx, my] = handEnd(a.minute, HANDS.minute);
+    const [sx, sy] = handEnd(a.second, HANDS.second);
+    p.line(16, 20, 16 + hx, 20 + hy, ink);
+    p.line(16, 20, 16 + mx, 20 + my, ink);
+    p.line(16, 20, 16 + sx, 20 + sy, '#c8383c');
     p.px(16, 20, GOLD);
   });
 };
@@ -390,12 +433,20 @@ function bigText(p: Sprite, text: string, x: number, y: number, scale: number, c
   for (let ty = 0; ty < tmp.h; ty++) for (let tx = 0; tx < tmp.w; tx++) if (tmp.alpha(tx, ty)) p.rect(x + tx * scale, y + ty * scale, scale, scale, c);
 }
 
+/**
+ * Quadros do neon (Fase F): 0 = aceso (o estático), 1 = letras mais fracas, 2 = tudo quase
+ * apagado, 3 = só a moldura falhando. A cena mostra o 0 quase sempre (ver `ANIM_NEON`).
+ */
 const neon: SpritePainter = (s, info) => {
   const m = matOf(info, '#ff5fa8');
   const { w } = info;
   const plate = '#24242b';
-  const tube = mix(m.base, '#ffffff', 0.5);
-  const halo = mix(m.base, plate, 0.45);
+  const k = info.frame ?? 0;
+  const lit = mix(m.base, '#ffffff', 0.5);
+  const dim = mix(m.base, plate, 0.55);
+  const tube = k === 1 ? m.base : k === 2 ? dim : lit;
+  const ring = k === 2 || k === 3 ? dim : m.base;
+  const halo = k === 2 ? mix(m.base, plate, 0.75) : mix(m.base, plate, 0.45);
   const raw = info.text ?? '';
   // escala 2 quando cabe; senão escala 1, cortando o que não couber
   const inner = w - 12;
@@ -413,10 +464,10 @@ const neon: SpritePainter = (s, info) => {
       p.px(x, 27, '#5a5d66');
     }
     // moldura de tubo
-    p.rect(6, 13, w - 12, 1, m.base);
-    p.rect(6, 27, w - 12, 1, m.base);
-    p.rect(5, 14, 1, 13, m.base);
-    p.rect(w - 6, 14, 1, 13, m.base);
+    p.rect(6, 13, w - 12, 1, ring);
+    p.rect(6, 27, w - 12, 1, ring);
+    p.rect(5, 14, 1, 13, ring);
+    p.rect(w - 6, 14, 1, 13, ring);
     // texto: tubo claro; no texto pequeno, um halo chapado em volta ajuda a ler
     const x = Math.round((w - tw) / 2);
     const y = 20 - Math.floor(th / 2);

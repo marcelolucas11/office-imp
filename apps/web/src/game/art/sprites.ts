@@ -19,6 +19,13 @@ export interface PaintInfo {
   setup: DeskSetup | null;
   /** Texto a desenhar (letreiro neon); `null` se o tipo não desenha texto. */
   text: string | null;
+  /**
+   * Quadro da animação de contexto (Fase F), de 0 a `objectFrames(o) - 1`. Ausente = 0, e o
+   * quadro 0 é sempre o desenho estático (o da folha, do Mapmaker e dos ícones).
+   */
+  frame?: number;
+  /** Hora mostrada pelo relógio de parede (só a cena passa); ausente = 10h10, o desenho estático. */
+  time?: { hour: number; minute: number } | null;
 }
 
 /** Desenha o objeto num sprite de `w × (top + h)` pixels. Deixe 1 px livre nas bordas para o contorno. */

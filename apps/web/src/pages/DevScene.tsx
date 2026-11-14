@@ -9,6 +9,7 @@ import { useSearchParams } from 'react-router-dom';
 import { generateOffice } from '@office-imp/map-engine';
 import { DAY_PERIODS, DEFAULT_AVATAR, DEFAULT_TIMEZONE, dayPeriod, deskSeat, mapDesks, type DayPeriod, type DeskInfo, type PlayerState } from '@office-imp/shared';
 import { bus } from '../game/bus';
+import { setReduceMotion, useMotion } from '../game/motion';
 import { useGame } from '../game/store';
 import { t } from '../lib/i18n';
 import { MiniMap } from '../office/Hud';
@@ -80,7 +81,8 @@ export default function DevScene() {
       canAdmin: true,
       modal: open === 'mapmaker' ? { kind: 'mapmaker' } : open === 'mesa' ? { kind: 'myDesk' } : null,
     });
-    (window as any).__oi = { game: useGame, bus };
+    // conferência: window.__oi.motion.set(true) para "Reduzir animações"
+    (window as any).__oi = { game: useGame, bus, motion: { set: setReduceMotion, store: useMotion } };
     const game = createGame(ref.current!);
     return () => {
       game.destroy();
