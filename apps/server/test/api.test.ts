@@ -508,7 +508,17 @@ describe('tempo real', () => {
     expect(badCheck.ok).toBe(false);
     expect(badCheck.errors[0]).toContain('cor desconhecida');
     expect((await admin.http.post(`/api/offices/${officeId}/map`, { map: badColor })).status).toBe(400);
+    // setup da mesa (visual v2): idem, e só mesas de trabalho aceitam
+    const badSetup = JSON.parse(JSON.stringify(cur.map));
+    mapDesks(badSetup)[0].setup = 'tres-monitores';
+    const setupCheck = (await admin.http.post(`/api/offices/${officeId}/map/validate`, { map: badSetup })).json;
+    expect(setupCheck.ok).toBe(false);
+    expect(setupCheck.errors[0]).toContain('setup desconhecido');
+    expect((await admin.http.post(`/api/offices/${officeId}/map`, { map: badSetup })).status).toBe(400);
     const edited = JSON.parse(JSON.stringify(cur.map));
+    const setupDesk = mapDesks(edited)[0];
+    setupDesk.setup = 'gamer';
+    setupDesk.color = 'walnut';
     edited.objects.push({ id: 'obj_tv_extra', type: 'tv', x: 2, y: map.meta!.gen!.corridorY + 1, props: { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } });
     edited.objects.push({ id: 'obj_chair_blue', type: 'chair', x: 4, y: map.meta!.gen!.corridorY + 1, color: 'blue' });
     const pub = await admin.http.post(`/api/offices/${officeId}/map`, { map: edited, note: 'TV no corredor' });
@@ -516,8 +526,10 @@ describe('tempo real', () => {
     const msg = await a.next('map');
     expect(msg.map.objects.some((o: any) => o.id === 'obj_tv_extra')).toBe(true);
     expect(msg.map.objects.find((o: any) => o.id === 'obj_chair_blue').color).toBe('blue');
-    // mapa antigo: nenhum objeto ganhou `color` por conta própria
-    expect(msg.map.objects.filter((o: any) => 'color' in o).map((o: any) => o.id)).toEqual(['obj_chair_blue']);
+    expect(msg.map.objects.find((o: any) => o.id === setupDesk.id)).toMatchObject({ setup: 'gamer', color: 'walnut' });
+    // mapa antigo: nenhum objeto ganhou `color` nem `setup` por conta própria
+    expect(msg.map.objects.filter((o: any) => 'color' in o).map((o: any) => o.id)).toEqual([setupDesk.id, 'obj_chair_blue']);
+    expect(msg.map.objects.filter((o: any) => 'setup' in o).map((o: any) => o.id)).toEqual([setupDesk.id]);
     const versions = (await admin.http.get(`/api/offices/${officeId}/map/versions`)).json;
     expect(versions[0]).toMatchObject({ note: 'TV no corredor', published: true, authorName: 'Gestora' });
     expect(versions.length).toBe(2);
