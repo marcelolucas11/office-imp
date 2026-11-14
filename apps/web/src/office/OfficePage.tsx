@@ -10,6 +10,7 @@ import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { desktop, toast, useSession } from '../lib/session';
 import { av, useAv } from './av';
+import { ColorTab, hasVariants } from './ColorTab';
 import { BottomBar, MiniMap, SidePanel, VideoBar } from './Hud';
 import { MiniMode } from './MiniMode';
 import { CalendarModal, CustomStatusModal, DeskModal, MyDeskModal, ObjectModal, ProfileModal, SettingsModal } from './Modals';
@@ -180,16 +181,25 @@ function TopLeft() {
 function Hint() {
   const hint = useGame((s) => s.hint);
   const buildMode = useGame((s) => s.buildMode);
+  const buildColor = useGame((s) => s.buildColor);
   const hide = useGame((s) => s.simplified || (s.mini && !s.miniExt) || Boolean(s.modal));
   if (hide) return null;
   if (buildMode) {
     return (
-      <div className="absolute bottom-24 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-ok bg-panel/95 px-4 py-1.5 text-xs shadow-lg">
-        {t('hint.build', 'Clique na área verde da sua mesa para colocar o objeto.')}
-        <button type="button" className="text-gold underline" onClick={() => useGame.setState({ buildMode: null, buildProps: null })}>
-          {t('app.cancel', 'Cancelar')}
-        </button>
-      </div>
+      <>
+        {/* aba "Cor" no canto enquanto a Build Tool coloca o objeto */}
+        {hasVariants(buildMode) ? (
+          <div className="absolute bottom-24 left-3 z-20">
+            <ColorTab testid="place-color" type={buildMode} color={buildColor ?? undefined} note={t('hint.buildColor', 'Cor do objeto que você vai colocar.')} onColor={(id) => useGame.setState({ buildColor: id })} />
+          </div>
+        ) : null}
+        <div className="absolute bottom-24 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-ok bg-panel/95 px-4 py-1.5 text-xs shadow-lg">
+          {t('hint.build', 'Clique na área verde da sua mesa para colocar o objeto.')}
+          <button type="button" className="text-gold underline" onClick={() => useGame.setState({ buildMode: null, buildProps: null, buildColor: null })}>
+            {t('app.cancel', 'Cancelar')}
+          </button>
+        </div>
+      </>
     );
   }
   if (!hint) return null;

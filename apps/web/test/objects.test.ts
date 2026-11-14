@@ -74,6 +74,18 @@ describe('cor na chave do cache de sprite', () => {
     }
     expect(objectIcon('chair', 'blue')).not.toBe(objectIcon('chair'));
   });
+
+  it('aba "Cor" (Fase E): amostra recortada na parte visível, uma por cor e por setup, em cache', () => {
+    // a caneca ocupa poucos pixels do bloco: recortada, ela enche a amostra
+    const full = objectIcon('mug', 'gold', undefined, 48);
+    const cropped = objectIcon('mug', 'gold', undefined, 48, true);
+    expect(cropped).not.toBe(full);
+    expect(objectIcon('mug', 'gold', undefined, 48, true)).toBe(cropped);
+    const swatches = objectColors('mug').map((c) => objectIcon('mug', c.id, undefined, 48, true));
+    expect(new Set(swatches).size).toBe(swatches.length);
+    const setups = DESK_SETUPS.map((st) => objectIcon('desk', 'walnut', st.id, 48, true));
+    expect(new Set(setups).size).toBe(setups.length);
+  });
 });
 
 describe('setup da mesa e texto no sprite (Fase C2)', () => {

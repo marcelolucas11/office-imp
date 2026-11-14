@@ -971,8 +971,8 @@ export class OfficeScene extends Phaser.Scene {
     if (g.buildMode) {
       const me = g.players[g.meId];
       const desk = mapDesks(this.map).find((d) => d.id === me?.deskId);
-      if (desk && rectContains(deskZone(desk), tx, ty)) net.send('decor:add', { type: g.buildMode, x: tx, y: ty, props: g.buildProps ?? undefined });
-      useGame.setState({ buildMode: null, buildProps: null });
+      if (desk && rectContains(deskZone(desk), tx, ty)) net.send('decor:add', { type: g.buildMode, x: tx, y: ty, props: g.buildProps ?? undefined, color: g.buildColor ?? undefined });
+      useGame.setState({ buildMode: null, buildProps: null, buildColor: null });
       return;
     }
     const now = performance.now();

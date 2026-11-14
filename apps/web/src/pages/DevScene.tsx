@@ -3,15 +3,19 @@
 // de verdade (Phaser), sem servidor nem login. Serve para conferir pisos, paredes, exterior e os
 // períodos do dia como aparecem no jogo, e para tirar prints.
 // Parâmetros: ?pessoas=15 (1 a 100) &periodo=dawn|day|dusk|night &fuso=America/Sao_Paulo
-import { useEffect, useRef, useState } from 'react';
+// &abrir=mapmaker (o Mapmaker) | mesa (a Build Tool da própria mesa, com alguns objetos postos)
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { generateOffice } from '@office-imp/map-engine';
-import { DAY_PERIODS, DEFAULT_AVATAR, DEFAULT_TIMEZONE, dayPeriod, type DayPeriod, type PlayerState } from '@office-imp/shared';
+import { DAY_PERIODS, DEFAULT_AVATAR, DEFAULT_TIMEZONE, dayPeriod, deskSeat, mapDesks, type DayPeriod, type DeskInfo, type PlayerState } from '@office-imp/shared';
 import { bus } from '../game/bus';
 import { useGame } from '../game/store';
 import { t } from '../lib/i18n';
 import { MiniMap } from '../office/Hud';
+import { MyDeskModal } from '../office/Modals';
 import { createGame, forcePeriod } from '../office/scene';
+
+const Mapmaker = lazy(() => import('../office/Mapmaker'));
 
 function periodLabel(p: DayPeriod): string {
   if (p === 'dawn') return t('period.dawn', 'Amanhecer');
@@ -25,12 +29,21 @@ export default function DevScene() {
   const people = Math.max(1, Math.min(100, Number(params.get('pessoas')) || 15));
   const timezone = params.get('fuso') || DEFAULT_TIMEZONE;
   const asked = params.get('periodo') as DayPeriod | null;
+  const open = params.get('abrir');
+  const modal = useGame((s) => s.modal);
   const [forced, setForced] = useState<DayPeriod | null>(asked && DAY_PERIODS.includes(asked) ? asked : null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const map = generateOffice({ name: 'Impera', size: 'custom', customCount: people, partners: 2, partnersShareRoom: true });
-    const spawn = map.spawns[0] ?? { x: 1, y: 1 };
+    // Build Tool: a primeira mesa é sua, com uma caneca dourada e um vaso
+    const mine = open === 'mesa' ? (mapDesks(map).find((d) => !d.props?.partner) ?? null) : null;
+    const desks: DeskInfo[] = mine ? [{ id: mine.id, userId: 'dev', userName: t('devScene.me', 'Você'), online: true }] : [];
+    if (mine) {
+      map.objects.push({ id: 'decor_dev_mug', type: 'mug', x: mine.x + 1, y: mine.y, color: 'gold', ownerDeskId: mine.id });
+      map.objects.push({ id: 'decor_dev_plant', type: 'plant_small', x: mine.x + 2, y: mine.y, color: 'blue', ownerDeskId: mine.id });
+    }
+    const spawn = mine ? deskSeat(mine) : (map.spawns[0] ?? { x: 1, y: 1 });
     const me: PlayerState = {
       id: 'dev',
       name: t('devScene.me', 'Você'),
@@ -48,7 +61,7 @@ export default function DevScene() {
       mic: false,
       cam: false,
       screen: false,
-      deskId: null,
+      deskId: mine?.id ?? null,
       distance: 2,
       profile: { title: '', about: '', timezone },
     };
@@ -58,21 +71,23 @@ export default function DevScene() {
       phase: 'online',
       office: { id: 'dev', slug: 'dev', name: 'Impera', timezone, settings: { awayMinutes: 10, notesRestrictedToAdmins: false, monitoringNotice: '' } },
       map,
+      baseMap: map,
       mapRev: useGame.getState().mapRev + 1,
       meId: me.id,
       players: { [me.id]: me },
-      desks: [],
+      desks,
       doors,
-      modal: null,
+      canAdmin: true,
+      modal: open === 'mapmaker' ? { kind: 'mapmaker' } : open === 'mesa' ? { kind: 'myDesk' } : null,
     });
     (window as any).__oi = { game: useGame, bus };
     const game = createGame(ref.current!);
     return () => {
       game.destroy();
       forcePeriod(null);
-      useGame.setState({ phase: 'idle', office: null, map: null, players: {}, meId: '', doors: {} });
+      useGame.setState({ phase: 'idle', office: null, map: null, baseMap: null, players: {}, meId: '', doors: {}, desks: [], modal: null });
     };
-  }, [people, timezone]);
+  }, [people, timezone, open]);
 
   useEffect(() => forcePeriod(forced), [forced]);
 
@@ -86,6 +101,12 @@ export default function DevScene() {
     <div className="relative h-full w-full overflow-hidden">
       <div ref={ref} className="absolute inset-0" data-testid="game" />
       <MiniMap />
+      {modal?.kind === 'mapmaker' ? (
+        <Suspense fallback={null}>
+          <Mapmaker />
+        </Suspense>
+      ) : null}
+      {modal?.kind === 'myDesk' ? <MyDeskModal initialTab="decor" /> : null}
       <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-panel/90 p-2 text-xs" data-testid="dev-periods">
         <span className="text-muted">{t('devScene.period', 'Período do dia')}</span>
         {btn(t('devScene.auto', 'Automático ({{period}})', { period: periodLabel(auto) }), null)}

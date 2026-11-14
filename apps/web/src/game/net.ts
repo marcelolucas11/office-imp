@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { Client, type Room } from 'colyseus.js';
-import { DIRS, type AvView, type ChatMessage, type DeskItem, type MapObject, type PlayerState, type Status } from '@office-imp/shared';
+import { DIRS, applyDeskLooks, deskLooksKey, type AvView, type ChatMessage, type DeskInfo, type DeskItem, type MapObject, type OfficeMap, type PlayerState, type Status } from '@office-imp/shared';
 import { api, ApiError, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { desktop, toast } from '../lib/session';
@@ -18,6 +18,7 @@ const NOTICES: Record<string, (d: any) => string> = {
   desk_taken: () => t('notice.deskTaken', 'Esta mesa já tem dono.'),
   desk_item_sent: (d) => t('notice.deskItemSent', 'Entregue na mesa de {{name}}.', { name: d.name }),
   decor_invalid: () => t('notice.decorInvalid', 'Não dá para colocar isso aí. Use a área da sua mesa.'),
+  desk_look_invalid: () => t('notice.deskLookInvalid', 'Não foi possível mudar esta mesa (só a sua, e só com uma cor ou setup da lista).'),
   music_invalid: () => t('notice.musicInvalid', 'Link do YouTube inválido.'),
   music_locked: () => t('notice.musicLocked', 'O DJ bloqueou a fila.'),
   server_updating: () => t('notice.serverUpdating', 'O servidor será atualizado agora. A conexão volta em instantes.'),
@@ -32,6 +33,22 @@ class OfficeNet {
   private retryTimer: number | null = null;
   private posBuf = new Map<string, [number, number, number]>();
   private posTimer: number | null = null;
+  /** Looks das mesas com que o mapa visto foi montado (`deskLooksKey`). */
+  private looks = '';
+
+  /**
+   * Guarda o mapa publicado e monta o mapa visto (com a cor e o setup que cada ocupante escolheu).
+   * Sem `base`, só refaz o visto se algum look mudou. Devolve se o mapa visto mudou.
+   */
+  private setMaps(base: OfficeMap | null, desks: DeskInfo[]): boolean {
+    const g = useGame.getState();
+    const key = deskLooksKey(desks);
+    const plan = base ?? g.baseMap;
+    if (!plan || (!base && key === this.looks)) return false;
+    this.looks = key;
+    useGame.setState({ baseMap: plan, map: applyDeskLooks(plan, desks), mapRev: g.mapRev + 1 });
+    return true;
+  }
 
   private flushPos() {
     this.posTimer = null;
@@ -58,7 +75,8 @@ class OfficeNet {
     const g = useGame.getState();
     try {
       const enter = await api.post(`/api/offices/${this.slug}/enter`);
-      useGame.setState({ office: enter.office, map: enter.map, mapRev: g.mapRev + 1, canAdmin: enter.canAdmin, livekitUrl: enter.livekitUrl });
+      useGame.setState({ office: enter.office, canAdmin: enter.canAdmin, livekitUrl: enter.livekitUrl });
+      this.setMaps(enter.map, enter.desks ?? g.desks);
       const client = new Client(`${location.protocol}//${location.host}/rt`);
       const room = await client.joinOrCreate('office', { officeId: enter.office.id, ticket: enter.ticket });
       if (!this.wanted) {
@@ -98,6 +116,7 @@ class OfficeNet {
       const doors: Record<string, true> = {};
       for (const id of (d.doors ?? []) as string[]) doors[id] = true;
       set({ phase: 'online', meId: d.me, players, desks: d.desks, music: d.music, recordings, doors, deskItems: d.myDeskItems ?? [], timeOffset: d.now - Date.now() });
+      if (this.setMaps(null, d.desks)) bus.emit('map');
       bus.emit('players:reset');
       void this.loadHistory();
       const unseen = (d.myDeskItems ?? []).filter((i: DeskItem) => !i.seen).length;
@@ -146,8 +165,10 @@ class OfficeNet {
       set({ av: v });
       bus.emit('av', v);
     });
-    room.onMessage('desks', (desks) => {
+    room.onMessage('desks', (desks: DeskInfo[]) => {
       set({ desks });
+      // alguém trocou a cor ou o setup da mesa (ou deixou o posto): a mesa muda para todos
+      if (this.setMaps(null, desks)) bus.emit('map');
       bus.emit('desks', desks);
     });
     room.onMessage('deskitem', (item: DeskItem) => {
@@ -209,15 +230,16 @@ class OfficeNet {
       this.posBuf.clear();
       const players: Record<string, PlayerState> = {};
       for (const p of d.players as PlayerState[]) players[p.id] = p;
-      set({ map: d.map, mapRev: get().mapRev + 1, players });
+      set({ players });
+      this.setMaps(d.map, get().desks);
       bus.emit('map');
       bus.emit('players:reset');
     });
     room.onMessage('map:patch', (d: { add: MapObject[]; remove: string[] }) => {
-      const map = get().map;
-      if (!map) return;
-      const objects = map.objects.filter((o) => !d.remove.includes(o.id)).concat(d.add);
-      set({ map: { ...map, objects }, mapRev: get().mapRev + 1 });
+      const base = get().baseMap;
+      if (!base) return;
+      const objects = base.objects.filter((o) => !d.remove.includes(o.id)).concat(d.add);
+      this.setMaps({ ...base, objects }, get().desks);
       bus.emit('map');
     });
     room.onMessage('office', (d) => {

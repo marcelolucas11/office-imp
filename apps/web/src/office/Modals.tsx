@@ -7,11 +7,17 @@ import {
   MIN_INTERACTION_DISTANCE,
   DEFAULT_INTERACTION_DISTANCE,
   OBJECT_DEFS,
+  OBJECT_GROUPS,
   ROLE_LABEL,
   STATUS_COLOR,
   STATUS_LABEL,
   areaCenter,
   can,
+  mapDesks,
+  objColor,
+  objSetup,
+  objectColors,
+  objectGroup,
   parseYouTubeUrl,
   type MapObject,
 } from '@office-imp/shared';
@@ -24,6 +30,8 @@ import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { desktop, toast, useSession } from '../lib/session';
 import { av, useAv } from './av';
+import { ColorTab, hasVariants } from './ColorTab';
+import { groupLabel } from './groupLabels';
 import { Emo, EmoText } from '../lib/icons';
 
 const Whiteboard = lazy(() => import('./Whiteboard'));
@@ -171,17 +179,28 @@ export function DeskModal({ deskId }: { deskId: string }) {
   );
 }
 
-export function MyDeskModal() {
+/** O que a aba "Cor" da Build Tool está mostrando: o objeto que vai ser colocado, um já colocado ou a própria mesa. */
+type BuildTarget = { kind: 'new' } | { kind: 'decor'; id: string } | { kind: 'desk' };
+
+export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | 'decor' } = {}) {
   const items = useGame((s) => s.deskItems);
   const me = useGame((s) => s.players[s.meId]);
   const map = useGame((s) => s.map);
-  const [tab, setTab] = useState<'inbox' | 'decor'>('inbox');
+  const desks = useGame((s) => s.desks);
+  const [tab, setTab] = useState<'inbox' | 'decor'>(initialTab);
   const [type, setType] = useState(DESK_DECOR_TYPES[0]);
+  // cor escolhida por tipo antes de colocar (a aba "Cor" e o ícone da paleta mostram)
+  const [colors, setColors] = useState<Record<string, string>>({});
+  const [target, setTarget] = useState<BuildTarget>({ kind: 'desk' });
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const mine = useMemo(() => (map && me?.deskId ? map.objects.filter((o) => o.ownerDeskId === me.deskId) : []), [map, me?.deskId]);
+  // a mesa como o escritório vê (com a cor e o setup escolhidos)
+  const desk = useMemo(() => (map && me?.deskId ? (mapDesks(map).find((d) => d.id === me.deskId) ?? null) : null), [map, me?.deskId]);
+  const look = desks.find((d) => d.id === me?.deskId)?.look ?? null;
+  const groups = useMemo(() => OBJECT_GROUPS.map((g) => ({ g, types: DESK_DECOR_TYPES.filter((ty) => objectGroup(ty) === g) })).filter((x) => x.types.length), []);
 
   useEffect(() => {
     net.send('desk:items');
@@ -202,7 +221,7 @@ export function MyDeskModal() {
       props.url = url;
       props.title = title.trim();
     }
-    useGame.setState({ buildMode: type, buildProps: props, modal: null });
+    useGame.setState({ buildMode: type, buildProps: props, buildColor: colors[type] ?? null, modal: null });
     toast(t('mydesk.placeHint', 'Clique em um ponto da área verde da sua mesa para colocar o objeto.'), 'info');
   };
   const onFile = async (f?: File) => {
@@ -216,8 +235,44 @@ export function MyDeskModal() {
       setBusy(false);
     }
   };
+  const picked = target.kind === 'decor' ? mine.find((o) => o.id === target.id) : null;
+  const colorPanel = () => {
+    if (target.kind === 'desk' && desk) {
+      return (
+        <div className="space-y-2">
+          <ColorTab
+            testid="build-color"
+            type={desk.type}
+            color={objColor(desk)?.id}
+            setup={objSetup(desk)?.id}
+            note={t('mydesk.deskNote', 'A sua mesa, para todo o escritório. Ao deixar o posto, ela volta ao que era.')}
+            onColor={(id) => net.send('desk:look', { color: id })}
+            onSetup={(id) => net.send('desk:look', { setup: id })}
+          />
+          {look ? (
+            <Button small variant="ghost" data-testid="desk-look-reset" onClick={() => net.send('desk:look', { reset: true })}>
+              {t('mydesk.deskReset', 'Voltar ao padrão da mesa')}
+            </Button>
+          ) : null}
+        </div>
+      );
+    }
+    if (picked) {
+      return hasVariants(picked.type) ? (
+        <ColorTab testid="build-color" type={picked.type} color={picked.color} note={t('mydesk.pickedNote', 'Objeto que já está na sua mesa: muda na hora.')} onColor={(id) => net.send('decor:color', { id: picked.id, color: id })} />
+      ) : (
+        <p className="text-xs text-muted">{t('mydesk.noColors', 'Este objeto tem uma cor só.')}</p>
+      );
+    }
+    return hasVariants(type) ? (
+      <ColorTab testid="build-color" type={type} color={colors[type]} note={t('mydesk.newNote', 'Para o objeto que você vai colocar.')} onColor={(id) => setColors((c) => ({ ...c, [type]: id }))} />
+    ) : (
+      <p className="text-xs text-muted">{t('mydesk.noColors', 'Este objeto tem uma cor só.')}</p>
+    );
+  };
+  const rowClass = (active: boolean) => cx('flex w-full items-center gap-2 rounded-lg border px-2 py-1 text-left text-sm', active ? 'border-gold bg-gold/10' : 'border-line hover:border-muted');
   return (
-    <Modal title={t('mydesk.title', 'Minha mesa')} onClose={close}>
+    <Modal title={t('mydesk.title', 'Minha mesa')} wide={tab === 'decor'} onClose={close}>
       <Tabs
         tabs={[
           { id: 'inbox', label: t('mydesk.inbox', 'Recados e presentes'), badge: items.filter((i) => !i.seen).length },
@@ -245,59 +300,96 @@ export function MyDeskModal() {
           ))}
         </div>
       ) : (
-        <div className="mt-3 space-y-3">
-          <p className="text-xs text-muted">{t('mydesk.decorHelp', 'Escolha um objeto e depois clique na área da sua mesa. Limite de {{n}} objetos.', { n: MAX_DESK_DECOR })}</p>
-          <div className="flex flex-wrap gap-2">
-            {DESK_DECOR_TYPES.map((d) => (
-              <button key={d} type="button" onClick={() => setType(d)} title={OBJECT_DEFS[d]?.label} className={cx('rounded-xl border p-1', type === d ? 'border-gold bg-gold/10' : 'border-line hover:border-muted')}>
-                <img src={objectIcon(d)} alt={OBJECT_DEFS[d]?.label} className="pixel h-10 w-10" />
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row-reverse sm:items-start" data-testid="build-tool">
+          {/* aba "Cor" no canto: o que estiver selecionado à esquerda */}
+          <div className="shrink-0 sm:sticky sm:top-0">{colorPanel()}</div>
+          <div className="min-w-0 flex-1 space-y-3">
+            {desk ? (
+              <button type="button" data-testid="build-desk" onClick={() => setTarget({ kind: 'desk' })} className={rowClass(target.kind === 'desk')}>
+                <img src={objectIcon(desk.type, desk.color, desk.setup, 40, true)} alt="" className="pixel h-10 w-10" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{t('mydesk.myDesk', 'A sua mesa')}</span>
+                  <span className="block truncate text-xs text-muted">
+                    {[objSetup(desk)?.label, objColor(desk)?.label].filter(Boolean).join(' · ')}
+                    {look ? ` · ${t('mydesk.custom', 'personalizada')}` : ''}
+                  </span>
+                </span>
+                <span className="text-xs text-gold">{t('mydesk.deskCustomize', 'Cor e setup')}</span>
               </button>
-            ))}
-          </div>
-          {type === 'note' ? (
-            <Field label={t('mydesk.noteText', 'Texto da placa')}>
-              <Textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={500} />
-            </Field>
-          ) : null}
-          {type === 'poster' ? (
-            <>
-              <Field label={t('mydesk.posterTitle', 'Título')}>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} />
-              </Field>
-              <Field label={t('mydesk.posterImg', 'Imagem (PNG, JPG, GIF ou WebP, até 5 MB)')}>
-                <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={(e) => void onFile(e.target.files?.[0])} className="text-xs" />
-              </Field>
-              {busy ? <Spinner /> : url ? <img src={url} alt="" className="max-h-28 rounded-lg" /> : null}
-            </>
-          ) : null}
-          <Button onClick={place} disabled={mine.length >= MAX_DESK_DECOR || busy || (type === 'poster' && !url)}>
-            {t('mydesk.place', 'Colocar na mesa')}
-          </Button>
-          {mine.length ? (
-            <div className="space-y-1 border-t border-line pt-3">
-              <p className="text-xs font-semibold text-muted">{t('mydesk.mine', 'Na sua mesa ({{n}}/{{max}})', { n: mine.length, max: MAX_DESK_DECOR })}</p>
-              {mine.map((o) => (
-                <div key={o.id} className="flex items-center gap-2 text-sm">
-                  <img src={objectIcon(o.type)} alt="" className="pixel h-7 w-7" />
-                  <span className="flex-1">{o.props?.title || OBJECT_DEFS[o.type]?.label}</span>
-                  <Button small variant="subtle" onClick={() => net.send('decor:remove', { id: o.id })}>
-                    {t('app.remove', 'Remover')}
-                  </Button>
+            ) : null}
+            <p className="text-xs text-muted">{t('mydesk.decorHelp', 'Escolha um objeto e depois clique na área da sua mesa. Limite de {{n}} objetos.', { n: MAX_DESK_DECOR })}</p>
+            {groups.map(({ g, types }) => (
+              <div key={g}>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{groupLabel(g)}</p>
+                <div className="flex flex-wrap gap-2">
+                  {types.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      data-testid={`build-obj-${d}`}
+                      onClick={() => {
+                        setType(d);
+                        setTarget({ kind: 'new' });
+                      }}
+                      title={OBJECT_DEFS[d]?.label}
+                      className={cx('rounded-xl border p-1', type === d && target.kind === 'new' ? 'border-gold bg-gold/10' : 'border-line hover:border-muted')}
+                    >
+                      <img src={objectIcon(d, colors[d])} alt={OBJECT_DEFS[d]?.label} className="pixel h-10 w-10" />
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : null}
-          <div className="border-t border-line pt-3">
-            <Button
-              small
-              variant="ghost"
-              onClick={() => {
-                net.send('desk:release');
-                close();
-              }}
-            >
-              {t('mydesk.release', 'Liberar esta mesa')}
+              </div>
+            ))}
+            {type === 'note' ? (
+              <Field label={t('mydesk.noteText', 'Texto da placa')}>
+                <Textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={500} />
+              </Field>
+            ) : null}
+            {type === 'poster' ? (
+              <>
+                <Field label={t('mydesk.posterTitle', 'Título')}>
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} />
+                </Field>
+                <Field label={t('mydesk.posterImg', 'Imagem (PNG, JPG, GIF ou WebP, até 5 MB)')}>
+                  <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={(e) => void onFile(e.target.files?.[0])} className="text-xs" />
+                </Field>
+                {busy ? <Spinner /> : url ? <img src={url} alt="" className="max-h-28 rounded-lg" /> : null}
+              </>
+            ) : null}
+            <Button onClick={place} disabled={mine.length >= MAX_DESK_DECOR || busy || (type === 'poster' && !url)} data-testid="build-place">
+              {t('mydesk.placeWhat', 'Colocar na mesa: {{name}}', { name: OBJECT_DEFS[type]?.label ?? '' })}
             </Button>
+            {mine.length ? (
+              <div className="space-y-1 border-t border-line pt-3">
+                <p className="text-xs font-semibold text-muted">{t('mydesk.mine', 'Na sua mesa ({{n}}/{{max}})', { n: mine.length, max: MAX_DESK_DECOR })}</p>
+                {mine.map((o) => (
+                  <div key={o.id} className="flex items-center gap-2">
+                    <button type="button" data-testid={`build-mine-${o.type}`} onClick={() => setTarget({ kind: 'decor', id: o.id })} className={rowClass(target.kind === 'decor' && target.id === o.id)}>
+                      <img src={objectIcon(o.type, o.color)} alt="" className="pixel h-7 w-7" />
+                      <span className="min-w-0 flex-1 truncate">{o.props?.title || OBJECT_DEFS[o.type]?.label}</span>
+                      {objectColors(o.type).length > 1 ? <span className="text-xs text-muted">{objColor(o)?.label}</span> : null}
+                    </button>
+                    <Button small variant="subtle" onClick={() => net.send('decor:remove', { id: o.id })}>
+                      {t('app.remove', 'Remover')}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="space-y-1 border-t border-line pt-3">
+              <Button
+                small
+                variant="ghost"
+                data-testid="leave-desk"
+                onClick={() => {
+                  net.send('desk:release');
+                  close();
+                }}
+              >
+                {t('mydesk.leave', 'Deixar o posto')}
+              </Button>
+              <p className="text-[11px] text-muted">{t('mydesk.leaveHelp', 'A mesa fica livre e volta ao setup e à cor originais. Os objetos que você colocou continuam nela.')}</p>
+            </div>
           </div>
         </div>
       )}

@@ -13,8 +13,6 @@ import {
   isDesk,
   isDeskType,
   mapDesks,
-  objColor,
-  objSetup,
   objSize,
   objectColors,
   objectGroup,
@@ -22,6 +20,7 @@ import {
   rectsToTiles,
   resizeMap,
   tilesToRects,
+  wallMountError,
   type Dir,
   type MapArea,
   type MapObject,
@@ -41,36 +40,13 @@ import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { FLOOR_IDS, WALL_IDS, floorLabel, wallLabel } from './tileLabels';
 import { toast } from '../lib/session';
+import { ColorTab, hasVariants } from './ColorTab';
+import { groupLabel } from './groupLabels';
 import { uploadImage } from './Modals';
 import { Emo, EmoText } from '../lib/icons';
 
 type Tool = 'select' | 'object' | 'floor' | 'wall' | 'erase' | 'fill' | 'area' | 'spawn' | 'target';
 const DIR_LABEL: Record<Dir, string> = { down: '↓', left: '←', right: '→', up: '↑' };
-/** Rótulo de cada grupo da paleta de objetos (a ordem vem de `OBJECT_GROUPS`). */
-function groupLabel(id: ObjectGroup): string {
-  switch (id) {
-    case 'interactive':
-      return t('mm.grpInteractive', 'Interativos');
-    case 'structure':
-      return t('mm.grpStructure', 'Estrutura');
-    case 'desks':
-      return t('mm.grpDesks', 'Mesas de trabalho');
-    case 'seating':
-      return t('mm.grpSeating', 'Cadeiras e sofás');
-    case 'furniture':
-      return t('mm.grpFurniture', 'Mesas e móveis');
-    case 'deskitems':
-      return t('mm.grpDeskItems', 'Objetos de mesa');
-    case 'appliances':
-      return t('mm.grpAppliances', 'Copa e equipamentos');
-    case 'wall':
-      return t('mm.grpWall', 'De parede');
-    case 'plants':
-      return t('mm.grpPlants', 'Plantas');
-    default:
-      return t('mm.grpDecor', 'Decoração');
-  }
-}
 const rid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
 
 interface Version {
@@ -84,7 +60,9 @@ interface Version {
 /** Editor do escritório: Mapmaker (mapa inteiro) e Build Tool (objetos interativos). */
 export default function Mapmaker() {
   const office = useGame((s) => s.office)!;
-  const live = useGame((s) => s.map)!;
+  // o Mapmaker edita o mapa publicado: a cor e o setup que cada ocupante escolheu (look) não entram nele
+  const live = useGame((s) => s.baseMap ?? s.map)!;
+  const desks = useGame((s) => s.desks);
   // as áreas das mesas são automáticas: não aparecem para edição (só no desenho)
   const mapRef = useRef<OfficeMap>(stripDerivedAreas(structuredClone(live)));
   const [rev, setRev] = useState(0);
@@ -95,6 +73,10 @@ export default function Mapmaker() {
   const [floorId, setFloorId] = useState(1);
   const [wallId, setWallId] = useState(1);
   const [objType, setObjType] = useState('whiteboard');
+  // aba "Cor": a última cor e o último setup escolhidos por tipo valem para os próximos que forem colocados
+  const [placeColors, setPlaceColors] = useState<Record<string, string>>({});
+  const [placeSetups, setPlaceSetups] = useState<Record<string, string>>({});
+  const [colorHidden, setColorHidden] = useState(false);
   const [openGroups, setOpenGroups] = useState<Partial<Record<ObjectGroup, boolean>>>({});
   const [dir, setDir] = useState<Dir>('down');
   const [eraseFloor, setEraseFloor] = useState(false);
@@ -260,8 +242,23 @@ export default function Mapmaker() {
     } else if (tool === 'object') {
       const def = OBJECT_DEFS[objType];
       if (!def) return;
+      // relógio, cortiça, neon, split e plantas de parede: só na face de uma parede
+      if (wallMountError(map, { type: objType, x: p.x, y: p.y })) {
+        toast(t('mm.wallOnly', '“{{name}}” vai na face de uma parede: clique num bloco de parede que tenha chão logo abaixo.', { name: def.label }), 'error');
+        return;
+      }
       snapshot();
-      const o: MapObject = { id: rid(isDeskType(objType) ? 'desk' : 'o'), type: objType, x: p.x, y: p.y, ...(dir !== 'down' ? { dir } : {}) };
+      const color = placeColors[objType];
+      const setup = placeSetups[objType];
+      const o: MapObject = {
+        id: rid(isDeskType(objType) ? 'desk' : 'o'),
+        type: objType,
+        x: p.x,
+        y: p.y,
+        ...(dir !== 'down' ? { dir } : {}),
+        ...(color && color !== objectColors(objType)[0]?.id ? { color } : {}),
+        ...(setup && setup !== deskSetups(objType)[0]?.id ? { setup } : {}),
+      };
       if (isDeskType(objType)) o.props = { seat: defaultDeskSeat(o), zone: defaultDeskZone(o) };
       map.objects.push(o);
       setSelObj(o.id);
@@ -300,6 +297,8 @@ export default function Mapmaker() {
       }
       const nx = Math.max(0, Math.min(map.width - 1, p.x - d.moving.dx));
       const ny = Math.max(0, Math.min(map.height - 1, p.y - d.moving.dy));
+      // objeto de parede não sai da parede: fica no último lugar válido
+      if (wallMountError(map, { ...selected, x: nx, y: ny })) return;
       if (isDesk(selected) && selected.props) {
         const ox = nx - selected.x;
         const oy = ny - selected.y;
@@ -424,6 +423,21 @@ export default function Mapmaker() {
     </Button>
   );
   const def = selected ? OBJECT_DEFS[selected.type] : null;
+  // look do ocupante da mesa selecionada (cor e setup escolhidos por ele, por cima deste mapa)
+  const deskLook = (() => {
+    const info = selected && isDesk(selected) ? desks.find((d) => d.id === selected.id) : null;
+    if (!info?.look) return null;
+    const what = [
+      info.look.setup ? deskSetups(selected!.type).find((x) => x.id === info.look!.setup)?.label : null,
+      info.look.color ? objectColors(selected!.type).find((x) => x.id === info.look!.color)?.label : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    return what ? { name: info.userName ?? t('mm.occupant', 'O ocupante'), what } : null;
+  })();
+  // aba "Cor": o objeto selecionado; sem seleção, o item da paleta que vai ser colocado
+  const colorTarget = selected && hasVariants(selected.type) ? selected : null;
+  const placing = !colorTarget && tool === 'object' && hasVariants(objType) ? objType : null;
   const typesByGroup = useMemo(() => Object.fromEntries(OBJECT_GROUPS.map((g) => [g, OBJECT_TYPES.filter((ty) => objectGroup(ty) === g)])) as Record<ObjectGroup, string[]>, []);
 
   return (
@@ -472,10 +486,12 @@ export default function Mapmaker() {
                         onClick={() => {
                           setObjType(ty);
                           setTool('object');
+                          // a aba "Cor" passa a mostrar o item da paleta (o que vai ser colocado)
+                          setSelObj(null);
                         }}
                         className={cx('rounded-lg border p-0.5', objType === ty && tool === 'object' ? 'border-gold bg-gold/10' : 'border-line hover:border-muted')}
                       >
-                        <img src={objectIcon(ty)} alt={OBJECT_DEFS[ty].label} className="pixel h-10 w-10" />
+                        <img src={objectIcon(ty, placeColors[ty], placeSetups[ty])} alt={OBJECT_DEFS[ty].label} className="pixel h-10 w-10" />
                       </button>
                     ))}
                   </div>
@@ -655,45 +671,11 @@ export default function Mapmaker() {
                   <Input value={selected.props?.text ?? ''} onChange={(e) => setProp('text', e.target.value.slice(0, def.text!.max))} placeholder={def.text.default} maxLength={def.text.max} data-testid="obj-text" />
                 </Field>
               ) : null}
-              {objectColors(selected.type).length > 1 ? (
-                <Field label={t('mm.pColor', 'Cor')}>
-                  <Select
-                    value={objColor(selected)?.id ?? ''}
-                    data-testid="obj-color"
-                    onChange={(e) =>
-                      patchObj((o) => {
-                        if (e.target.value === objectColors(o.type)[0].id) delete o.color;
-                        else o.color = e.target.value;
-                      })
-                    }
-                  >
-                    {objectColors(selected.type).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              ) : null}
-              {deskSetups(selected.type).length ? (
-                <Field label={t('mm.pSetup', 'Setup da mesa (o que fica em cima)')}>
-                  <Select
-                    value={objSetup(selected)?.id ?? ''}
-                    data-testid="obj-setup"
-                    onChange={(e) =>
-                      patchObj((o) => {
-                        if (e.target.value === deskSetups(o.type)[0].id) delete o.setup;
-                        else o.setup = e.target.value;
-                      })
-                    }
-                  >
-                    {deskSetups(selected.type).map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+              {hasVariants(selected.type) ? <p className="text-[11px] text-muted">{t('mm.pColorTab', 'Cor e setup: na aba “Cor”, no canto do mapa.')}</p> : null}
+              {deskLook ? (
+                <p className="rounded-lg border border-gold/40 bg-gold/10 p-2 text-[11px] leading-snug" data-testid="obj-desk-look">
+                  {t('mm.deskLook', '{{name}} personalizou esta mesa ({{what}}). No escritório vale a escolha dela até deixar o posto; aqui você edita o padrão da mesa.', { name: deskLook.name, what: deskLook.what })}
+                </p>
               ) : null}
               {selected.type === 'portal' ? (
                 <div className="space-y-1">
@@ -770,7 +752,55 @@ export default function Mapmaker() {
               ))}
             </div>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-line bg-black">
+          <div className="relative min-h-0 flex-1">
+          {colorTarget || placing ? (
+            <div className="absolute right-3 top-3 z-10">
+              {colorHidden ? (
+                <button type="button" onClick={() => setColorHidden(false)} data-testid="color-tab-show" className="rounded-full border border-gold/60 bg-panel/95 px-3 py-1 text-xs font-semibold text-gold shadow-lg">
+                  <EmoText text={t('mm.colorShow', '🎨 Cor')} />
+                </button>
+              ) : colorTarget ? (
+                <ColorTab
+                  key={colorTarget.id}
+                  type={colorTarget.type}
+                  color={colorTarget.color}
+                  setup={colorTarget.setup}
+                  note={t('mm.colorSelected', 'Objeto selecionado. A escolha vale também para os próximos deste tipo.')}
+                  onHide={() => setColorHidden(true)}
+                  onColor={(id) => {
+                    setPlaceColors((c) => ({ ...c, [colorTarget.type]: id }));
+                    patchObj((o) => {
+                      if (id === objectColors(o.type)[0]?.id) delete o.color;
+                      else o.color = id;
+                    });
+                  }}
+                  onSetup={
+                    deskSetups(colorTarget.type).length
+                      ? (id) => {
+                          setPlaceSetups((c) => ({ ...c, [colorTarget.type]: id }));
+                          patchObj((o) => {
+                            if (id === deskSetups(o.type)[0]?.id) delete o.setup;
+                            else o.setup = id;
+                          });
+                        }
+                      : undefined
+                  }
+                />
+              ) : (
+                <ColorTab
+                  key={placing!}
+                  type={placing!}
+                  color={placeColors[placing!]}
+                  setup={placeSetups[placing!]}
+                  note={t('mm.colorPlace', 'Para os próximos que você colocar.')}
+                  onHide={() => setColorHidden(true)}
+                  onColor={(id) => setPlaceColors((c) => ({ ...c, [placing!]: id }))}
+                  onSetup={deskSetups(placing!).length ? (id) => setPlaceSetups((c) => ({ ...c, [placing!]: id })) : undefined}
+                />
+              )}
+            </div>
+          ) : null}
+          <div className="h-full overflow-auto rounded-xl border border-line bg-black">
             <canvas
               ref={canvas}
               data-testid="mm-canvas"
@@ -783,6 +813,7 @@ export default function Mapmaker() {
               }}
               style={{ width: map.width * T * zoom, height: map.height * T * zoom, cursor: tool === 'select' ? 'default' : 'crosshair' }}
             />
+          </div>
           </div>
         </div>
       </div>

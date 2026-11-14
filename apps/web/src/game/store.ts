@@ -34,7 +34,13 @@ export interface GameState {
   office: OfficeInfo | null;
   canAdmin: boolean;
   livekitUrl: string;
+  /**
+   * Mapa como o escritório vê: o publicado (`baseMap`) com a cor e o setup que cada ocupante
+   * escolheu para a mesa dele (`applyDeskLooks`). É o que a cena, o mini-mapa e os painéis usam.
+   */
   map: OfficeMap | null;
+  /** Mapa publicado, sem os looks das mesas: é o que o Mapmaker edita. */
+  baseMap: OfficeMap | null;
   mapRev: number;
   meId: string;
   players: Record<string, PlayerState>;
@@ -59,6 +65,8 @@ export interface GameState {
   minimap: boolean;
   buildMode: string | null;
   buildProps: Record<string, any> | null;
+  /** Cor (id da variante) do objeto que a Build Tool vai colocar. */
+  buildColor: string | null;
   following: string | null;
   modal: ModalState;
   hint: { text: string; object?: MapObject } | null;
@@ -77,6 +85,7 @@ export const useGame = create<GameState>((set, get) => ({
   canAdmin: false,
   livekitUrl: '',
   map: null,
+  baseMap: null,
   mapRev: 0,
   meId: '',
   players: {},
@@ -99,6 +108,7 @@ export const useGame = create<GameState>((set, get) => ({
   minimap: true,
   buildMode: null,
   buildProps: null,
+  buildColor: null,
   following: null,
   modal: null,
   hint: null,
@@ -114,6 +124,7 @@ export function resetGame() {
     errorCode: null,
     office: null,
     map: null,
+    baseMap: null,
     meId: '',
     players: {},
     av: EMPTY_AV,
@@ -131,6 +142,7 @@ export function resetGame() {
     following: null,
     buildMode: null,
     buildProps: null,
+    buildColor: null,
     simplified: false,
   });
 }

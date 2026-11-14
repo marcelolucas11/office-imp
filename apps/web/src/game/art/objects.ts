@@ -94,14 +94,57 @@ export function objectTall(type: string): number {
   return OBJECT_DEFS[type]?.tall ?? 0;
 }
 
-/** Ícone do objeto (paleta do Mapmaker e da Build Tool). `color` e `setup` = ids das variantes (opcionais). */
-export function objectIcon(type: string, color?: string, setup?: string): string {
-  const sprite = objectSprite({ id: 'icon', type, x: 0, y: 0, color, setup });
-  const c = makeCanvas(40, 40);
+const icons = new Map<string, string>();
+
+/** Retângulo dos pixels visíveis de um sprite (o sprite inteiro se estiver vazio). */
+function opaqueBounds(c: HTMLCanvasElement): { x: number; y: number; w: number; h: number } {
+  const { data } = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+  let x0 = c.width;
+  let y0 = c.height;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      if (data[(y * c.width + x) * 4 + 3] === 0) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  return x1 < 0 ? { x: 0, y: 0, w: c.width, h: c.height } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+/**
+ * Ícone do objeto (paleta do Mapmaker e da Build Tool, amostras da aba "Cor"). `color` e `setup` =
+ * ids das variantes (opcionais); `size` = lado do quadrado em px. Com `crop`, o ícone mostra só a
+ * parte visível do sprite, ampliada em pixels inteiros quando cabe (uma caneca fica do tamanho da
+ * amostra). Guardado em cache por chave.
+ */
+export function objectIcon(type: string, color?: string, setup?: string, size = 40, crop = false): string {
+  const o: MapObject = { id: 'icon', type, x: 0, y: 0, color, setup };
+  const key = `${objectKey(o)}@${size}${crop ? 'c' : ''}`;
+  const hit = icons.get(key);
+  if (hit) return hit;
+  const sprite = objectSprite(o);
+  const c = makeCanvas(size, size);
   const ctx = c.getContext('2d')!;
-  const scale = Math.min(40 / sprite.width, 40 / sprite.height, 1.25);
-  const dw = sprite.width * scale;
-  const dh = sprite.height * scale;
-  ctx.drawImage(sprite, (40 - dw) / 2, (40 - dh) / 2, dw, dh);
-  return c.toDataURL();
+  if (crop) {
+    const b = opaqueBounds(sprite);
+    const fit = Math.min((size - 2) / b.w, (size - 2) / b.h);
+    const scale = fit >= 1 ? Math.floor(fit) : fit;
+    ctx.imageSmoothingEnabled = fit < 1;
+    const dw = Math.round(b.w * scale);
+    const dh = Math.round(b.h * scale);
+    ctx.drawImage(sprite, b.x, b.y, b.w, b.h, Math.floor((size - dw) / 2), Math.floor((size - dh) / 2), dw, dh);
+  } else {
+    // até 1,25× do tamanho real (um bloco de 32 px ocupa o ícone de 40 px inteiro, como antes)
+    const scale = Math.min(size / sprite.width, size / sprite.height, (size / 40) * 1.25);
+    const dw = sprite.width * scale;
+    const dh = sprite.height * scale;
+    ctx.drawImage(sprite, (size - dw) / 2, (size - dh) / 2, dw, dh);
+  }
+  const url = c.toDataURL();
+  icons.set(key, url);
+  return url;
 }
