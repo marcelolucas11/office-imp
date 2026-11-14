@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
-import { OBJECT_DEFS, buildCollision, deskSeat, emptyMap, Floor, objectGroup, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
+import { DEFAULT_DESK_SETUP, OBJECT_DEFS, buildCollision, deskSeat, emptyMap, Floor, objColor, objColorError, objSetupError, objectGroup, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
 import { buildWing, CORRIDOR_H, expandOffice, FLOOR_THEMES, generateOffice, GENERATOR_VERSION, modulesForInput, PLANT_PAIRS, renderAscii, reserveBlankWing, ROOM_H, toTiled, validateOffice } from '../src';
 
 const base: WizardInput = { name: 'Impera', size: 'small', partners: 2, partnersShareRoom: true };
@@ -292,5 +292,101 @@ describe('áreas das mesas', () => {
   it('é idempotente', () => {
     const map = generateOffice(base);
     expect(JSON.stringify(withDeskAreas(withDeskAreas(map)))).toBe(JSON.stringify(withDeskAreas(map)));
+  });
+});
+
+describe('setups e cadeiras do visual v2 no gerador (Fase E)', () => {
+  const input: WizardInput = { name: 'Impera', size: 'custom', customCount: 100, partners: 4, partnersShareRoom: true };
+  const regular = (map: OfficeMap) => mapDesks(map).filter((d) => !d.props?.partner);
+  const setupOf = (d: { setup?: string }) => d.setup ?? DEFAULT_DESK_SETUP;
+  /** Cadeiras agrupadas por cômodo (o cômodo é o retângulo de paredes em volta: usa a posição do cômodo no gerador). */
+  const chairsByRoom = (map: OfficeMap) => {
+    const rooms = new Map<string, Set<string>>();
+    const cy = map.meta!.gen!.corridorY;
+    for (const o of map.objects) {
+      if (o.type !== 'chair') continue;
+      // o cômodo de cima ou de baixo do corredor, e a porta mais próxima à esquerda dá o começo dele
+      const side = o.y < cy ? 'top' : 'bottom';
+      const door = map.objects.filter((d) => d.type === 'door' && (d.y < cy) === (side === 'top') && d.x <= o.x + 6).sort((a, b) => b.x - a.x)[0];
+      const key = `${side}:${door?.x ?? -1}`;
+      if (!rooms.has(key)) rooms.set(key, new Set());
+      rooms.get(key)!.add(objColor(o)!.id);
+    }
+    return rooms;
+  };
+
+  it('escritório novo guarda a seed e sorteia setups variados, a maioria com monitor', () => {
+    const map = generateOffice(input);
+    expect(typeof map.meta?.gen?.seed).toBe('number');
+    expect(JSON.stringify(generateOffice(input))).toBe(JSON.stringify(map));
+    const desks = regular(map);
+    const count = new Map<string, number>();
+    for (const d of desks) count.set(setupOf(d), (count.get(setupOf(d)) ?? 0) + 1);
+    // monitor é o mais comum; aparecem ao menos notebook prata, dois monitores, all-in-one e gamer
+    const monitor = count.get('monitor') ?? 0;
+    for (const [id, n] of count) if (id !== 'monitor') expect([id, n < monitor]).toEqual([id, true]);
+    expect(monitor / desks.length).toBeGreaterThan(0.3);
+    for (const id of ['laptop_silver', 'dual', 'aio', 'gamer']) expect([id, (count.get(id) ?? 0) > 0]).toEqual([id, true]);
+    expect(count.has('none')).toBe(false);
+    // o padrão não é gravado, e todo setup gravado é válido
+    for (const o of map.objects) {
+      expect(o.setup).not.toBe(DEFAULT_DESK_SETUP);
+      expect(objSetupError(o)).toBeNull();
+      expect(objColorError(o)).toBeNull();
+    }
+    expect(validateOffice(map).errors).toEqual([]);
+  });
+
+  it('sócios ficam com dois monitores, all-in-one, notebook prata ou monitor', () => {
+    const partners = mapDesks(generateOffice({ ...input, partners: 10 })).filter((d) => d.props?.partner);
+    expect(partners).toHaveLength(10);
+    for (const d of partners) expect(['dual', 'aio', 'laptop_silver', 'monitor']).toContain(setupOf(d));
+  });
+
+  it('as cadeiras de um cômodo têm a mesma cor, e os cômodos variam', () => {
+    const rooms = chairsByRoom(generateOffice(input));
+    expect(rooms.size).toBeGreaterThan(5);
+    for (const [key, colors] of rooms) expect([key, colors.size]).toEqual([key, 1]);
+    const all = new Set([...rooms.values()].flatMap((c) => [...c]));
+    expect(all.size).toBeGreaterThan(1);
+    expect(all.has('graphite')).toBe(true);
+  });
+
+  it('outro escritório (outro nome) sai com outro sorteio; a mesma entrada sai igual', () => {
+    const a = regular(generateOffice(input)).map(setupOf);
+    const b = regular(generateOffice({ ...input, name: 'Outra Empresa' })).map(setupOf);
+    expect(a).toHaveLength(b.length);
+    expect(a).not.toEqual(b);
+    expect(regular(generateOffice({ ...input, name: '  impera ' })).map(setupOf)).toEqual(a);
+  });
+
+  it('setups e cores não mudam a colisão nem o lugar de nada', () => {
+    const fresh = generateOffice(input);
+    const plain = JSON.parse(JSON.stringify(fresh)) as OfficeMap;
+    for (const o of plain.objects) {
+      delete o.setup;
+      if (o.type === 'chair') delete o.color;
+    }
+    expect(Array.from(buildCollision(fresh))).toEqual(Array.from(buildCollision(plain)));
+    expect(withDeskAreas(fresh).areas).toEqual(withDeskAreas(plain).areas);
+  });
+
+  it('escritório antigo (versão 1) e a ala nova dele não ganham setup nem cor de cadeira', () => {
+    const before = legacyOffice({ ...input, customCount: 20 });
+    const after = expandOffice(before, 20).map;
+    for (const o of after.objects) {
+      expect([o.id, o.setup]).toEqual([o.id, undefined]);
+      if (o.type === 'chair') expect([o.id, o.color]).toEqual([o.id, undefined]);
+    }
+  });
+
+  it('a ala nova de um escritório novo também varia, sem mexer nas mesas que já existem', () => {
+    const fresh = generateOffice({ ...input, customCount: 20 });
+    const plan = expandOffice(fresh, 40);
+    expect(JSON.stringify(expandOffice(fresh, 40).map)).toBe(JSON.stringify(plan.map));
+    for (const d of mapDesks(fresh)) expect(plan.map.objects.find((o) => o.id === d.id)).toEqual(d);
+    const added = regular(plan.map).filter((d) => !fresh.objects.some((o) => o.id === d.id));
+    expect(added.length).toBeGreaterThanOrEqual(36);
+    expect(new Set(added.map(setupOf)).size).toBeGreaterThan(2);
   });
 });

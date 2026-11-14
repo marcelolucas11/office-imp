@@ -79,6 +79,68 @@ export function plantFor(version: number | undefined, kind: ModuleSpec['kind'], 
   return PLANT_PAIRS[kind][quadrant % 2];
 }
 
+/**
+ * Setups sorteados para as mesas dos escritórios novos (versão 2+, visual v2 Fase E), com peso:
+ * a maioria fica com o monitor de sempre; alguns notebook prata, dois monitores, all-in-one, PC
+ * gamer e notebook. Na sala dos sócios, mais dois monitores e all-in-one.
+ */
+export const SETUP_WEIGHTS: Record<'regular' | 'partner', [string, number][]> = {
+  regular: [
+    ['monitor', 10],
+    ['laptop_silver', 3],
+    ['dual', 3],
+    ['aio', 2],
+    ['gamer', 1],
+    ['laptop', 1],
+  ],
+  partner: [
+    ['dual', 2],
+    ['aio', 2],
+    ['laptop_silver', 1],
+    ['monitor', 1],
+  ],
+};
+
+/** Cor das cadeiras de um cômodo (todas iguais no cômodo), com peso: grafite, a de sempre, é a mais comum. */
+export const CHAIR_COLOR_WEIGHTS: [string, number][] = [
+  ['graphite', 4],
+  ['blue', 2],
+  ['green', 1],
+  ['wine', 1],
+  ['sand', 1],
+];
+
+/** Hash FNV-1a de 32 bits (determinístico, sem `Math.random`). */
+export function hash32(...parts: (string | number)[]): number {
+  let h = 0x811c9dc5;
+  for (const ch of parts.join('|')) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/** Item de uma lista com pesos, escolhido pelo número `h` (de `hash32`). */
+export function pickWeighted<T>(list: [T, number][], h: number): T {
+  const total = list.reduce((n, [, w]) => n + w, 0);
+  let r = h % total;
+  for (const [v, w] of list) {
+    if (r < w) return v;
+    r -= w;
+  }
+  return list[0][0];
+}
+
+/** Setup da mesa número `n` de um escritório (versão 2+). `monitor` é o padrão: a mesa fica sem `setup`. */
+export function setupFor(seed: number, n: number, partner: boolean): string {
+  return pickWeighted(SETUP_WEIGHTS[partner ? 'partner' : 'regular'], hash32(seed, 'setup', n));
+}
+
+/** Cor das cadeiras do cômodo posto em (ox, oy). */
+export function chairColorFor(seed: number, ox: number, oy: number): string {
+  return pickWeighted(CHAIR_COLOR_WEIGHTS, hash32(seed, 'chairs', ox, oy));
+}
+
 export type ModuleSpec =
   | { kind: 'reception'; officeName?: string }
   | { kind: 'desks' }

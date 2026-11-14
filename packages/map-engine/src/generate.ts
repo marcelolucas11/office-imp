@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {
+  DEFAULT_DESK_SETUP,
   DESKS_PER_BLOCK,
   Wall,
   MAX_MAP_SIZE,
@@ -8,13 +9,15 @@ import {
   floodFill,
   isDeskType,
   mapDesks,
+  objectColors,
   resizeMap,
   type GeneratorMeta,
   type MapArea,
+  type MapObject,
   type OfficeMap,
   type WizardInput,
 } from '@office-imp/shared';
-import { AREA_NAMES, CORRIDOR_H, GENERATOR_VERSION, ROOM_H, buildChunk, floorTheme, type Chunk, type ModuleSpec, type Side } from './modules';
+import { AREA_NAMES, CORRIDOR_H, GENERATOR_VERSION, ROOM_H, buildChunk, chairColorFor, floorTheme, hash32, setupFor, type Chunk, type ModuleSpec, type Side } from './modules';
 
 export const MAX_CUSTOM_EMPLOYEES = 100;
 export const MAX_PARTNERS = 10;
@@ -74,9 +77,21 @@ function placeChunk(map: OfficeMap, gen: GeneratorMeta, c: Chunk, ox: number, oy
       map.layers.walls[i] = c.walls[y * c.w + x];
     }
   }
+  // visual v2 (Fase E): da versão 2 em diante, setups variados e uma cor de cadeira por cômodo,
+  // sorteados pela seed do escritório (mesma entrada, mesmo mapa); a versão 1 continua igual
+  const varied = (gen.version ?? 1) >= 2;
+  const seed = gen.seed ?? 0;
+  const chairColor = varied ? chairColorFor(seed, ox, oy) : null;
   for (const o of c.objects) {
     const desk = isDeskType(o.type);
-    const id = desk ? `desk_${nextId(gen, 'desk')}` : `obj_${nextId(gen, 'obj')}`;
+    const n = nextId(gen, desk ? 'desk' : 'obj');
+    const id = desk ? `desk_${n}` : `obj_${n}`;
+    const variant: Partial<MapObject> = {};
+    if (varied && desk) {
+      const setup = setupFor(seed, n, Boolean(o.props?.partner));
+      if (setup !== DEFAULT_DESK_SETUP) variant.setup = setup;
+    }
+    if (chairColor && o.type === 'chair' && chairColor !== objectColors('chair')[0]?.id) variant.color = chairColor;
     const props = o.props ? JSON.parse(JSON.stringify(o.props)) : undefined;
     if (props?.zone) {
       props.zone.x += ox;
@@ -86,7 +101,7 @@ function placeChunk(map: OfficeMap, gen: GeneratorMeta, c: Chunk, ox: number, oy
       props.seat.x += ox;
       props.seat.y += oy;
     }
-    map.objects.push({ ...o, id, x: o.x + ox, y: o.y + oy, ...(props ? { props } : {}) });
+    map.objects.push({ ...o, id, x: o.x + ox, y: o.y + oy, ...variant, ...(props ? { props } : {}) });
   }
   for (const a of c.areas) {
     const { nameKey, ...rest } = a;
@@ -168,10 +183,15 @@ export function buildWing(map: OfficeMap, gen: GeneratorMeta, modules: ModuleSpe
   gen.endX = endX;
 }
 
+/** Seed de um escritório novo: sai da entrada do assistente (a mesma entrada dá o mesmo escritório). */
+export function officeSeed(input: WizardInput): number {
+  return hash32(input.name.trim().toLowerCase(), input.size, input.customCount ?? '', input.partners, input.partnersShareRoom ? 1 : 0);
+}
+
 /** Gera um escritório novo. Determinístico: a mesma entrada produz o mesmo mapa. */
 export function generateOffice(input: WizardInput): OfficeMap {
   const map = emptyMap(1, ROOM_H * 2 + CORRIDOR_H);
-  const gen: GeneratorMeta = { version: GENERATOR_VERSION, corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, counters: {} };
+  const gen: GeneratorMeta = { version: GENERATOR_VERSION, seed: officeSeed(input), corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, counters: {} };
   buildWing(map, gen, modulesForInput(input), 0, false);
   map.meta = { gen };
   return map;

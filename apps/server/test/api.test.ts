@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { areaCenter, buildCollision, mapDesks, type AvView, type MapArea, type OfficeMap } from '@office-imp/shared';
+import { DESK_SETUPS, areaCenter, buildCollision, mapDesks, objColor, objSetup, objectColors, type AvView, type MapArea, type OfficeMap } from '@office-imp/shared';
 import { config } from '../src/config';
 import { totpCode } from '../src/lib/crypto';
 import { setMailTestMode, testOutbox } from '../src/lib/mailer';
@@ -403,6 +403,9 @@ describe('tempo real', () => {
     const desk = mapDesks(map).find((d) => !d.props?.partner)!;
     const room = hub.room(officeId)!;
     const lookOf = (desks: any[]) => desks.find((x: any) => x.id === desk.id)?.look ?? null;
+    // setups e cor diferentes dos do mapa publicado (o gerador sorteia o setup de cada mesa)
+    const [s1, s2] = DESK_SETUPS.map((x) => x.id).filter((id) => id !== objSetup(desk)!.id);
+    const c1 = objectColors(desk.type).map((c) => c.id).find((id) => id !== objColor(desk)!.id)!;
     // decoração com cor: a variante é validada no servidor; a padrão não é gravada
     a.send('decor:add', { type: 'mug', x: desk.x + 1, y: desk.y, color: 'gold' });
     const added = (await b.next('map:patch', (d) => d.add[0]?.type === 'mug')).add[0];
@@ -432,8 +435,8 @@ describe('tempo real', () => {
     }
 
     // look da mesa: cor e setup escolhidos pela dona, para todos, sem mudar o mapa publicado
-    a.send('desk:look', { color: 'black', setup: 'gamer' });
-    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === 'gamer'))).toEqual({ color: 'black', setup: 'gamer' });
+    a.send('desk:look', { color: c1, setup: s1 });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === s1))).toEqual({ color: c1, setup: s1 });
     a.send('desk:look', { setup: 'tres-monitores' });
     expect((await a.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
     a.send('desk:look', { color: 'arco-iris' });
@@ -441,18 +444,24 @@ describe('tempo real', () => {
     // funcionária não mexe na mesa de outra pessoa
     b.send('desk:look', { deskId: desk.id, setup: 'aio' });
     expect((await b.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
-    a.send('desk:look', { setup: 'laptop_silver' }); // só o setup: a cor escolhida continua
-    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === 'laptop_silver'))).toEqual({ color: 'black', setup: 'laptop_silver' });
-    expect(room.map.objects.find((o) => o.id === desk.id)).not.toHaveProperty('setup');
-    expect(room.map.objects.find((o) => o.id === desk.id)).not.toHaveProperty('color');
+    a.send('desk:look', { setup: s2 }); // só o setup: a cor escolhida continua
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === s2))).toEqual({ color: c1, setup: s2 });
+    // o mapa publicado (planta) não muda: nem na sala, nem no banco
+    const plan = (o: any) => ({ setup: o?.setup, color: o?.color });
+    expect(plan(room.map.objects.find((o) => o.id === desk.id))).toEqual(plan(desk));
     const published = (await admin.http.get(`/api/offices/${officeId}/map`)).json.map;
-    expect(published.objects.find((o: any) => o.id === desk.id)).not.toHaveProperty('setup');
+    expect(plan(published.objects.find((o: any) => o.id === desk.id))).toEqual(plan(desk));
     // quem entra depois já recebe o look (na entrada e na lista de mesas)
-    expect(lookOf((await bia.http.post(`/api/offices/${slug}/enter`)).json.desks)).toEqual({ color: 'black', setup: 'laptop_silver' });
-    expect(lookOf((await bia.http.get(`/api/offices/${officeId}/desks`)).json)).toEqual({ color: 'black', setup: 'laptop_silver' });
+    expect(lookOf((await bia.http.post(`/api/offices/${slug}/enter`)).json.desks)).toEqual({ color: c1, setup: s2 });
+    expect(lookOf((await bia.http.get(`/api/offices/${officeId}/desks`)).json)).toEqual({ color: c1, setup: s2 });
+    // escolher o que o mapa publicado já tem não é personalização: o campo sai do look
+    a.send('desk:look', { setup: objSetup(desk)!.id });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.color === c1 && !lookOf(d)?.setup))).toEqual({ color: c1 });
+    a.send('desk:look', { setup: s2 });
+    await b.next('desks', (d) => lookOf(d)?.setup === s2);
     // voltar um campo ao do mapa publicado: o look guarda só o que muda
     a.send('desk:look', { color: null });
-    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === 'laptop_silver' && !lookOf(d)?.color))).toEqual({ setup: 'laptop_silver' });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === s2 && !lookOf(d)?.color))).toEqual({ setup: s2 });
 
     // "Deixar o posto": a mesa fica livre e volta ao setup e à cor do mapa publicado
     a.send('desk:release');
@@ -460,7 +469,7 @@ describe('tempo real', () => {
     expect(lookOf(freed)).toBeNull();
     expect(lookOf((await bia.http.get(`/api/offices/${officeId}/desks`)).json)).toBeNull();
     // mesa livre não tem look
-    a.send('desk:look', { deskId: desk.id, setup: 'gamer' });
+    a.send('desk:look', { deskId: desk.id, setup: s1 });
     expect((await a.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
     // pegar a mesa de novo começa do setup inicial
     a.send('desk:claim', { deskId: desk.id });
@@ -585,9 +594,10 @@ describe('tempo real', () => {
     const desk = mapDesks(map).find((d) => !d.props?.partner)!;
     const free = mapDesks(map).find((d) => d.id !== desk.id && !d.props?.partner)!;
     const lookOf = (desks: any[], id = desk.id) => desks.find((x: any) => x.id === id)?.look ?? null;
-    adm.send('desk:look', { deskId: desk.id, setup: 'aio', color: 'walnut' });
-    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === 'aio'))).toEqual({ setup: 'aio', color: 'walnut' });
-    adm.send('desk:look', { deskId: free.id, setup: 'aio' });
+    const setup = DESK_SETUPS.map((x) => x.id).find((id) => id !== objSetup(desk)!.id)!;
+    adm.send('desk:look', { deskId: desk.id, setup, color: 'walnut' });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.setup === setup))).toEqual({ setup, color: 'walnut' });
+    adm.send('desk:look', { deskId: free.id, setup });
     expect((await adm.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
     adm.send('desk:look', { deskId: desk.id, reset: true });
     expect(lookOf(await b.next('desks', (d) => d.some((x: any) => x.id === desk.id) && !lookOf(d)))).toBeNull();
@@ -626,9 +636,11 @@ describe('tempo real', () => {
     expect(msg.map.objects.some((o: any) => o.id === 'obj_tv_extra')).toBe(true);
     expect(msg.map.objects.find((o: any) => o.id === 'obj_chair_blue').color).toBe('blue');
     expect(msg.map.objects.find((o: any) => o.id === setupDesk.id)).toMatchObject({ setup: 'gamer', color: 'walnut' });
-    // mapa antigo: nenhum objeto ganhou `color` nem `setup` por conta própria
-    expect(msg.map.objects.filter((o: any) => 'color' in o).map((o: any) => o.id)).toEqual([setupDesk.id, 'obj_chair_blue']);
-    expect(msg.map.objects.filter((o: any) => 'setup' in o).map((o: any) => o.id)).toEqual([setupDesk.id]);
+    // o servidor não inventa nem tira cor ou setup: sai como foi enviado (o gerador já sorteia setups e cor de cadeira por sala)
+    const withKey = (objs: any[], key: string) => objs.filter((o) => key in o).map((o) => `${o.id}:${o[key]}`);
+    expect(withKey(msg.map.objects, 'color')).toEqual(withKey(edited.objects, 'color'));
+    expect(withKey(msg.map.objects, 'setup')).toEqual(withKey(edited.objects, 'setup'));
+    expect(withKey(msg.map.objects, 'color')).toContain('obj_chair_blue:blue');
     const versions = (await admin.http.get(`/api/offices/${officeId}/map/versions`)).json;
     expect(versions[0]).toMatchObject({ note: 'TV no corredor', published: true, authorName: 'Gestora' });
     expect(versions.length).toBe(2);
@@ -661,11 +673,11 @@ describe('tempo real', () => {
 
   it('remover funcionário libera a mesa, guarda a decoração, devolve o setup inicial e derruba a sessão', async () => {
     // a mesa da Ana com cor e setup próprios
-    a.send('desk:look', { setup: 'dual', color: 'white' });
-    const anaDesk = (await b.next('desks', (d) => d.some((x: any) => x.userId === ana.id && x.look?.setup === 'dual'))).find((x: any) => x.userId === ana.id).id;
+    a.send('desk:look', { color: 'white' });
+    const anaDesk = (await b.next('desks', (d) => d.some((x: any) => x.userId === ana.id && x.look?.color === 'white'))).find((x: any) => x.userId === ana.id).id;
     const desksBefore = (await admin.http.get(`/api/offices/${officeId}/desks`)).json;
     expect(desksBefore.filter((d: any) => d.userId === ana.id)).toHaveLength(1);
-    expect(desksBefore.find((d: any) => d.id === anaDesk).look).toEqual({ setup: 'dual', color: 'white' });
+    expect(desksBefore.find((d: any) => d.id === anaDesk).look).toEqual({ color: 'white' });
     expect((await admin.http.del(`/api/users/${ana.id}`)).status).toBe(200);
     expect((await a.next('kick')).reason).toBe('removed');
     const desksAfter = (await admin.http.get(`/api/offices/${officeId}/desks`)).json;

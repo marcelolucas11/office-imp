@@ -529,6 +529,11 @@ export interface MapPortal {
 
 export interface GeneratorMeta {
   version: number;
+  /**
+   * Seed do escritório (visual v2, Fase E): sorteia os setups das mesas e a cor das cadeiras de
+   * cada cômodo da versão 2 em diante. Sai da entrada do assistente; mapas sem ela usam 0.
+   */
+  seed?: number;
   corridorY: number;
   topX: number;
   bottomX: number;
