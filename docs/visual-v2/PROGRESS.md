@@ -9,7 +9,7 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 | B. Pisos, paredes e exterior | pronto | 15 pisos (10 redesenhados + 5 novos), 7 paredes (4 novas), janelas com vista, exterior com grama e árvores, dia e noite pelo fuso do escritório, gerador com os pisos novos, `pnpm art:map` e `/dev/cena`. Guia logo abaixo do guia da Fase A |
 | C1. Mesas e cadeiras | pronto | 8 mesas de trabalho (flag `desk: true`, L com máscara e espelho), 6 assentos com cores, cadeiras de mesa com encosto alto. Guia logo abaixo do guia da Fase B |
 | C2. Setups e objetos de mesa | pronto | `MapObject.setup` (7 setups), 13 objetos de mesa, 10 extras (neon com texto editável), paleta do Mapmaker em grupos. Guia logo abaixo |
-| C3. Plantas e catálogo antigo | pendente | |
+| C3. Plantas e catálogo antigo | pronto | 8 plantas novas + `plant`/`plant_small` redesenhadas (grupo "Plantas"), o resto do catálogo redesenhado com cores, desenho antigo removido de `objects.ts`, gerador com as plantas novas. Guia logo abaixo do guia das Fases C1 e C2 |
 | D. Avatar: mais opções | pendente | |
 | E. Cores e setup da mesa | pendente | |
 | F. Animações | pendente | |
@@ -17,9 +17,10 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 
 ## Checklist final (andamento)
 
+- [x] Arte de cenário e objetos refeita com traço de 1 px, nenhum sprite antigo sobrando (Fase C3; o avatar fica como é, pela decisão 2)
 - [x] Exterior com grama e árvores + dia/noite pelo fuso do escritório (Fase B)
-- [x] Mesas, cadeiras, setups, objetos de mesa e os 10 extras (Fases C1 e C2; as plantas são da C3)
-- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases C3 a G
+- [x] Todas as mesas, cadeiras, plantas, setups, objetos de mesa e os 10 extras (Fases C1, C2 e C3)
+- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases D a G
 
 ## Guia da base (Fase A) para as próximas fases
 
@@ -44,7 +45,7 @@ Arquivos novos em `apps/web/src/game/art/`:
 - `noise(x, y, seed)` é o mesmo de antes (os pisos atuais dependem dele; há teste que trava os valores).
 - Deixe **1 px livre** nas bordas do sprite: o contorno não sai do canvas.
 
-**Como redesenhar um objeto.** Escreva um `SpritePainter` (`(s, info) => void`, com `info.w`, `info.h`, `info.top`, `info.o`, `info.color`) e registre em `spritePainters` no `objects.ts` (hoje `{ ...SEATING }`). Quem tem `SpritePainter` ignora o desenho antigo de `painters`; ao migrar um tipo, apague o desenho antigo dele. `objectSprite`, `objectKey`, o cache e a cena do Phaser não precisam mudar.
+**Como desenhar um objeto.** Escreva um `SpritePainter` (`(s, info) => void`, com `info.w`, `info.h`, `info.top`, `info.o`, `info.color`) no arquivo da família e registre em `spritePainters` no `objects.ts`. (Até a Fase C2 havia também o desenho antigo, `painters`; a C3 o removeu.) `objectSprite`, `objectKey`, o cache e a cena do Phaser não precisam mudar.
 
 **Cor por objeto.** Em `packages/shared/src/map.ts`: `ObjectDef.colors?: ObjectColor[]` (a primeira é a padrão), `MapObject.color?: string`, `objColor(o)` (variante válida ou a padrão; `null` se o tipo não tem cores), `objectColors(type)`, `objColorError(o)` e `normalizeObjectColors(map)`. Para dar cores a um tipo, basta pôr `colors` na definição e usar `info.color.hex` no desenho (`ramp(hex)` gera os 4 tons). `objectKey` já inclui a cor; `objectIcon(type, color?)` aceita a variante. Cadeira e sofá usam a lista `UPHOLSTERY` (grafite, azul, verde, vinho, areia).
 
@@ -126,10 +127,36 @@ Arquivos novos em `apps/web/src/game/art/`:
 
 **Conferência.** `pnpm art:sheet --only=desk*,chair* --scale=4 --out=/tmp/folha` gera só `recorte.png` com os tipos pedidos ao lado de um avatar (nome exato ou prefixo com `*`). A folha completa mostra cada mesa em cada setup e o neon com um texto de exemplo.
 
+## Guia da Fase C3 (plantas e catálogo antigo) para as próximas fases
+
+Arquivos novos em `apps/web/src/game/art/`:
+
+| Arquivo | O que tem |
+|---|---|
+| `plants.ts` | As 10 plantas: `plant` (planta de folhagem) e `plant_small` (vaso pequeno, jiboia) redesenhadas, `monstera`, `snake_plant`, `cactus` (mandacaru), `succulent_bowl`, `palm`, `tall_vase` (vaso alto com plumas), `hanging_fern` e `wall_garden` (as duas de parede). Peças reaproveitáveis: `pot` (quadrado, afunilado, redondo), `basket`, `frond` (folha em pente: palmeira e samambaia), `monsteraLeaf`, `sword`, `rosette`, `leafCluster` |
+| `furniture.ts` | Mesa de reunião (redimensionável), mesa redonda, balcão (redimensionável), estante, armário, luminária de chão, púlpito, tapete (redimensionável), tapete com logo (coroa Impera em dourado) e quadro |
+| `appliances.ts` | Máquina de café, bebedouro e geladeira |
+| `interactive.ts` | Quadro branco, TV, quiosque, fliperama, pôster e nota (só o desenho mudou; `interact` e `props` iguais) |
+| `structure.ts` | Porta aberta (`door`), porta fechada (`paintDoorClosed`) e portal |
+
+**Um caminho só.** `objects.ts` não tem mais o desenho antigo (`painters`, retângulos no canvas): todo tipo de `OBJECT_DEFS` tem um `SpritePainter` em `spritePainters`, e `REDESIGNED_TYPES` é o catálogo inteiro. O teste "nenhum tipo do catálogo usa o desenho antigo" falha se um tipo novo ficar sem desenho (nesse caso, o objeto cai num bloco contornado na cor da variante, para não sumir). O `r` e o `shade` aditivo de `tiles.ts` ficam só para o avatar, que tem que sair pixel a pixel igual.
+
+**Medidas das plantas.** As de chão com `tall: 1` apoiam o vaso no fim do bloco (`top + 13 … top + 29`) e sobem para o bloco de cima, como a planta de antes; são sólidas e ocupam um bloco, então trocar uma pela outra não muda a colisão. As de parede (`hanging_fern`, `wall_garden`) vão no bloco da própria parede e ocupam a face (linhas 10 a 30), como o relógio e a cortiça. O pôster agora também cabe na face da parede (linhas 7 a 29) e continua funcionando no chão. A cor das plantas é a do vaso (`POTS`, com `potsWith(id)` para escolher a padrão de cada tipo: branco na costela-de-adão, preto na espada-de-são-jorge, cesto de palha na palmeira); no jardim vertical, a da moldura.
+
+**Cores novas** (a primeira de cada lista é a mais próxima da cor antiga, então mapas salvos mudam de traço, não de cor): mesa de reunião e mesa redonda (`TOPS`), balcão, estante e púlpito (`CABINET_WOODS`), armário, luminária (cúpula), quadro (`FRAMES`), tapetes (`RUGS`), máquina de café, bebedouro, geladeira, porta, portal, fliperama, pôster e nota. Quadro branco, TV e quiosque não têm cores.
+
+**Porta fechada.** Não é um tipo: `doorClosedSprite(o)` desenha a folha na cor da porta e `doorClosedKey(o)` dá o nome da textura (`door:closed:<cor>`), uma por variante. A cena cria a textura de cada porta ao montar o mapa e troca entre `obj:<chave>` (aberta, no chão) e `doorClosedKey(o)` (fechada, na altura dos avatares). A `/dev/cena` abre todas as portas; para ver fechadas: `node e2e/dev-shot.mjs saida.png "http://localhost:5173/dev/cena?pessoas=15" 1920 1080 1500 "const g=window.__oi.game; const ids=Object.keys(g.getState().doors); g.setState({doors:{}}); ids.forEach(id=>window.__oi.bus.emit('doors',{id}))"`.
+
+**Paleta do Mapmaker.** Grupo novo `plants` ("Plantas", `mm.grpPlants`) antes de `decor`, que passou a se chamar "Decoração". As plantas de parede também ficam em "Plantas" (o rótulo diz "(parede)").
+
+**Gerador.** `buildChunk(spec, side, theme, version)` troca cada `plant` do cômodo por `plantFor(version, kind, x, y, w, h)`: na versão 1, sempre `plant`; da 2 em diante, o par de `PLANT_PAIRS` do tipo de cômodo, alternado em diagonal pelos quadrantes (na recepção, costela-de-adão e espada-de-são-jorge se cruzam nos cantos; copa com cacto e palmeira; reunião e auditório com palmeira; sócios com vaso alto). Posições, tamanho e colisão são os mesmos de antes (há teste). Mapas salvos não mudam; a ala nova de um escritório da versão 1 continua com `plant`. O ASCII mostra toda planta como `p`.
+
+**Conferência.** `pnpm art:map --json=docs/visual-v2/catalogo-c3.json --margin=3 --scale=2` gera `prints/mapa-catalogo-c3-day.png`, uma sala com todo o catálogo da C3 (plantas, móveis, copa, interativos, decoração de parede, portas e portal). `prints/cena-15p-portas-fechadas.png` é a cena real com as portas fechadas.
+
 ## Problemas conhecidos
 
 - A página `/dev/arte` foi conferida só pelo servidor do Vite (os módulos compilam e a rota responde); não havia navegador no ambiente da Fase A para abri-la. As folhas PNG saem do mesmo código (`sheet.ts`).
-- Sofá virado para a esquerda ou direita usa o desenho de frente (já era assim na arte antiga). Se a Fase C3 quiser as 4 direções, o `SpritePainter` do sofá recebe `info.o.dir`.
+- Sofá virado para a esquerda ou direita usa o desenho de frente (já era assim na arte antiga). A Fase C3 manteve: o sofá é 2×1 fixo, e um sofá de lado precisaria de um footprint 1×2 (mudaria a colisão de mapas salvos).
 - `decor:add` (tempo real, não alterado nesta fase) considera "em cima da mesa" só os 2 primeiros blocos (`desk.x + 2`): numa mesa de 3 blocos, o funcionário consegue pôr a planta grande (sólida) no 3º bloco. Corrigir na Fase E com `objSolidAt`.
 - Objetos postos na coluna do setup ficam por cima dele (o setup é parte do sprite da mesa): um mousepad ali cobre o teclado do setup.
 - Na mesa em L, clicar no vão (onde fica a cadeira) no Mapmaker seleciona a mesa se não houver outro objeto ali; com a cadeira posta depois, a cadeira tem prioridade.
@@ -141,3 +168,6 @@ Arquivos novos em `apps/web/src/game/art/`:
 - Janela num trecho vertical de parede (parede com outra embaixo) vira só um filete de vidro no topo: o modelo de parede não tem face lateral.
 - A troca de período refaz os blocos estáticos do mapa de uma vez (4 vezes por dia). Em mapas muito grandes pode custar alguns quadros; a Fase G deve medir.
 - `/dev/cena` foi conferida com o Chrome sem janela (WebGL por software); o FPS real fica para a Fase G.
+- As plantas de parede (`hanging_fern`, `wall_garden`), como os outros objetos de parede, foram feitas para o bloco da parede; o Mapmaker não impede pôr num bloco de chão (aparecem "flutuando" na altura da face). O gerador não usa plantas de parede.
+- As plantas novas não entraram em `DESK_DECOR_TYPES` (a Build Tool do funcionário continua com `plant` e `plant_small`); a Fase E pode decidir se o funcionário escolhe outras.
+- Pôsteres postos sobre um bloco de chão ficam com o desenho um pouco mais baixo que antes (o pôster agora cabe na face da parede).
