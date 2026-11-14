@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { OBJECT_DEFS, objSize, type DayPeriod, type MapArea, type OfficeMap, type Rect } from '@office-imp/shared';
+import { OBJECT_DEFS, isDesk, objDepthRows, objSize, objSolidAt, type DayPeriod, type MapArea, type MapObject, type OfficeMap, type Rect } from '@office-imp/shared';
 import { EXTERIOR_MARGIN, drawExterior } from './exterior';
 import { objectSprite, objectTall } from './objects';
 import { FLOOR_COLOR, T, WALL_MINI, drawStatic, makeCanvas, type Ctx } from './tiles';
@@ -9,17 +9,34 @@ export const VOID_COLOR = '#0b0b0d';
 /** Cor do vazio no mini-mapa e nas miniaturas: verde escuro, lembrando a grama do exterior. */
 export const MINI_VOID_COLOR = '#22382a';
 
+const FLOOR_LEVEL = (type: string) => type.startsWith('rug') || type === 'door' || type === 'portal';
+
+/**
+ * Para cada bloco, o móvel sólido que o ocupa (chave `y * largura + x`). Um objeto não sólido
+ * posto num desses blocos está "em cima" do móvel (a caneca na mesa) e é desenhado logo acima dele.
+ */
+export function surfaceIndex(map: OfficeMap): Map<number, MapObject> {
+  const out = new Map<number, MapObject>();
+  for (const o of map.objects) {
+    if (!OBJECT_DEFS[o.type]?.solid) continue;
+    const { w, h } = objSize(o);
+    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (objSolidAt(o, dx, dy)) out.set((o.y + dy) * map.width + o.x + dx, o);
+  }
+  return out;
+}
+
+/** Ordem de desenho: itens de chão, depois por profundidade; o que está em cima de um móvel vem logo depois dele. */
 export function sortedObjects(map: OfficeMap) {
-  return [...map.objects].sort((a, b) => {
-    const fa = OBJECT_DEFS[a.type]?.solid ? 1 : 0;
-    const fb = OBJECT_DEFS[b.type]?.solid ? 1 : 0;
-    const ya = a.y + objSize(a).h;
-    const yb = b.y + objSize(b).h;
-    // tapetes e itens de chão primeiro; depois por profundidade
-    const ra = a.type.startsWith('rug') || a.type === 'door' || a.type === 'portal' ? 0 : 1;
-    const rb = b.type.startsWith('rug') || b.type === 'door' || b.type === 'portal' ? 0 : 1;
-    return ra - rb || ya - yb || fa - fb;
-  });
+  const surfaces = surfaceIndex(map);
+  const key = (o: MapObject): [number, number, number] => {
+    if (FLOOR_LEVEL(o.type)) return [0, o.y + objSize(o).h, 0];
+    if (OBJECT_DEFS[o.type]?.solid) return [1, o.y + objDepthRows(o), 1];
+    const under = surfaces.get(o.y * map.width + o.x);
+    return under ? [1, under.y + objDepthRows(under), 2] : [1, o.y + objSize(o).h, 0];
+  };
+  const keyed = map.objects.map((o, i) => ({ o, i, k: key(o) }));
+  keyed.sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2] || a.i - b.i);
+  return keyed.map((e) => e.o);
 }
 
 export function drawObjects(ctx: Ctx, map: OfficeMap, x0 = 0, y0 = 0) {
@@ -133,8 +150,13 @@ export function renderMini(map: OfficeMap, px: number, highlight?: Rect | null):
     const def = OBJECT_DEFS[o.type];
     if (!def || (!def.solid && o.type !== 'chair')) continue;
     const { w, h } = objSize(o);
-    ctx.fillStyle = o.type === 'desk' ? '#d7b870' : o.type === 'plant' ? '#22c55e' : o.type === 'chair' ? 'rgba(20,20,24,0.55)' : 'rgba(20,20,24,0.8)';
+    ctx.fillStyle = isDesk(o) ? '#d7b870' : o.type === 'plant' ? '#22c55e' : o.type === 'chair' ? 'rgba(20,20,24,0.55)' : 'rgba(20,20,24,0.8)';
     const pad = o.type === 'chair' ? px * 0.25 : 0;
+    if (def.cells) {
+      // footprint que não é retangular (mesa em L): só os blocos sólidos
+      for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (objSolidAt(o, dx, dy)) ctx.fillRect((o.x + dx) * px, (o.y + dy) * px, px, px);
+      continue;
+    }
     ctx.fillRect(o.x * px + pad, o.y * px + pad, w * px - pad * 2, h * px - pad * 2);
   }
   if (highlight) {

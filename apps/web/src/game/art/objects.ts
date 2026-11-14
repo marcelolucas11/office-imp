@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { OBJECT_DEFS, objColor, objSize, type Dir, type MapObject } from '@office-imp/shared';
+import { OBJECT_DEFS, objColor, objSetup, objSize, objText, type MapObject } from '@office-imp/shared';
+import { CHAIRS } from './chairs';
+import { DESK_ITEMS } from './deskitems';
+import { DESKS } from './desks';
+import { EXTRAS } from './extras';
 import { Sprite } from './prim';
 import { SEATING } from './seating';
 import type { SpritePainter } from './sprites';
@@ -12,56 +16,12 @@ const GOLD = '#d7b870';
 type Painter = (ctx: Ctx, w: number, h: number, top: number, o: MapObject) => void;
 
 /** Desenhos do visual v2 (primitivas de `prim.ts`). Têm prioridade sobre os antigos. */
-const spritePainters: Record<string, SpritePainter> = { ...SEATING };
+const spritePainters: Record<string, SpritePainter> = { ...SEATING, ...CHAIRS, ...DESKS, ...DESK_ITEMS, ...EXTRAS };
 
-function sofaLike(ctx: Ctx, w: number, top: number, dir: Dir | undefined) {
-  const base = '#3f4350';
-  const cushion = '#565b6b';
-  const y = top;
-  r(ctx, 1, y + 4, w - 2, 26, shade(base, -0.08));
-  r(ctx, 1, y + 4, w - 2, 24, base);
-  if (dir === 'up') {
-    r(ctx, 1, y + 20, w - 2, 9, shade(base, -0.12)); // encosto embaixo (de costas para a câmera)
-    r(ctx, 5, y + 7, w - 10, 12, cushion);
-  } else {
-    r(ctx, 1, y + 3, w - 2, 9, shade(base, 0.06));
-    r(ctx, 5, y + 13, w - 10, 13, cushion);
-  }
-  r(ctx, 1, y + 6, 4, 22, shade(base, -0.05));
-  r(ctx, w - 5, y + 6, 4, 22, shade(base, -0.05));
-  for (let x = 5 + 26; x < w - 8; x += 27) r(ctx, x, y + (dir === 'up' ? 7 : 13), 1, 12, shade(cushion, -0.12));
-  r(ctx, 5, y + (dir === 'up' ? 7 : 13), w - 10, 1, GOLD);
-}
+/** Tipos já redesenhados no visual v2 (os outros ainda usam o desenho antigo, até a Fase C3). */
+export const REDESIGNED_TYPES = Object.keys(spritePainters);
 
 const painters: Record<string, Painter> = {
-  desk(ctx, w, _h, top) {
-    const y = top;
-    // tampo
-    r(ctx, 0, y + 4, w, 20, WOOD);
-    r(ctx, 0, y + 4, w, 2, shade(WOOD, 0.12));
-    r(ctx, 0, y + 24, w, 5, shade(WOOD, -0.18));
-    r(ctx, 2, y + 29, 4, 3, shade(WOOD, -0.3));
-    r(ctx, w - 6, y + 29, 4, 3, shade(WOOD, -0.3));
-    // monitor (sobe para o tile de cima)
-    r(ctx, 13, y - 2, 6, 8, '#111318');
-    r(ctx, 9, y + 5, 14, 2, '#111318');
-    r(ctx, 2, y - 20, 28, 19, '#111318');
-    r(ctx, 4, y - 18, 24, 15, '#1e293b');
-    r(ctx, 6, y - 16, 12, 2, '#60a5fa');
-    r(ctx, 6, y - 12, 18, 1, '#94a3b8');
-    r(ctx, 6, y - 9, 14, 1, '#94a3b8');
-    r(ctx, 6, y - 6, 9, 1, GOLD);
-    // teclado, mouse e caneca
-    r(ctx, 5, y + 10, 20, 6, '#d1d5db');
-    r(ctx, 6, y + 11, 18, 1, '#9ca3af');
-    r(ctx, 6, y + 13, 18, 1, '#9ca3af');
-    r(ctx, 28, y + 11, 4, 5, '#e5e7eb');
-    r(ctx, 40, y + 8, 14, 10, '#f3f4f6');
-    r(ctx, 42, y + 10, 10, 1, '#9ca3af');
-    r(ctx, 42, y + 13, 7, 1, '#9ca3af');
-    r(ctx, 56, y + 9, 5, 6, '#111318');
-    r(ctx, 57, y + 10, 3, 2, '#7c4a1e');
-  },
   table(ctx, w, h, top) {
     const hh = h * T;
     const y = top;
@@ -88,9 +48,6 @@ const painters: Record<string, Painter> = {
     r(ctx, 0, top + 2, w, 2, '#f5f5f4');
     r(ctx, 0, top + hh - 4, w, 2, '#292524');
     for (let x = 6; x < w - 4; x += 16) r(ctx, x, top + hh - 10, 6, 1, GOLD);
-  },
-  armchair(ctx, w, _h, top, o) {
-    sofaLike(ctx, w, top, o.dir === 'up' ? 'up' : 'down');
   },
   bookshelf(ctx, w, _h, top) {
     const y = top - T;
@@ -316,10 +273,16 @@ const painters: Record<string, Painter> = {
 
 const cache = new Map<string, HTMLCanvasElement>();
 
-/** Chave do cache de sprite: tipo + tamanho + direção + cor (a cor padrão e a ausência de cor dão a mesma chave). */
+/**
+ * Chave do cache de sprite: tipo + tamanho + direção + cor + setup + texto. O padrão e a ausência
+ * dão a mesma chave (cor padrão = sem cor; setup padrão = sem setup; texto padrão = sem texto).
+ */
 export function objectKey(o: MapObject): string {
   const { w, h } = objSize(o);
-  return `${o.type}:${w}x${h}:${o.dir ?? ''}:${objColor(o)?.id ?? ''}`;
+  const base = `${o.type}:${w}x${h}:${o.dir ?? ''}:${objColor(o)?.id ?? ''}`;
+  const setup = objSetup(o);
+  const text = objText(o);
+  return `${base}${setup ? `:${setup.id}` : ''}${text === null ? '' : `:${text}`}`;
 }
 
 /** Sprite do objeto. A altura inclui a parte "alta" (tall) acima do footprint. */
@@ -334,14 +297,15 @@ export function objectSprite(o: MapObject): HTMLCanvasElement {
   const paintSprite = spritePainters[o.type];
   if (paintSprite) {
     const s = new Sprite(w * T, (h + tall) * T);
-    paintSprite(s, { o, w: w * T, h: h * T, top: tall * T, color: objColor(o) });
+    paintSprite(s, { o, w: w * T, h: h * T, top: tall * T, color: objColor(o), setup: objSetup(o), text: objText(o) });
     c = s.toCanvas();
   } else {
     c = makeCanvas(w * T, (h + tall) * T);
     const ctx = c.getContext('2d')!;
     const paint = painters[o.type];
     if (paint) paint(ctx, w * T, h, tall * T, o);
-    else r(ctx, 4, tall * T + 4, w * T - 8, h * T - 8, '#be185d');
+    // tipo sem desenho: um bloco na cor da variante (ou magenta), para não sumir do mapa
+    else r(ctx, 4, tall * T + 4, w * T - 8, h * T - 8, objColor(o)?.hex ?? '#be185d');
   }
   cache.set(key, c);
   return c;
@@ -370,9 +334,9 @@ export function objectTall(type: string): number {
   return OBJECT_DEFS[type]?.tall ?? 0;
 }
 
-/** Ícone do objeto (paleta do Mapmaker e da Build Tool). `color` = id da variante de cor (opcional). */
-export function objectIcon(type: string, color?: string): string {
-  const sprite = objectSprite({ id: 'icon', type, x: 0, y: 0, color });
+/** Ícone do objeto (paleta do Mapmaker e da Build Tool). `color` e `setup` = ids das variantes (opcionais). */
+export function objectIcon(type: string, color?: string, setup?: string): string {
+  const sprite = objectSprite({ id: 'icon', type, x: 0, y: 0, color, setup });
   const c = makeCanvas(40, 40);
   const ctx = c.getContext('2d')!;
   const scale = Math.min(40 / sprite.width, 40 / sprite.height, 1.25);

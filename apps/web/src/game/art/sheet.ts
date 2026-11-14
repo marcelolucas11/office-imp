@@ -3,7 +3,7 @@
 // direções) e avatares de exemplo. Tudo sai das definições de `@office-imp/shared`, então
 // um tipo novo de piso, parede ou objeto aparece aqui sozinho.
 // Usado por `pnpm art:sheet` (Node, gera PNG) e pela página /dev/arte (navegador).
-import { AVATAR_OPTIONS, DAY_PERIODS, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, emptyMap, objectColors, type AvatarConfig, type DayPeriod, type Dir, type MapObject, type OfficeMap } from '@office-imp/shared';
+import { AVATAR_OPTIONS, DAY_PERIODS, DEFAULT_DESK_SETUP, DIRS, Floor, OBJECT_DEFS, OBJECT_TYPES, Wall, deskSetups, emptyMap, objectColors, type AvatarConfig, type DayPeriod, type Dir, type MapObject, type OfficeMap } from '@office-imp/shared';
 import { avatarSheet } from './avatar';
 import { makeCanvas } from './canvas';
 import { doorClosedSprite, objectSprite } from './objects';
@@ -194,10 +194,11 @@ function objectCell(o: MapObject, lines: string[]): Cell {
   return { canvas, lines };
 }
 
-/** Todos os tipos de `OBJECT_DEFS`, em todas as cores e em cada direção que muda o desenho. */
-export function objectCells(): Cell[] {
+/** Todos os tipos de `OBJECT_DEFS`, em todas as cores, em cada direção que muda o desenho e, nas mesas, em cada setup. */
+export function objectCells(only?: string[]): Cell[] {
   const cells: Cell[] = [];
   for (const type of OBJECT_TYPES) {
+    if (only && !only.some((name) => (name.endsWith('*') ? type.startsWith(name.slice(0, -1)) : type === name))) continue;
     const def = OBJECT_DEFS[type];
     const colors = objectColors(type);
     const sizes: { w?: number; h?: number }[] = [{}];
@@ -215,7 +216,15 @@ export function objectCells(): Cell[] {
         }
       }
     }
+    // mesas de trabalho: cada setup, na cor padrão (o setup padrão já saiu acima)
+    for (const setup of deskSetups(type)) {
+      if (setup.id === DEFAULT_DESK_SETUP) continue;
+      cells.push(objectCell({ id: 'sheet', type, x: 0, y: 0, setup: setup.id }, [type, `setup ${setup.id}`]));
+    }
+    // tipos com texto no sprite (letreiro neon): um texto diferente do padrão, num tamanho maior
+    if (def.text) cells.push(objectCell({ id: 'sheet', type, x: 0, y: 0, w: def.w + 1, props: { text: 'Bom dia, time!' } }, [type, 'texto']));
   }
+  if (only) return cells;
   // sprite especial: a porta fechada não é um tipo de objeto
   const closed = doorClosedSprite();
   const canvas = makeCanvas(closed.width, closed.height);
@@ -252,6 +261,22 @@ export function avatarCells(): Cell[] {
     ctx.drawImage(sheet, 0, 0);
     return { canvas, lines: [`PELE ${cfg.skin} CABELO ${cfg.hair}/${cfg.hairColor}`, `ROUPA ${cfg.shirt}/${cfg.pants} ACESS ${cfg.accessory}`] };
   });
+}
+
+/**
+ * Recorte da folha de objetos só com os tipos pedidos (nome exato, ou prefixo terminado em `*`),
+ * mais um avatar para comparar a proporção. Serve para conferir uma família de perto
+ * (`pnpm art:sheet --only=desk,chair* --scale=4 --out=/tmp/folha`).
+ */
+export function objectCrop(only: string[], scale = 4): ArtSheet {
+  const sheet = avatarSheet(sampleAvatars()[1]);
+  const avatar = makeCanvas(32, 48);
+  const ctx = avatar.getContext('2d')!;
+  ctx.fillStyle = '#8f8c85';
+  ctx.fillRect(0, 0, 32, 48);
+  ctx.drawImage(sheet, 0, 0, 32, 48, 0, 0, 32, 48);
+  const cells = [{ canvas: avatar, lines: ['AVATAR', '32X48'] }, ...objectCells(only)];
+  return { name: 'recorte', title: 'RECORTE', canvas: scaleCanvas(layout(`RECORTE - ${only.join(' ')} (${cells.length - 1})`, cells), scale), count: cells.length - 1 };
 }
 
 /** As folhas (pisos e paredes, exterior, objetos, avatares), ampliadas `scale` vezes com vizinho mais próximo. */

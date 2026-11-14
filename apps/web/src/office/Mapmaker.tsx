@@ -5,9 +5,19 @@ import {
   Floor,
   MAX_MAP_SIZE,
   OBJECT_DEFS,
+  OBJECT_GROUPS,
   OBJECT_TYPES,
+  defaultDeskSeat,
+  defaultDeskZone,
+  deskSetups,
+  isDesk,
+  isDeskType,
   mapDesks,
+  objColor,
+  objSetup,
   objSize,
+  objectColors,
+  objectGroup,
   rectContains,
   rectsToTiles,
   resizeMap,
@@ -15,7 +25,7 @@ import {
   type Dir,
   type MapArea,
   type MapObject,
-  type ObjectCategory,
+  type ObjectGroup,
   stripDerivedAreas,
   withDeskAreas,
   type OfficeMap,
@@ -36,12 +46,29 @@ import { Emo, EmoText } from '../lib/icons';
 
 type Tool = 'select' | 'object' | 'floor' | 'wall' | 'erase' | 'fill' | 'area' | 'spawn' | 'target';
 const DIR_LABEL: Record<Dir, string> = { down: '↓', left: '←', right: '→', up: '↑' };
-const CATS: { id: ObjectCategory; label: string }[] = [
-  { id: 'interactive', label: 'Interativos' },
-  { id: 'structure', label: 'Estrutura' },
-  { id: 'furniture', label: 'Móveis' },
-  { id: 'decor', label: 'Decoração' },
-];
+/** Rótulo de cada grupo da paleta de objetos (a ordem vem de `OBJECT_GROUPS`). */
+function groupLabel(id: ObjectGroup): string {
+  switch (id) {
+    case 'interactive':
+      return t('mm.grpInteractive', 'Interativos');
+    case 'structure':
+      return t('mm.grpStructure', 'Estrutura');
+    case 'desks':
+      return t('mm.grpDesks', 'Mesas de trabalho');
+    case 'seating':
+      return t('mm.grpSeating', 'Cadeiras e sofás');
+    case 'furniture':
+      return t('mm.grpFurniture', 'Mesas e móveis');
+    case 'deskitems':
+      return t('mm.grpDeskItems', 'Objetos de mesa');
+    case 'appliances':
+      return t('mm.grpAppliances', 'Copa e equipamentos');
+    case 'wall':
+      return t('mm.grpWall', 'De parede');
+    default:
+      return t('mm.grpDecor', 'Plantas e decoração');
+  }
+}
 const rid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
 
 interface Version {
@@ -66,6 +93,7 @@ export default function Mapmaker() {
   const [floorId, setFloorId] = useState(1);
   const [wallId, setWallId] = useState(1);
   const [objType, setObjType] = useState('whiteboard');
+  const [openGroups, setOpenGroups] = useState<Partial<Record<ObjectGroup, boolean>>>({});
   const [dir, setDir] = useState<Dir>('down');
   const [eraseFloor, setEraseFloor] = useState(false);
   const [selObj, setSelObj] = useState<string | null>(null);
@@ -231,8 +259,8 @@ export default function Mapmaker() {
       const def = OBJECT_DEFS[objType];
       if (!def) return;
       snapshot();
-      const o: MapObject = { id: rid(objType === 'desk' ? 'desk' : 'o'), type: objType, x: p.x, y: p.y, ...(dir !== 'down' ? { dir } : {}) };
-      if (objType === 'desk') o.props = { seat: { x: p.x, y: p.y + 1 }, zone: { x: p.x, y: p.y, w: 3, h: 1 } };
+      const o: MapObject = { id: rid(isDeskType(objType) ? 'desk' : 'o'), type: objType, x: p.x, y: p.y, ...(dir !== 'down' ? { dir } : {}) };
+      if (isDeskType(objType)) o.props = { seat: defaultDeskSeat(o), zone: defaultDeskZone(o) };
       map.objects.push(o);
       setSelObj(o.id);
       bump();
@@ -270,7 +298,7 @@ export default function Mapmaker() {
       }
       const nx = Math.max(0, Math.min(map.width - 1, p.x - d.moving.dx));
       const ny = Math.max(0, Math.min(map.height - 1, p.y - d.moving.dy));
-      if (selected.type === 'desk' && selected.props) {
+      if (isDesk(selected) && selected.props) {
         const ox = nx - selected.x;
         const oy = ny - selected.y;
         const seat = selected.props.seat as Point | undefined;
@@ -394,6 +422,7 @@ export default function Mapmaker() {
     </Button>
   );
   const def = selected ? OBJECT_DEFS[selected.type] : null;
+  const typesByGroup = useMemo(() => Object.fromEntries(OBJECT_GROUPS.map((g) => [g, OBJECT_TYPES.filter((ty) => objectGroup(ty) === g)])) as Record<ObjectGroup, string[]>, []);
 
   return (
     <Modal title={t('mm.title', 'Mapmaker — {{name}}', { name: office.name })} wide="full" onClose={closeAsk}>
@@ -426,11 +455,13 @@ export default function Mapmaker() {
                   ))}
                 </div>
               </Field>
-              {CATS.map((c) => (
-                <div key={c.id}>
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{c.label}</p>
+              {OBJECT_GROUPS.map((g) => (
+                <details key={g} open={openGroups[g] ?? true} onToggle={(e) => setOpenGroups((o) => ({ ...o, [g]: (e.target as HTMLDetailsElement).open }))} data-testid={`grp-${g}`}>
+                  <summary className="mb-1 cursor-pointer select-none text-[11px] font-semibold uppercase tracking-wide text-muted hover:text-ink">
+                    {groupLabel(g)} <span className="font-normal normal-case">({typesByGroup[g].length})</span>
+                  </summary>
                   <div className="flex flex-wrap gap-1.5">
-                    {OBJECT_TYPES.filter((ty) => OBJECT_DEFS[ty].category === c.id).map((ty) => (
+                    {typesByGroup[g].map((ty) => (
                       <button
                         key={ty}
                         type="button"
@@ -446,7 +477,7 @@ export default function Mapmaker() {
                       </button>
                     ))}
                   </div>
-                </div>
+                </details>
               ))}
             </>
           ) : null}
@@ -615,6 +646,51 @@ export default function Mapmaker() {
               {def.interact === 'note' || def.interact === 'poster' ? (
                 <Field label={t('mm.pText', 'Texto')}>
                   <Textarea value={selected.props?.text ?? ''} onChange={(e) => setProp('text', e.target.value.slice(0, 500))} />
+                </Field>
+              ) : null}
+              {def.text ? (
+                <Field label={t('mm.pSignText', 'Texto do letreiro (até {{n}} letras)', { n: def.text.max })}>
+                  <Input value={selected.props?.text ?? ''} onChange={(e) => setProp('text', e.target.value.slice(0, def.text!.max))} placeholder={def.text.default} maxLength={def.text.max} data-testid="obj-text" />
+                </Field>
+              ) : null}
+              {objectColors(selected.type).length > 1 ? (
+                <Field label={t('mm.pColor', 'Cor')}>
+                  <Select
+                    value={objColor(selected)?.id ?? ''}
+                    data-testid="obj-color"
+                    onChange={(e) =>
+                      patchObj((o) => {
+                        if (e.target.value === objectColors(o.type)[0].id) delete o.color;
+                        else o.color = e.target.value;
+                      })
+                    }
+                  >
+                    {objectColors(selected.type).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              ) : null}
+              {deskSetups(selected.type).length ? (
+                <Field label={t('mm.pSetup', 'Setup da mesa (o que fica em cima)')}>
+                  <Select
+                    value={objSetup(selected)?.id ?? ''}
+                    data-testid="obj-setup"
+                    onChange={(e) =>
+                      patchObj((o) => {
+                        if (e.target.value === deskSetups(o.type)[0].id) delete o.setup;
+                        else o.setup = e.target.value;
+                      })
+                    }
+                  >
+                    {deskSetups(selected.type).map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.label}
+                      </option>
+                    ))}
+                  </Select>
                 </Field>
               ) : null}
               {selected.type === 'portal' ? (

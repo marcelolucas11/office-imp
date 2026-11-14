@@ -14,8 +14,10 @@ import {
   deskSeat,
   deskZone,
   findPath,
+  isDesk,
   mapDesks,
   nearestFree,
+  objDepthRows,
   objSize,
   privateAreaAt,
   rectContains,
@@ -32,6 +34,7 @@ import { AV_FRAMES, AV_H, AV_W, avatarKey, avatarSheet } from '../game/art/avata
 import { DECOR_SIZE, EXTERIOR, decorSprite, exteriorDecor, exteriorGrass, type DecorKind } from '../game/art/exterior';
 import { FLOOR_PATTERN } from '../game/art/floors';
 import { doorClosedSprite, objectKey, objectSprite, objectTall } from '../game/art/objects';
+import { surfaceIndex } from '../game/art/render';
 import { T, drawStatic, hasPeriodWalls, makeCanvas } from '../game/art/tiles';
 import { bus } from '../game/bus';
 import { net } from '../game/net';
@@ -235,12 +238,12 @@ export class OfficeScene extends Phaser.Scene {
     this.doorImgs.clear();
     this.doorAt.clear();
     if (!this.textures.exists('door:closed')) this.textures.addCanvas('door:closed', doorClosedSprite());
+    const surfaces = surfaceIndex(map);
     for (const o of map.objects) {
       const def = OBJECT_DEFS[o.type];
       if (!def) continue;
       const key = `obj:${objectKey(o)}`;
       if (!this.textures.exists(key)) this.textures.addCanvas(key, objectSprite(o));
-      const { h } = objSize(o);
       const img = this.add.image(o.x * T, (o.y - objectTall(o.type)) * T, key).setOrigin(0);
       if (o.type === 'door') {
         this.doorImgs.set(o.id, img);
@@ -249,8 +252,12 @@ export class OfficeScene extends Phaser.Scene {
         this.applyDoor(o.id);
       } else if (FLOOR_TYPES.has(o.type)) img.setDepth(D_RUG);
       else if (def.above || o.props?.above) img.setDepth(D_DIM - 1);
-      else if (def.solid) img.setDepth(D_WORLD + (o.y + h) * T - 1);
-      else img.setDepth(D_WORLD + o.y * T + 1);
+      else if (def.solid) img.setDepth(D_WORLD + (o.y + objDepthRows(o)) * T - 1);
+      else {
+        // objeto solto em cima de um móvel (caneca na mesa): logo acima do móvel, abaixo de quem está na frente
+        const under = surfaces.get(o.y * map.width + o.x);
+        img.setDepth(under ? D_WORLD + (under.y + objDepthRows(under)) * T - 0.5 : D_WORLD + o.y * T + 1);
+      }
       this.objs.push(img);
     }
     this.refreshDeskLabels();
@@ -393,7 +400,7 @@ export class OfficeScene extends Phaser.Scene {
       const info = desks.find((x) => x.id === d.id);
       if (!info?.userName) continue;
       const { w } = objSize(d);
-      const label = this.text((d.x + w / 2) * T, (d.y - objectTall('desk')) * T + 8, info.userName, info.online ? '#e6d2a0' : '#77778a', 9).setDepth(D_LABEL - 1);
+      const label = this.text((d.x + w / 2) * T, (d.y - objectTall(d.type)) * T + 8, info.userName, info.online ? '#e6d2a0' : '#77778a', 9).setDepth(D_LABEL - 1);
       this.deskLabels.push(label);
     }
   }
@@ -946,7 +953,7 @@ export class OfficeScene extends Phaser.Scene {
       net.send('door', { id: o.id });
       return;
     }
-    if (o.type === 'desk') {
+    if (isDesk(o)) {
       const info = g.desks.find((x) => x.id === o.id);
       useGame.setState({ modal: info?.userId === g.meId ? { kind: 'myDesk' } : { kind: 'desk', deskId: o.id } });
     } else useGame.setState({ modal: { kind: 'object', object: o } });

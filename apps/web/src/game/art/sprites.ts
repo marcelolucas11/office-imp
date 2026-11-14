@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Contrato dos desenhos de objeto do visual v2. Cada tipo redesenhado registra um
 // `SpritePainter` (ver `seating.ts`); `objects.ts` cuida do tamanho, do cache e da cor.
-import type { MapObject, ObjectColor } from '@office-imp/shared';
+import type { DeskSetup, MapObject, ObjectColor } from '@office-imp/shared';
 import type { Sprite } from './prim';
 
 export interface PaintInfo {
@@ -15,6 +15,10 @@ export interface PaintInfo {
   top: number;
   /** Variante de cor em uso (a pedida ou a padrão); `null` se o tipo não tem cores. */
   color: ObjectColor | null;
+  /** Setup da mesa (o pedido ou o padrão); `null` se o tipo não é mesa de trabalho. */
+  setup: DeskSetup | null;
+  /** Texto a desenhar (letreiro neon); `null` se o tipo não desenha texto. */
+  text: string | null;
 }
 
 /** Desenha o objeto num sprite de `w × (top + h)` pixels. Deixe 1 px livre nas bordas para o contorno. */

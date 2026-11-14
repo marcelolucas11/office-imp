@@ -90,6 +90,10 @@ export interface Rect {
 
 export type InteractKind = 'whiteboard' | 'website' | 'tv' | 'poster' | 'game' | 'note';
 export type ObjectCategory = 'structure' | 'furniture' | 'decor' | 'interactive';
+/** Grupo do objeto na paleta do Mapmaker (subdivisão das categorias, que ficaram longas no visual v2). */
+export type ObjectGroup = 'interactive' | 'structure' | 'desks' | 'seating' | 'furniture' | 'deskitems' | 'appliances' | 'wall' | 'decor';
+/** Grupos na ordem em que aparecem na paleta. */
+export const OBJECT_GROUPS: ObjectGroup[] = ['interactive', 'structure', 'desks', 'seating', 'furniture', 'deskitems', 'appliances', 'wall', 'decor'];
 
 /** Variante de cor de um objeto (visual v2). */
 export interface ObjectColor {
@@ -116,7 +120,43 @@ export interface ObjectDef {
   tall?: number;
   /** Variantes de cor. A primeira é a padrão (usada quando o objeto do mapa não tem `color`). */
   colors?: ObjectColor[];
+  /** Grupo na paleta do Mapmaker. Sem ele, o grupo sai da categoria (`objectGroup`). */
+  group?: ObjectGroup;
+  /**
+   * Mesa de trabalho: pode ser atribuída a um funcionário, tem assento, área de conversa,
+   * zona de decoração e setup (`MapObject.setup`). Use `isDesk`/`mapDesks`, nunca `type === 'desk'`.
+   */
+  desk?: boolean;
+  /** Assento padrão da mesa, relativo ao canto do objeto (padrão: `{ x: 0, y: h }`, logo abaixo do canto esquerdo). */
+  seat?: Point;
+  /**
+   * Blocos sólidos de um footprint que não é retangular: uma string por linha, `#` = sólido,
+   * qualquer outro caractere = livre (ex.: mesa em L). Com `dir: 'right'` o desenho e a máscara
+   * são espelhados. Sem `cells`, o retângulo inteiro bloqueia.
+   */
+  cells?: string[];
+  /** Texto curto desenhado no próprio sprite (`props.text`), como no letreiro neon. */
+  text?: { max: number; default: string };
 }
+
+/** Setup de uma mesa de trabalho: o que fica em cima do tampo (visual v2). */
+export interface DeskSetup {
+  /** Identificador gravado no mapa (`MapObject.setup`). */
+  id: string;
+  label: string;
+}
+
+/** Setups disponíveis para qualquer mesa de trabalho. O primeiro é o padrão (mapas antigos, mesa sem `setup`). */
+export const DESK_SETUPS: DeskSetup[] = [
+  { id: 'monitor', label: 'Monitor' },
+  { id: 'gamer', label: 'PC gamer' },
+  { id: 'dual', label: 'Dois monitores' },
+  { id: 'laptop_silver', label: 'Notebook prata' },
+  { id: 'aio', label: 'All-in-one' },
+  { id: 'laptop', label: 'Notebook' },
+  { id: 'none', label: 'Vazio' },
+];
+export const DEFAULT_DESK_SETUP = DESK_SETUPS[0].id;
 
 /** Cores de estofado (cadeiras, sofás). A primeira é a padrão. */
 const UPHOLSTERY: ObjectColor[] = [
@@ -127,25 +167,101 @@ const UPHOLSTERY: ObjectColor[] = [
   { id: 'sand', label: 'Areia', hex: '#b39a78' },
 ];
 
+/** Tampos de mesa. O carvalho é a cor da mesa de antes do visual v2. */
+const TOPS: ObjectColor[] = [
+  { id: 'oak', label: 'Carvalho', hex: '#a06e45' },
+  { id: 'maple', label: 'Madeira clara', hex: '#c9a070' },
+  { id: 'walnut', label: 'Nogueira', hex: '#6f4a35' },
+  { id: 'white', label: 'Branco', hex: '#d8d5cd' },
+  { id: 'black', label: 'Preto', hex: '#3a3b43' },
+];
+
+const DARK_WOODS: ObjectColor[] = [
+  { id: 'walnut', label: 'Nogueira escura', hex: '#5c4130' },
+  { id: 'mahogany', label: 'Mogno', hex: '#6e3528' },
+  { id: 'ebony', label: 'Ébano', hex: '#3b3033' },
+  { id: 'cherry', label: 'Cerejeira', hex: '#7d4c36' },
+];
+
+const GLASS_TINTS: ObjectColor[] = [
+  { id: 'clear', label: 'Vidro azulado', hex: '#a9d3e6' },
+  { id: 'smoke', label: 'Vidro fumê', hex: '#7f8a97' },
+  { id: 'green', label: 'Vidro verde', hex: '#a3d4bd' },
+];
+
+/** Cores de destaque (mesa e cadeira gamer, objetos coloridos). */
+const ACCENTS: ObjectColor[] = [
+  { id: 'red', label: 'Vermelho', hex: '#c8383c' },
+  { id: 'blue', label: 'Azul', hex: '#3672c9' },
+  { id: 'green', label: 'Verde', hex: '#3aa45c' },
+  { id: 'purple', label: 'Roxo', hex: '#7e52c8' },
+  { id: 'pink', label: 'Rosa', hex: '#d2589a' },
+];
+
+const LEATHERS: ObjectColor[] = [
+  { id: 'black', label: 'Couro preto', hex: '#33313a' },
+  { id: 'brown', label: 'Couro marrom', hex: '#5c3b2b' },
+  { id: 'caramel', label: 'Couro caramelo', hex: '#9c6338' },
+  { id: 'cream', label: 'Couro creme', hex: '#cbbfa8' },
+  { id: 'wine', label: 'Couro vinho', hex: '#702f37' },
+];
+
+const BLACK_WHITE: ObjectColor[] = [
+  { id: 'black', label: 'Preto', hex: '#2a2b30' },
+  { id: 'white', label: 'Branco', hex: '#dfe1e6' },
+];
+
+const POTS: ObjectColor[] = [
+  { id: 'terracotta', label: 'Vaso de barro', hex: '#a85f3a' },
+  { id: 'white', label: 'Vaso branco', hex: '#e8e3d9' },
+  { id: 'black', label: 'Vaso preto', hex: '#34353c' },
+  { id: 'blue', label: 'Vaso azul', hex: '#4a6fa5' },
+];
+
 const defs: ObjectDef[] = [
-  { type: 'desk', label: 'Mesa de trabalho', w: 2, h: 1, solid: true, category: 'structure', tall: 1 },
-  { type: 'chair', label: 'Cadeira', w: 1, h: 1, solid: false, category: 'furniture', colors: UPHOLSTERY },
+  // ----- mesas de trabalho (C1) -----
+  { type: 'desk', label: 'Mesa de trabalho', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: TOPS },
+  { type: 'desk_wide', label: 'Mesa de trabalho grande (3 blocos)', w: 3, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, seat: { x: 1, y: 1 }, colors: TOPS },
+  { type: 'desk_l', label: 'Mesa em L (direção → espelha)', w: 3, h: 2, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, seat: { x: 1, y: 1 }, cells: ['###', '#..'], colors: TOPS },
+  { type: 'desk_standing', label: 'Mesa de pé (standing desk)', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: TOPS },
+  { type: 'desk_glass', label: 'Mesa de vidro', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: GLASS_TINTS },
+  { type: 'desk_dark', label: 'Mesa executiva de madeira escura', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: DARK_WOODS },
+  { type: 'desk_gamer', label: 'Mesa gamer', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: ACCENTS },
+  { type: 'desk_bench', label: 'Bancada compartilhada (um módulo por pessoa; encoste um no outro)', w: 2, h: 1, solid: true, category: 'structure', group: 'desks', tall: 1, desk: true, colors: TOPS },
+  // ----- assentos (C1) -----
+  { type: 'chair', label: 'Cadeira de escritório', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
+  { type: 'chair_gamer', label: 'Cadeira gamer', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: ACCENTS },
+  { type: 'chair_exec', label: 'Cadeira executiva de couro', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: LEATHERS },
+  { type: 'stool', label: 'Banqueta', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
+  { type: 'armchair', label: 'Poltrona', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
+  { type: 'pouf', label: 'Pufe', w: 1, h: 1, solid: false, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
+  { type: 'sofa', label: 'Sofá', w: 2, h: 1, solid: true, category: 'furniture', group: 'seating', colors: UPHOLSTERY },
+  // ----- mesas e móveis -----
   { type: 'table', label: 'Mesa de reunião', w: 4, h: 2, solid: true, category: 'furniture', resizable: true },
   { type: 'table_round', label: 'Mesa redonda', w: 1, h: 1, solid: true, category: 'furniture' },
   { type: 'counter', label: 'Balcão', w: 2, h: 1, solid: true, category: 'furniture', resizable: true },
-  { type: 'sofa', label: 'Sofá', w: 2, h: 1, solid: true, category: 'furniture', colors: UPHOLSTERY },
-  { type: 'armchair', label: 'Poltrona', w: 1, h: 1, solid: false, category: 'furniture' },
   { type: 'bookshelf', label: 'Estante', w: 1, h: 1, solid: true, category: 'furniture', tall: 1 },
   { type: 'cabinet', label: 'Armário', w: 1, h: 1, solid: true, category: 'furniture' },
-  { type: 'coffee', label: 'Máquina de café', w: 1, h: 1, solid: true, category: 'decor', tall: 1 },
-  { type: 'cooler', label: 'Bebedouro', w: 1, h: 1, solid: true, category: 'decor', tall: 1 },
-  { type: 'fridge', label: 'Geladeira', w: 1, h: 1, solid: true, category: 'decor', tall: 1 },
+  // ----- copa e equipamentos -----
+  { type: 'coffee', label: 'Máquina de café', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1 },
+  { type: 'cooler', label: 'Bebedouro', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1 },
+  { type: 'fridge', label: 'Geladeira', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1 },
+  // ----- plantas e decoração -----
   { type: 'plant', label: 'Planta', w: 1, h: 1, solid: true, category: 'decor', tall: 1 },
   { type: 'plant_small', label: 'Vaso pequeno', w: 1, h: 1, solid: false, category: 'decor' },
   { type: 'lamp', label: 'Luminária', w: 1, h: 1, solid: false, category: 'decor', tall: 1 },
-  { type: 'frame', label: 'Quadro decorativo', w: 1, h: 1, solid: false, category: 'decor' },
-  { type: 'photo', label: 'Porta-retrato', w: 1, h: 1, solid: false, category: 'decor' },
-  { type: 'trophy', label: 'Troféu', w: 1, h: 1, solid: false, category: 'decor' },
+  { type: 'frame', label: 'Quadro decorativo', w: 1, h: 1, solid: false, category: 'decor', group: 'wall' },
+  { type: 'photo', label: 'Porta-retrato', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [
+    { id: 'wood', label: 'Moldura de madeira', hex: '#8f6340' },
+    { id: 'black', label: 'Moldura preta', hex: '#2a2b30' },
+    { id: 'white', label: 'Moldura branca', hex: '#e9ecf2' },
+    { id: 'gold', label: 'Moldura dourada', hex: '#d7b870' },
+  ] },
+  { type: 'trophy', label: 'Troféu', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [
+    { id: 'gold', label: 'Ouro', hex: '#d7b870' },
+    { id: 'silver', label: 'Prata', hex: '#b8bcc4' },
+    { id: 'bronze', label: 'Bronze', hex: '#b5774a' },
+  ] },
   { type: 'rug', label: 'Tapete', w: 3, h: 2, solid: false, category: 'decor', resizable: true },
   { type: 'rug_logo', label: 'Tapete com logo', w: 4, h: 2, solid: false, category: 'decor' },
   { type: 'podium', label: 'Púlpito', w: 1, h: 1, solid: false, category: 'decor' },
@@ -157,12 +273,105 @@ const defs: ObjectDef[] = [
   { type: 'arcade', label: 'Jogo', w: 1, h: 1, solid: true, category: 'interactive', interact: 'game', tall: 1 },
   { type: 'poster', label: 'Pôster / imagem', w: 1, h: 1, solid: false, category: 'interactive', interact: 'poster' },
   { type: 'note', label: 'Nota / placa', w: 1, h: 1, solid: false, category: 'interactive', interact: 'note' },
+  // ----- objetos de mesa (C2): pequenos, para ficar em cima do tampo -----
+  { type: 'keyboard', label: 'Teclado mecânico', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [
+    { id: 'rgb', label: 'Preto com RGB', hex: '#2a2b30' },
+    { id: 'white', label: 'Branco', hex: '#dfe1e6' },
+    { id: 'pink', label: 'Rosa', hex: '#e3a4c0' },
+  ] },
+  { type: 'mousepad', label: 'Mousepad grande', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [{ id: 'black', label: 'Preto', hex: '#2a2b30' }, ...ACCENTS] },
+  { type: 'mouse', label: 'Mouse', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: BLACK_WHITE },
+  { type: 'mug', label: 'Caneca', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [{ id: 'white', label: 'Branca', hex: '#e9ecf2' }, { id: 'black', label: 'Preta', hex: '#2a2b30' }, { id: 'gold', label: 'Dourada', hex: '#d7b870' }, ...ACCENTS.slice(0, 3)] },
+  { type: 'bottle', label: 'Garrafa', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [{ id: 'blue', label: 'Azul', hex: '#4a86c9' }, { id: 'green', label: 'Verde', hex: '#3aa45c' }, { id: 'pink', label: 'Rosa', hex: '#d2589a' }, { id: 'steel', label: 'Inox', hex: '#9da2aa' }, { id: 'black', label: 'Preta', hex: '#2a2b30' }] },
+  { type: 'headphones', label: 'Fone de ouvido', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [...BLACK_WHITE, ...ACCENTS.slice(0, 2)] },
+  { type: 'desk_lamp', label: 'Luminária de mesa', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [...BLACK_WHITE, { id: 'gold', label: 'Dourada', hex: '#d7b870' }, ...ACCENTS.slice(0, 3)] },
+  { type: 'postits', label: 'Post-its', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [
+    { id: 'yellow', label: 'Amarelo', hex: '#f2d95c' },
+    { id: 'pink', label: 'Rosa', hex: '#f08fb4' },
+    { id: 'green', label: 'Verde', hex: '#9fd67a' },
+    { id: 'blue', label: 'Azul', hex: '#86c5ea' },
+  ] },
+  { type: 'books', label: 'Livros', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: [
+    { id: 'classic', label: 'Coloridos', hex: '#b23a3a' },
+    { id: 'sober', label: 'Sóbrios', hex: '#4a5568' },
+    { id: 'pastel', label: 'Pastel', hex: '#e3a4c0' },
+  ] },
+  { type: 'succulent', label: 'Suculenta', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: POTS },
+  { type: 'cactus_small', label: 'Cacto de mesa', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', colors: POTS },
+  // ----- extras (C2) -----
+  { type: 'espresso', label: 'Cafeteira expresso com moedor', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1, colors: [
+    { id: 'steel', label: 'Inox', hex: '#9da2aa' },
+    { id: 'black', label: 'Preta', hex: '#34353c' },
+    { id: 'red', label: 'Vermelha', hex: '#b8363a' },
+    { id: 'cream', label: 'Creme', hex: '#d9cfb8' },
+  ] },
+  { type: 'podcast_mic', label: 'Microfone de podcast com braço articulado', w: 1, h: 1, solid: false, category: 'decor', group: 'deskitems', tall: 1, colors: BLACK_WHITE },
+  { type: 'ring_light', label: 'Ring light no tripé', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1, colors: [
+    { id: 'warm', label: 'Luz quente', hex: '#f6e3a8' },
+    { id: 'cool', label: 'Luz fria', hex: '#dcebf7' },
+  ] },
+  { type: 'printer', label: 'Impressora multifuncional', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1, colors: [
+    { id: 'white', label: 'Branca', hex: '#d9dce0' },
+    { id: 'graphite', label: 'Grafite', hex: '#4a4d57' },
+  ] },
+  { type: 'snack_machine', label: 'Máquina de snacks', w: 1, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1, colors: [...ACCENTS.slice(0, 3), { id: 'black', label: 'Preta', hex: '#34353c' }] },
+  { type: 'aquarium', label: 'Aquário com peixes', w: 2, h: 1, solid: true, category: 'decor', group: 'appliances', tall: 1, colors: [
+    { id: 'black', label: 'Móvel preto', hex: '#34353c' },
+    { id: 'wood', label: 'Móvel de madeira', hex: '#a06e45' },
+    { id: 'white', label: 'Móvel branco', hex: '#d8d5cd' },
+  ] },
+  { type: 'corkboard', label: 'Quadro de cortiça (parede)', w: 2, h: 1, solid: false, category: 'decor', group: 'wall', colors: [
+    { id: 'wood', label: 'Moldura de madeira', hex: '#8f6340' },
+    { id: 'dark', label: 'Moldura escura', hex: '#3a261c' },
+    { id: 'white', label: 'Moldura branca', hex: '#e9ecf2' },
+  ] },
+  { type: 'wall_clock', label: 'Relógio de parede', w: 1, h: 1, solid: false, category: 'decor', group: 'wall', colors: [
+    { id: 'black', label: 'Preto', hex: '#2a2b30' },
+    { id: 'white', label: 'Branco', hex: '#e9ecf2' },
+    { id: 'gold', label: 'Dourado', hex: '#d7b870' },
+    { id: 'wood', label: 'Madeira', hex: '#8f6340' },
+  ] },
+  { type: 'neon', label: 'Letreiro neon (texto editável)', w: 2, h: 1, solid: false, category: 'decor', group: 'wall', resizable: true, text: { max: 24, default: 'IMPERA' }, colors: [
+    { id: 'pink', label: 'Rosa', hex: '#ff5fa8' },
+    { id: 'cyan', label: 'Ciano', hex: '#4fd8f0' },
+    { id: 'yellow', label: 'Amarelo', hex: '#ffd84a' },
+    { id: 'green', label: 'Verde', hex: '#5ee37f' },
+    { id: 'purple', label: 'Roxo', hex: '#b07cff' },
+    { id: 'orange', label: 'Laranja', hex: '#ff8a3c' },
+    { id: 'white', label: 'Branco', hex: '#f4f6fb' },
+  ] },
+  { type: 'split_ac', label: 'Ar-condicionado split (parede)', w: 1, h: 1, solid: false, category: 'decor', group: 'wall', colors: [
+    { id: 'white', label: 'Branco', hex: '#e9ecf2' },
+    { id: 'graphite', label: 'Grafite', hex: '#4a4d57' },
+  ] },
 ];
 
 export const OBJECT_DEFS: Record<string, ObjectDef> = Object.fromEntries(defs.map((d) => [d.type, d]));
 export const OBJECT_TYPES = defs.map((d) => d.type);
-/** Objetos que um funcionário pode colocar na própria mesa. */
-export const DESK_DECOR_TYPES = ['plant_small', 'plant', 'lamp', 'frame', 'photo', 'trophy', 'note', 'poster'];
+/** Objetos que um funcionário pode colocar na própria mesa (os primeiros são os de antes do visual v2). */
+export const DESK_DECOR_TYPES = [
+  'plant_small',
+  'plant',
+  'lamp',
+  'frame',
+  'photo',
+  'trophy',
+  'note',
+  'poster',
+  // objetos pequenos de mesa (visual v2, Fase C2)
+  'keyboard',
+  'mousepad',
+  'mouse',
+  'mug',
+  'bottle',
+  'headphones',
+  'desk_lamp',
+  'postits',
+  'books',
+  'succulent',
+  'cactus_small',
+  'podcast_mic',
+];
 export const MAX_DESK_DECOR = 8;
 
 export interface MapObject {
@@ -176,6 +385,8 @@ export interface MapObject {
   dir?: Dir;
   /** Id da variante de cor (`ObjectDef.colors`). Ausente = cor padrão do tipo. */
   color?: string;
+  /** Id do setup da mesa (`DESK_SETUPS`), só em mesas de trabalho. Ausente = setup padrão (monitor). */
+  setup?: string;
   props?: Record<string, any>;
   /** Decoração pertencente a uma mesa (colocada pelo dono da mesa). */
   ownerDeskId?: string;
@@ -257,6 +468,105 @@ export function objSize(o: MapObject): { w: number; h: number } {
   return { w: o.w ?? def?.w ?? 1, h: o.h ?? def?.h ?? 1 };
 }
 
+/** Grupo do tipo na paleta do Mapmaker. */
+export function objectGroup(type: string): ObjectGroup {
+  const def = OBJECT_DEFS[type];
+  return def?.group ?? def?.category ?? 'decor';
+}
+
+/** O tipo é uma mesa de trabalho (atribuível, com assento, área de conversa e setup)? */
+export function isDeskType(type: string): boolean {
+  return Boolean(OBJECT_DEFS[type]?.desk);
+}
+
+/** O objeto é uma mesa de trabalho? */
+export function isDesk(o: Pick<MapObject, 'type'>): boolean {
+  return isDeskType(o.type);
+}
+
+/** Tipos de mesa de trabalho do catálogo, na ordem da paleta. */
+export const DESK_TYPES = defs.filter((d) => d.desk).map((d) => d.type);
+
+/** O footprint do objeto é espelhado? Só tipos com `cells` (mesa em L), quando `dir` é `right`. */
+export function objMirrored(o: Pick<MapObject, 'type' | 'dir'>): boolean {
+  return Boolean(OBJECT_DEFS[o.type]?.cells) && o.dir === 'right';
+}
+
+/**
+ * O bloco (dx, dy) do footprint bloqueia a passagem? Fora do footprint ou em objeto não sólido,
+ * não. Tipos com `cells` (mesa em L) só bloqueiam os blocos marcados.
+ */
+export function objSolidAt(o: MapObject, dx: number, dy: number): boolean {
+  const def = OBJECT_DEFS[o.type];
+  if (!def?.solid) return false;
+  const { w, h } = objSize(o);
+  if (dx < 0 || dy < 0 || dx >= w || dy >= h) return false;
+  if (!def.cells) return true;
+  const row = def.cells[dy] ?? '';
+  return row[objMirrored(o) ? w - 1 - dx : dx] === '#';
+}
+
+/**
+ * Linhas do footprint que contam para a ordem de desenho (profundidade): as de cima que são
+ * inteiramente sólidas. Num objeto comum é a altura toda; na mesa em L é 1 (quem senta no vão
+ * fica na frente do tampo de cima).
+ */
+export function objDepthRows(o: MapObject): number {
+  const def = OBJECT_DEFS[o.type];
+  const { h } = objSize(o);
+  if (!def?.cells) return h;
+  let rows = 0;
+  for (const row of def.cells.slice(0, h)) {
+    if ([...row].some((c) => c !== '#')) break;
+    rows++;
+  }
+  return Math.max(1, rows);
+}
+
+/** Setups que o tipo aceita: todos os de `DESK_SETUPS` nas mesas de trabalho, nenhum nos outros tipos. */
+export function deskSetups(type: string): DeskSetup[] {
+  return isDeskType(type) ? DESK_SETUPS : [];
+}
+
+/**
+ * Setup em uso por uma mesa: o que ela pede, se existir; senão o padrão (monitor).
+ * `null` quando o objeto não é uma mesa de trabalho.
+ */
+export function objSetup(o: Pick<MapObject, 'type' | 'setup'>): DeskSetup | null {
+  const setups = deskSetups(o.type);
+  if (!setups.length) return null;
+  return setups.find((s) => s.id === o.setup) ?? setups[0];
+}
+
+/** Erro do campo `setup` de um objeto, ou `null` se estiver certo (ausente é sempre válido). */
+export function objSetupError(o: { type: string; setup?: unknown }): string | null {
+  if (o.setup === undefined) return null;
+  if (typeof o.setup !== 'string') return 'setup de mesa inválido';
+  if (!deskSetups(o.type).some((s) => s.id === o.setup)) return `setup desconhecido para ${o.type}: ${o.setup.slice(0, 40)}`;
+  return null;
+}
+
+/**
+ * Texto desenhado no sprite de um tipo com `text` (letreiro neon): `props.text` sem quebras de
+ * linha e cortado no limite, ou o texto padrão do tipo. `null` se o tipo não desenha texto.
+ */
+export function objText(o: Pick<MapObject, 'type' | 'props'>): string | null {
+  const spec = OBJECT_DEFS[o.type]?.text;
+  if (!spec) return null;
+  const raw = typeof o.props?.text === 'string' ? o.props.text.replace(/\s+/g, ' ').trim() : '';
+  return (raw || spec.default).slice(0, spec.max);
+}
+
+/** Erro do texto de um tipo com `text`, ou `null` (ausente é válido: usa o texto padrão). */
+export function objTextError(o: { type: string; props?: any }): string | null {
+  const spec = OBJECT_DEFS[o.type]?.text;
+  const text = o.props?.text;
+  if (!spec || text === undefined) return null;
+  if (typeof text !== 'string') return 'texto de objeto inválido';
+  if (text.length > spec.max) return `texto longo demais para ${o.type} (máximo ${spec.max})`;
+  return null;
+}
+
 /** Variantes de cor de um tipo de objeto (lista vazia se o tipo não tem cores). */
 export function objectColors(type: string): ObjectColor[] {
   return OBJECT_DEFS[type]?.colors ?? [];
@@ -293,6 +603,23 @@ export function normalizeObjectColors(map: OfficeMap): OfficeMap {
     objects: map.objects.map((o) => {
       if (!objColorError(o)) return o;
       const { color: _drop, ...rest } = o;
+      return rest;
+    }),
+  };
+}
+
+/**
+ * Como `normalizeObjectColors`, para cor e setup: tira o `color` e o `setup` que não existem
+ * mais no catálogo (o objeto volta ao padrão). Devolve o mesmo mapa se não houver o que corrigir.
+ */
+export function normalizeObjectVariants(map: OfficeMap): OfficeMap {
+  const fixed = normalizeObjectColors(map);
+  if (!fixed.objects.some((o) => objSetupError(o))) return fixed;
+  return {
+    ...fixed,
+    objects: fixed.objects.map((o) => {
+      if (!objSetupError(o)) return o;
+      const { setup: _drop, ...rest } = o;
       return rest;
     }),
   };
@@ -337,6 +664,7 @@ export function buildCollision(map: OfficeMap): Uint8Array {
     const { w, h } = objSize(o);
     for (let dy = 0; dy < h; dy++) {
       for (let dx = 0; dx < w; dx++) {
+        if (def.cells && !objSolidAt(o, dx, dy)) continue;
         const x = o.x + dx;
         const y = o.y + dy;
         if (inBounds(map, x, y)) grid[y * map.width + x] = 1;
@@ -391,22 +719,35 @@ export function areaCenter(area: MapArea): Point {
   return { x: r.x + Math.floor(r.w / 2), y: r.y + Math.floor(r.h / 2) };
 }
 
-/** Mesas atribuíveis presentes no mapa. */
+/** Mesas atribuíveis presentes no mapa: todo objeto cujo tipo tem `desk: true` (reta, em L, gamer…). */
 export function mapDesks(map: OfficeMap): MapObject[] {
-  return map.objects.filter((o) => o.type === 'desk');
+  return map.objects.filter(isDesk);
+}
+
+/** Assento padrão de uma mesa posta em (x, y): o `seat` do tipo, ou logo abaixo do canto esquerdo. */
+export function defaultDeskSeat(desk: Pick<MapObject, 'type' | 'x' | 'y' | 'w' | 'h'>): Point {
+  const def = OBJECT_DEFS[desk.type];
+  const seat = def?.seat ?? { x: 0, y: objSize(desk as MapObject).h };
+  return { x: desk.x + seat.x, y: desk.y + seat.y };
+}
+
+/** Zona de decoração padrão de uma mesa nova: a linha do tampo e um bloco à direita. */
+export function defaultDeskZone(desk: Pick<MapObject, 'type' | 'x' | 'y' | 'w' | 'h'>): Rect {
+  return { x: desk.x, y: desk.y, w: objSize(desk as MapObject).w + 1, h: 1 };
 }
 
 /** Zona de decoração de uma mesa (onde o dono pode colocar objetos). */
 export function deskZone(desk: MapObject): Rect {
   const z = desk.props?.zone as Rect | undefined;
   if (z) return z;
-  return { x: desk.x, y: desk.y, w: 3, h: 2 };
+  const { w, h } = objSize(desk);
+  return { x: desk.x, y: desk.y, w: w + 1, h: h + 1 };
 }
 
 /** Tile onde a pessoa fica ao "ir para a mesa". */
 export function deskSeat(desk: MapObject): Point {
   const s = desk.props?.seat as Point | undefined;
-  return s ?? { x: desk.x, y: desk.y + 1 };
+  return s ?? defaultDeskSeat(desk);
 }
 
 /** Prefixo dos ids das áreas de mesa, que são derivadas das mesas e nunca gravadas no mapa. */
@@ -527,8 +868,8 @@ export function validateMapShape(m: any): string | null {
     if (typeof o?.id !== 'string' || typeof o?.type !== 'string') return 'objeto inválido';
     if (!OBJECT_DEFS[o.type]) return `tipo de objeto desconhecido: ${o.type}`;
     if (!Number.isInteger(o.x) || !Number.isInteger(o.y)) return 'posição de objeto inválida';
-    const colorError = objColorError(o);
-    if (colorError) return colorError;
+    const variantError = objColorError(o) ?? objSetupError(o) ?? objTextError(o);
+    if (variantError) return variantError;
     if (ids.has(o.id)) return 'id de objeto duplicado';
     ids.add(o.id);
   }

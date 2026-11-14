@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createCanvas } from '@napi-rs/canvas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { AVATAR_OPTIONS, DIRS, OBJECT_DEFS, OBJECT_TYPES, objectColors, type AvatarConfig, type Dir, type MapObject } from '@office-imp/shared';
+import { AVATAR_OPTIONS, DIRS, OBJECT_DEFS, OBJECT_TYPES, deskSetups, objectColors, type AvatarConfig, type Dir, type MapObject } from '@office-imp/shared';
 import { AV_FRAMES, AV_H, AV_W, avatarSheet } from '../src/game/art/avatar';
 import { setCanvasFactory } from '../src/game/art/canvas';
-import { objectIcon, objectKey, objectSprite } from '../src/game/art/objects';
+import { REDESIGNED_TYPES, objectIcon, objectKey, objectSprite } from '../src/game/art/objects';
 import { Sprite, rgba } from '../src/game/art/prim';
 import { artSheets, sampleAvatars } from '../src/game/art/sheet';
 import { T } from '../src/game/art/tiles';
@@ -50,7 +50,7 @@ describe('cor na chave do cache de sprite', () => {
       const keys = new Set(colors.map((c) => objectKey(obj(type, { color: c.id }))));
       expect(keys.size).toBe(colors.length);
       const base = pixels(obj(type));
-      for (const c of colors.slice(1)) expect(same(base, pixels(obj(type, { color: c.id })))).toBe(false);
+      for (const c of colors.slice(1)) expect([type, c.id, same(base, pixels(obj(type, { color: c.id })))]).toEqual([type, c.id, false]);
     }
   });
 
@@ -89,26 +89,30 @@ describe('sprites dos objetos', () => {
   });
 
   it('objetos redesenhados têm contorno escuro em toda a borda e nenhum pixel suavizado', () => {
+    // todo tipo com desenho do visual v2: cadeira e sofá (Fase A), mesas e assentos (C1), objetos de mesa e extras (C2)
+    expect(REDESIGNED_TYPES).toEqual(expect.arrayContaining(['chair', 'sofa', 'desk', 'armchair', 'photo', 'trophy']));
     const bad: string[] = [];
-    for (const type of ['chair', 'sofa']) {
-      for (const color of objectColors(type)) {
-        for (const dir of DIRS) {
-          const s = pixels(obj(type, { dir, color: color.id }));
-          for (let y = 0; y < s.h; y++) {
-            for (let x = 0; x < s.w; x++) {
-              const a = s.alpha(x, y);
-              if (a === 0) continue;
-              if (a !== 255) bad.push(`${type}/${color.id}/${dir} (${x},${y}): alfa ${a}`);
-              const onEdge = s.alpha(x - 1, y) === 0 || s.alpha(x + 1, y) === 0 || s.alpha(x, y - 1) === 0 || s.alpha(x, y + 1) === 0;
-              if (!onEdge) continue;
-              const i = (y * s.w + x) * 4;
-              if (Math.max(s.data[i], s.data[i + 1], s.data[i + 2]) >= 96) bad.push(`${type}/${color.id}/${dir} (${x},${y}): borda sem contorno`);
-            }
+    for (const type of REDESIGNED_TYPES) {
+      const colors = objectColors(type).length ? objectColors(type).map((c) => c.id) : [undefined];
+      const setups = [undefined, ...deskSetups(type).map((st) => st.id)];
+      const variants = colors.flatMap((color) => DIRS.flatMap((dir) => setups.map((setup) => ({ color, dir, setup }))));
+      for (const v of variants) {
+        const name = `${type}/${v.color}/${v.dir}/${v.setup}`;
+        const s = pixels(obj(type, v));
+        for (let y = 0; y < s.h; y++) {
+          for (let x = 0; x < s.w; x++) {
+            const a = s.alpha(x, y);
+            if (a === 0) continue;
+            if (a !== 255) bad.push(`${name} (${x},${y}): alfa ${a}`);
+            const onEdge = s.alpha(x - 1, y) === 0 || s.alpha(x + 1, y) === 0 || s.alpha(x, y - 1) === 0 || s.alpha(x, y + 1) === 0;
+            if (!onEdge) continue;
+            const i = (y * s.w + x) * 4;
+            if (Math.max(s.data[i], s.data[i + 1], s.data[i + 2]) >= 96) bad.push(`${name} (${x},${y}): borda sem contorno`);
           }
         }
       }
     }
-    expect(bad).toEqual([]);
+    expect(bad.slice(0, 20)).toEqual([]);
   });
 
   it('as folhas de conferência cobrem o catálogo inteiro', () => {

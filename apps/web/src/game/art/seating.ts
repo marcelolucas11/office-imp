@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Assentos no estilo do visual v2 (traço de 1 px, contorno por peça, cor por variante).
-// Na Fase A só a cadeira e o sofá foram redesenhados, como prova das primitivas e do `color`.
-import { PAL, ramp } from './palette';
+// Cadeira de escritório e sofá (Fase A). As outras cadeiras, a poltrona e o pufe estão em `chairs.ts`.
+import { PAL, ramp, type Mat } from './palette';
 import { Sprite } from './prim';
 import type { SpritePainter } from './sprites';
 
-/** Base giratória da cadeira: coluna, estrela e rodinhas. `cx` é o centro. */
-function swivelBase(s: Sprite, cx: number, y: number): void {
+/** Base giratória da cadeira: coluna, estrela e rodinhas. `cx` é o centro; `m` é o metal (cromado na executiva). */
+export function swivelBase(s: Sprite, cx: number, y: number, m: Mat = { dark: PAL.metal.dark, base: PAL.metal.base, light: PAL.metal.light, hi: PAL.metal.hi }): void {
   s.piece((p) => {
-    p.rect(cx - 1, y, 2, 4, PAL.metal.dark);
-    p.rect(cx - 7, y + 4, 14, 1, PAL.metal.base);
-    p.rect(cx - 1, y + 4, 2, 1, PAL.metal.light);
+    p.rect(cx - 1, y, 2, 4, m.dark);
+    p.rect(cx - 7, y + 4, 14, 1, m.base);
+    p.rect(cx - 1, y + 4, 2, 1, m.light);
     p.rect(cx - 8, y + 5, 3, 2, PAL.plasticBlack.base);
     p.rect(cx - 1, y + 5, 2, 2, PAL.plasticBlack.base);
     p.rect(cx + 5, y + 5, 3, 2, PAL.plasticBlack.base);

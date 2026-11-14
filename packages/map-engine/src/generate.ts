@@ -6,6 +6,7 @@ import {
   buildCollision,
   emptyMap,
   floodFill,
+  isDeskType,
   mapDesks,
   resizeMap,
   type GeneratorMeta,
@@ -74,8 +75,8 @@ function placeChunk(map: OfficeMap, gen: GeneratorMeta, c: Chunk, ox: number, oy
     }
   }
   for (const o of c.objects) {
-    const isDesk = o.type === 'desk';
-    const id = isDesk ? `desk_${nextId(gen, 'desk')}` : `obj_${nextId(gen, 'obj')}`;
+    const desk = isDeskType(o.type);
+    const id = desk ? `desk_${nextId(gen, 'desk')}` : `obj_${nextId(gen, 'obj')}`;
     const props = o.props ? JSON.parse(JSON.stringify(o.props)) : undefined;
     if (props?.zone) {
       props.zone.x += ox;
