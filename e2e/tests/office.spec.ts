@@ -363,6 +363,59 @@ test('Mapmaker: publicar uma mudança atualiza o mapa de quem está online', asy
   await expect.poll(() => game(emp, `g.map.objects.some((o) => o.type === 'rug' && o.x === ${spawn.x} && o.y === ${spawn.y})`)).toBe(true);
 });
 
+test('Build Tool: a funcionária troca a cor de um objeto e o setup da mesa; “Deixar o posto” volta ao inicial', async () => {
+  test.setTimeout(300_000);
+  // uma mesa livre fora da sala dos sócios
+  const deskId = await game<string>(emp, `g.desks.find((d) => !d.userId && !(g.baseMap.objects.find((o) => o.id === d.id).props || {}).partner).id`);
+  await send(emp, 'desk:claim', { deskId });
+  await expect.poll(() => game(emp, 'g.players[g.meId].deskId')).toBe(deskId);
+  const look = (page: Page, map = 'map') => game<{ setup: string | null; color: string | null }>(page, `(() => { const o = g.${map}.objects.find((o) => o.id === '${deskId}'); return { setup: o.setup ?? null, color: o.color ?? null }; })()`);
+  const initial = await look(owner);
+  expect(await look(emp, 'baseMap')).toEqual(initial);
+  // uma caneca dourada na mesa (o clique no mapa da Build Tool é coberto pelo teste do servidor)
+  const desk = await game<{ x: number; y: number }>(emp, `g.baseMap.objects.find((o) => o.id === '${deskId}')`);
+  await send(emp, 'decor:add', { type: 'mug', x: desk.x + 1, y: desk.y, color: 'gold' });
+  const mug = `g.map.objects.find((o) => o.ownerDeskId === '${deskId}' && o.type === 'mug')`;
+  await expect.poll(() => game(owner, `${mug}?.color ?? null`)).toBe('gold');
+
+  // Minha mesa → Decorar (Build Tool)
+  await emp.getByRole('button', { name: 'Mais opções' }).click();
+  await emp.getByText('Minha mesa (recados e decoração)').click();
+  await emp.getByRole('button', { name: 'Decorar (Build Tool)' }).click();
+  await expect(emp.getByTestId('build-tool')).toBeVisible();
+
+  // aba "Cor" de um objeto já posto: muda na hora, para todos
+  await emp.getByTestId('build-mine-mug').click();
+  await emp.getByTestId('build-color-color-black').click();
+  await expect.poll(() => game(owner, `${mug}?.color ?? null`)).toBe('black');
+  await expect(emp.getByTestId('build-color-current')).toContainText('Preta');
+
+  // a própria mesa: setup e cor por cima do mapa publicado
+  const setup = initial.setup === 'gamer' ? 'aio' : 'gamer';
+  await emp.getByTestId('build-desk').click();
+  await emp.getByTestId('build-color-tab-setup').click();
+  await emp.getByTestId(`build-color-setup-${setup}`).click();
+  await emp.getByTestId('build-color-tab-color').click();
+  await emp.getByTestId('build-color-color-black').click();
+  await expect.poll(() => look(owner)).toEqual({ setup, color: 'black' });
+  // o mapa publicado não mudou
+  expect(await look(owner, 'baseMap')).toEqual(initial);
+  expect(await look(emp, 'baseMap')).toEqual(initial);
+
+  // quem entra depois já vê a mesa personalizada
+  await owner.goto(`/o/${slug}`);
+  await online(owner);
+  await expect.poll(() => look(owner)).toEqual({ setup, color: 'black' });
+
+  // “Deixar o posto” (a Build Tool continua aberta): a mesa fica livre e volta ao setup e à cor iniciais, para todos
+  await emp.getByTestId('leave-desk').click();
+  await expect(emp.getByTestId('build-tool')).toBeHidden();
+  await expect.poll(() => game(owner, `g.desks.find((d) => d.id === '${deskId}').userId`)).toBeNull();
+  await expect.poll(() => look(owner)).toEqual(initial);
+  await expect.poll(() => look(emp)).toEqual(initial);
+  expect(await game(emp, 'g.players[g.meId].deskId')).toBeNull();
+});
+
 test('revogar o link desconecta o convidado na hora', async () => {
   await api(owner, 'post', `/api/offices/${officeId}/invites/${guestInviteId}/revoke`);
   await expect(guest.getByTestId('office-blocked')).toBeVisible();

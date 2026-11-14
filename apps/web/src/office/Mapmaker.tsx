@@ -674,7 +674,7 @@ export default function Mapmaker() {
               {hasVariants(selected.type) ? <p className="text-[11px] text-muted">{t('mm.pColorTab', 'Cor e setup: na aba “Cor”, no canto do mapa.')}</p> : null}
               {deskLook ? (
                 <p className="rounded-lg border border-gold/40 bg-gold/10 p-2 text-[11px] leading-snug" data-testid="obj-desk-look">
-                  {t('mm.deskLook', '{{name}} personalizou esta mesa ({{what}}). No escritório vale a escolha dela até deixar o posto; aqui você edita o padrão da mesa.', { name: deskLook.name, what: deskLook.what })}
+                  {t('mm.deskLook', '{{name}} personalizou esta mesa ({{what}}). No escritório essa escolha vale até a mesa ser liberada; aqui você edita o padrão dela.', { name: deskLook.name, what: deskLook.what })}
                 </p>
               ) : null}
               {selected.type === 'portal' ? (
