@@ -12,7 +12,7 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 | C3. Plantas e catálogo antigo | pronto | 8 plantas novas + `plant`/`plant_small` redesenhadas (grupo "Plantas"), o resto do catálogo redesenhado com cores, desenho antigo removido de `objects.ts`, gerador com as plantas novas. Guia logo abaixo do guia das Fases C1 e C2 |
 | D. Avatar: mais opções | pronto | `AvatarConfig` v2 (acessórios múltiplos, 16 cores por peça, 15 cabelos, barba, roupa de cima, estampa, roupa de baixo, calçado, cor dos acessórios), regras de exclusão, editor com abas e prévia nas 4 direções, folha `avatares.png` em seções. Os 40 hashes dos avatares antigos não mudaram. Guia logo abaixo do guia da Fase C3 |
 | E. Cores e setup da mesa | pronto | Aba "Cor" (com "Setup" nas mesas) no Mapmaker e na Build Tool, cor e setup da própria mesa por cima do mapa publicado (`desks.look`, migração `0001_desk_look`), `decor:color`, `desk:look`, "Deixar o posto" e remoção voltam ao inicial, `decor:add` com cor e tampo real, objetos de parede só na parede, gerador com setups e cadeiras variados (versão 2+), E2E do fluxo. Guia logo abaixo do guia da Fase D |
-| F. Animações | pendente | |
+| F. Animações | pronto | Quadros pré-gerados (4 a 8) desenhados pelo mesmo `SpritePainter` com `info.frame` (quadro 0 = estático, hash travado): telas dos 6 setups, RGB e LED do PC gamer, teclado RGB, vapor na caneca e nas cafeteiras, peixes, neon, relógio com a hora do escritório, plantas perto do split, árvores e nuvens das janelas. Relógio único na cena (`Animator`), pausa com a aba oculta e fora da câmera, opção "Reduzir animações" (padrão = `prefers-reduced-motion`), folha `animacoes.png`, `/dev/cena?animados=1`, `e2e/dev-fps.mjs` (sem diferença de FPS). Guia logo abaixo do guia da Fase E |
 | G. QA e release | pendente | |
 
 ## Checklist final (andamento)
@@ -24,7 +24,8 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 - [x] Avatar com acessórios múltiplos e 16 cores por peça (Fase D)
 - [x] Aba "Cor" por objeto, sem objetos duplicados por cor (Fase E)
 - [x] Setup da própria mesa + "Deixar o posto" volta ao inicial (Fase E)
-- [ ] Os demais itens do checklist do `PROMPT.md` dependem das fases F e G
+- [x] Animações de contexto + opção "Reduzir animações" (Fase F)
+- [ ] Os demais itens do checklist do `PROMPT.md` dependem da Fase G
 
 ## Guia da base (Fase A) para as próximas fases
 
@@ -218,13 +219,62 @@ Arquivos novos ou com mudança grande:
 
 **Testes novos.** `packages/shared/test/looks.test.ts` (look, `applyDeskLooks`, tampo da L e da mesa grande, objetos de parede, paleta sem repetição), "aba Cor" em `apps/web/test/objects.test.ts`, "setups e cadeiras do visual v2 no gerador (Fase E)" em `generate.test.ts`, e em `apps/server/test/api.test.ts`: "Build Tool: cor da decoração e look da própria mesa…" (inclui o 3º bloco da mesa grande e "Deixar o posto"), "look da mesa: Dono e Admin…" e a remoção do funcionário devolvendo o setup inicial. E2E: "Build Tool: a funcionária troca a cor de um objeto e o setup da mesa; “Deixar o posto” volta ao inicial" em `e2e/tests/office.spec.ts` (rodado aqui com o Chrome do sistema: `CHROME_PATH=/usr/bin/google-chrome pnpm e2e`, depois de `pnpm build`; o servidor do teste usa PGlite, sem Postgres nem Redis).
 
+## Guia da Fase F (animações de contexto) para as próximas fases
+
+Arquivos novos ou com mudança grande:
+
+| Arquivo | O que tem |
+|---|---|
+| `apps/web/src/game/art/anim.ts` | Catálogo das animações (`AnimDef`: quadros, ms por passo, sequência, pisca raro), `objectAnim(o, { breeze })`, `animFrame` (quadro pelo horário, puro), `animPhase` (fase pela posição), `clockFrame`, `plantsInBreeze`, `swayFoliage` (balanço da copa) e `paintSteam` (vapor) |
+| `apps/web/src/game/animator.ts` | `Animator`: o relógio único da cena. Registra sprites (`add(grupo, alvo, def, fase, caixa, pick?)`) e a cada `tick` troca só o quadro de quem mudou; para com `hidden`, pula quem está fora de `view` e põe tudo no quadro 0 com `reduce`. Não depende do Phaser |
+| `apps/web/src/game/motion.ts` | Preferência local "Reduzir animações" (`useMotion`, `setReduceMotion`, `resolveReduceMotion`, chave `oi-reduce-motion` no `localStorage`) |
+| `packages/shared/src/time.ts` | `localClock(instante, fuso)` (hora, minuto e segundo no fuso do escritório) e `clockAngles` (graus dos ponteiros) |
+
+**Contrato.** `PaintInfo.frame` (0 a n − 1; ausente = 0) e `PaintInfo.time` (só o relógio). O quadro 0 é sempre o desenho estático: folha, Mapmaker, ícones e `render.ts` continuam iguais (o teste "quadro 0 … de antes da Fase F" trava o hash das 622 variantes animadas, conferido com o código de `dd90131`). `objectSprite(o, frame, { breeze })` guarda cada quadro em cache; `objectStrip(o, opts)` devolve todos os quadros lado a lado (vira textura com quadros na cena); `objectFrames(o, opts)` diz quantos são (1 = estático).
+
+**O que anima** (quadros × ms por passo):
+
+| Objeto | Quadros | Ritmo | O que muda |
+|---|---|---|---|
+| Mesas com setup (todos menos "Vazio") | 7 | 700 ms | Tela: linha sendo digitada com cursor (monitor, 2 monitores, notebook prata), barra do gráfico ao vivo, personagem andando e mini-mapa piscando (gamer), comando no terminal (notebook), ícone do dock pulando e aviso (all-in-one). No gamer: fans, fita, LED do monitor e roda do mouse andam uma cor RGB por quadro; LED de energia do gabinete pulsa |
+| Teclado mecânico RGB (`keyboard`, cor `rgb`) | 7 | 700 ms | A luz anda uma cor por quadro (branco e rosa: estáticos) |
+| Caneca, máquina de café, expresso | 6 | 280 ms, sequência `0 1 2 3 4 5 0 0` | Fio de vapor translúcido subindo e sumindo (composto por cima, sem contorno) |
+| Aquário | 8 | 450 ms | 4 peixes vão, viram e voltam (um mais rápido, dois sobem 1 px); bolhas sobem |
+| Neon | 4 | 140 ms, pisca raro | Quase sempre aceso; ~1 piscada de 0,7 s a cada 20 s (letras fracas, tudo fraco, moldura falhando) |
+| Relógio de parede | 8 | segundos de verdade | Hora e minuto do escritório (textura do minuto, trocada a cada minuto; só o minuto atual fica em memória); 8 posições do ponteiro de segundos |
+| Planta perto de split (`plant`, `monstera`, `palm`, `tall_vase` a até 2 blocos) | 4 | 380 ms, `0 1 2 1 0 3` | Folhagem acima do vaso balança 1 a 2 px |
+| Árvores do exterior (4 tipos) | 4 | 450 ms, rajada `0 0 0 1 2 2 1 0 3 0 0 0` | A copa dobra e volta; a fase anda com a posição (o vento atravessa o bosque de oeste para leste) |
+| Vista das janelas (amanhecer, dia, entardecer) | 8 | 2,5 s, vai e volta | Nuvens andam 7 px e voltam; todas as janelas no mesmo quadro (a paisagem continua de uma para a outra). À noite não há nuvem: nada anima |
+
+**Na cena** (`scene.ts`): objeto animado vira um `Image` com textura de quadros `objA:<chave>` (uma por chave de objeto, criada uma vez) e entra no animador com a fase pela posição; os estáticos seguem como antes (`obj:<chave>`). Relógios usam `clock:<chave>:<h>:<m>` e `syncClocks` troca de textura na virada do minuto (ou do fuso) e apaga as velhas. Árvores usam `extA:<tipo>:<período>`; na troca de período o quadro atual é mantido. Janelas com vista viram um sprite por bloco (`win:<wallKey>`, profundidade 0,5), por cima do bloco estático igual, refeito junto com os blocos. O `update()` chama o animador a cada 100 ms; com a aba oculta não faz nada (o Phaser também para), e com "Reduzir animações" tudo fica no quadro 0 (o relógio continua com a hora certa, com o ponteiro de segundos parado para baixo). Nada é redesenhado por quadro: só `setFrame`.
+
+**Para animar um objeto novo:** desenhe os quadros no painter com `info.frame` (o 0 tem que ser o desenho de hoje), acrescente o `case` em `objectAnim` com uma `AnimDef` (4 a 8 quadros) e o objeto na lista do teste de quadros por tipo; a cena, a folha e o teste do quadro 0 já o pegam. Para animar algo do exterior: `decorFrames`/`decorSprite(kind, período, quadro)`.
+
+**Preferência.** Configurações → "Reduzir animações do cenário" (`data-testid="reduce-motion"`). Sem escolha salva vale o `prefers-reduced-motion` do sistema (e acompanha a mudança dele na hora); depois de escolher, vale a escolha (`oi-reduce-motion` = `1`/`0`).
+
+**Conferência.**
+
+- `pnpm art:sheet` gera também `sheet/animacoes.png`: cada animado com todos os quadros lado a lado (o 0 à esquerda), relógios em quatro horas, plantas com brisa, árvores de dia e de noite e as janelas quadro a quadro.
+- `/dev/cena?animados=1` põe perto da entrada um aquário, uma expresso, um relógio, um neon, um split com uma costela-de-adão ao lado, uma caneca e um teclado RGB nas mesas. `window.__oi.motion.set(true)` liga "Reduzir animações" ali.
+- `node e2e/dev-fps.mjs [url] [segundos] [rodadas] [largura] [altura]` mede FPS (`requestAnimationFrame`) e CPU de script e tarefas (métricas do DevTools) da cena parada, alternando animações ligadas e reduzidas. Serve para a Fase G.
+- Prints: `prints/fase-f-animacoes-{1,2,3}.png` (a vitrine em três momentos: peixes, vapor, ponteiro de segundos, planta, telas e RGB mudam) e `prints/fase-f-entardecer-neon-janelas.png`.
+
+**Medição (Chrome sem janela, WebGL por software, cena parada).** 640×360: 15 pessoas + vitrine, 3 rodadas de 5 s: 43 a 47 FPS animando e 41 a 46 reduzido; script 38,7 a 40,5 ms/s animando e 37,5 a 38,7 ms/s reduzido. 40 pessoas + vitrine: 47,6 a 50,4 FPS nos dois modos; script 35,7 a 42,8 ms/s animando e 34,8 a 41,3 reduzido. A diferença de CPU fica em 1 a 2 ms por segundo (0,1% a 0,2% de um núcleo, dentro do ruído) e o FPS não muda; o limite aqui é a renderização por software (tarefas a ~1000 ms/s nos dois modos). Em 1600×900 o software fica em ~9 FPS nos dois modos, igual. A Fase G mede numa máquina com GPU.
+
+**Testes novos.** `apps/web/test/anim.test.ts` (quadro 0 igual ao estático e hash de antes da Fase F, quadros por tipo, cada quadro com o tamanho certo e mudando algo, cache, relógio, árvores com o tronco parado, nuvens, ritmo e piscada do neon, plantas perto do split, animador, preferência) e `packages/shared/test/clock.test.ts` (hora no fuso, horário de verão, fuso inválido, ângulos). E2E: "preferências: “Reduzir animações” liga e desliga e fica salva no navegador".
+
 ## Problemas conhecidos
 
 - A página `/dev/arte` foi conferida só pelo servidor do Vite (os módulos compilam e a rota responde); não havia navegador no ambiente da Fase A para abri-la. As folhas PNG saem do mesmo código (`sheet.ts`).
 - Sofá virado para a esquerda ou direita usa o desenho de frente (já era assim na arte antiga). A Fase C3 manteve: o sofá é 2×1 fixo, e um sofá de lado precisaria de um footprint 1×2 (mudaria a colisão de mapas salvos).
 - Objetos postos na coluna do setup ficam por cima dele (o setup é parte do sprite da mesa): um mousepad ali cobre o teclado do setup.
 - Na mesa em L, clicar no vão (onde fica a cadeira) no Mapmaker seleciona a mesa se não houver outro objeto ali; com a cadeira posta depois, a cadeira tem prioridade.
-- O relógio de parede é estático (10h10) até a Fase F.
+- O relógio de parede mostra 10h10 no Mapmaker, na folha e nos ícones (o desenho estático); a hora do escritório aparece só na cena.
+- Fase F: o balanço das árvores e das plantas é um deslocamento de linhas de 1 a 2 px sobre o desenho pronto; no contorno aparece um degrau de 1 px enquanto a copa está dobrada (lê como balanço em pixel art).
+- Fase F: as nuvens das janelas vão 7 px e voltam (com 8 quadros, uma volta contínua pela paisagem de 128 px exigiria saltos de 16 px); a 2,5 s por passo, é um vaivém lento.
+- Fase F: o exterior visto de cima não tem céu, então as nuvens só andam na vista das janelas; à noite nada anima ali (sem nuvens; as estrelas ficam paradas).
+- Fase F: o ponteiro de segundos anda em 8 posições (de 7,5 em 7,5 s), não segundo a segundo.
+- Fase F: o FPS foi medido só com WebGL por software (sem diferença entre animado e reduzido); a Fase G mede numa máquina com GPU.
 - O letreiro neon redimensionado em altura continua com a placa na primeira linha (só a largura muda o desenho).
 - A câmera continua presa aos limites do mapa (decisão 1 do plano: não mexer na câmera). Por isso o exterior aparece nos vazios do mapa, na faixa de 28 px acima dele e em volta quando o escritório é menor que a tela. Num escritório grande com zoom alto, quem está no meio vê pouco exterior; a vista das janelas aparece sempre.
 - Além dos 16 blocos de margem há só grama, sem árvores (aparece em telas muito largas com zoom mínimo e escritório pequeno).

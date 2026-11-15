@@ -302,6 +302,19 @@ test('status: menu, atalhos e Não incomodar bloqueando a conexão', async () =>
   await expect.poll(() => peerIds(owner)).toEqual([empId]);
 });
 
+test('preferências: “Reduzir animações” liga e desliga e fica salva no navegador', async () => {
+  await emp.evaluate(() => (window as any).__oi.game.setState({ modal: { kind: 'settings' } }));
+  const toggle = emp.getByTestId('reduce-motion').getByRole('switch');
+  const initial = (await toggle.getAttribute('aria-checked')) === 'true';
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-checked', String(!initial));
+  expect(await emp.evaluate(() => localStorage.getItem('oi-reduce-motion'))).toBe(initial ? '0' : '1');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-checked', String(initial));
+  expect(await emp.evaluate(() => localStorage.getItem('oi-reduce-motion'))).toBe(initial ? '1' : '0');
+  await emp.evaluate(() => (window as any).__oi.game.setState({ modal: null }));
+});
+
 test('convidado entra só com o nome, vê o aviso e não entra em área da equipe', async () => {
   const inv = await api(owner, 'post', `/api/offices/${officeId}/invites`, { kind: 'GUEST', label: 'Cliente', expiresAt: Date.now() + 3600_000 });
   guestInviteId = inv.id;
