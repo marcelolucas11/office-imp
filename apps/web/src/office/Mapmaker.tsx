@@ -40,7 +40,7 @@ import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { FLOOR_IDS, WALL_IDS, floorLabel, wallLabel } from './tileLabels';
 import { toast } from '../lib/session';
-import { ColorTab, hasVariants } from './ColorTab';
+import { ColorTab, ICON_TILE, hasVariants } from './ColorTab';
 import { groupLabel } from './groupLabels';
 import { uploadImage } from './Modals';
 import { Emo, EmoText } from '../lib/icons';
@@ -491,7 +491,7 @@ export default function Mapmaker() {
                         }}
                         className={cx('rounded-lg border p-0.5', objType === ty && tool === 'object' ? 'border-gold bg-gold/10' : 'border-line hover:border-muted')}
                       >
-                        <img src={objectIcon(ty, placeColors[ty], placeSetups[ty])} alt={OBJECT_DEFS[ty].label} className="pixel h-10 w-10" />
+                        <img src={objectIcon(ty, placeColors[ty], placeSetups[ty])} alt={OBJECT_DEFS[ty].label} className={cx('pixel h-10 w-10', ICON_TILE)} />
                       </button>
                     ))}
                   </div>

@@ -31,7 +31,7 @@ import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { desktop, toast, useSession } from '../lib/session';
 import { av, useAv } from './av';
-import { ColorTab, hasVariants } from './ColorTab';
+import { ColorTab, ICON_TILE, hasVariants } from './ColorTab';
 import { groupLabel } from './groupLabels';
 import { Emo, EmoText } from '../lib/icons';
 
@@ -307,7 +307,7 @@ export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | '
           <div className="min-w-0 flex-1 space-y-3">
             {desk ? (
               <button type="button" data-testid="build-desk" onClick={() => setTarget({ kind: 'desk' })} className={rowClass(target.kind === 'desk')}>
-                <img src={objectIcon(desk.type, desk.color, desk.setup, 40, true)} alt="" className="pixel h-10 w-10" />
+                <img src={objectIcon(desk.type, desk.color, desk.setup, 40, true)} alt="" className={cx('pixel h-10 w-10', ICON_TILE)} />
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold">{t('mydesk.myDesk', 'A sua mesa')}</span>
                   <span className="block truncate text-xs text-muted">
@@ -335,7 +335,7 @@ export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | '
                       title={OBJECT_DEFS[d]?.label}
                       className={cx('rounded-xl border p-1', type === d && target.kind === 'new' ? 'border-gold bg-gold/10' : 'border-line hover:border-muted')}
                     >
-                      <img src={objectIcon(d, colors[d])} alt={OBJECT_DEFS[d]?.label} className="pixel h-10 w-10" />
+                      <img src={objectIcon(d, colors[d])} alt={OBJECT_DEFS[d]?.label} className={cx('pixel h-10 w-10', ICON_TILE)} />
                     </button>
                   ))}
                 </div>
@@ -366,7 +366,7 @@ export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | '
                 {mine.map((o) => (
                   <div key={o.id} className="flex items-center gap-2">
                     <button type="button" data-testid={`build-mine-${o.type}`} onClick={() => setTarget({ kind: 'decor', id: o.id })} className={rowClass(target.kind === 'decor' && target.id === o.id)}>
-                      <img src={objectIcon(o.type, o.color)} alt="" className="pixel h-7 w-7" />
+                      <img src={objectIcon(o.type, o.color)} alt="" className={cx('pixel h-7 w-7', ICON_TILE)} />
                       <span className="min-w-0 flex-1 truncate">{o.props?.title || OBJECT_DEFS[o.type]?.label}</span>
                       {objectColors(o.type).length > 1 ? <span className="text-xs text-muted">{objColor(o)?.label}</span> : null}
                     </button>

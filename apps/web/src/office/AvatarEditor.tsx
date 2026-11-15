@@ -99,9 +99,9 @@ function Preview({ cfg }: { cfg: AvatarConfig }) {
     <div className="flex shrink-0 flex-col items-center gap-3">
       <div className="grid grid-cols-2 gap-2 rounded-xl bg-panel-2 p-2">
         {DIRS.map((d) => (
-          <figure key={d} className="flex flex-col items-center gap-1 rounded-lg bg-panel-3/60 px-2 pt-2 pb-1">
+          <figure key={d} className="flex flex-col items-center gap-1 rounded-lg bg-[#5d6270] px-2 pt-2 pb-1">
             <img src={avatarPortrait(cfg, 3, d, frame)} alt={dirLabel(d)} className="pixel h-36 w-24" />
-            <figcaption className="text-[11px] text-muted">{dirLabel(d)}</figcaption>
+            <figcaption className="text-[11px] text-stone-100">{dirLabel(d)}</figcaption>
           </figure>
         ))}
       </div>

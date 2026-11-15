@@ -8,6 +8,13 @@ import { cx } from '@office-imp/ui';
 import { objectIcon } from '../game/art/objects';
 import { t } from '../lib/i18n';
 
+/**
+ * Fundo das miniaturas de objeto (paleta do Mapmaker, Build Tool e aba "Cor"): um cinza médio, como
+ * um piso. No fundo quase preto dos painéis, o contorno escuro e os objetos escuros (cadeira
+ * grafite, mouse, mousepad) sumiam.
+ */
+export const ICON_TILE = 'rounded-md bg-[#5d6270]';
+
 /** O tipo tem o que escolher na aba (mais de uma cor, ou setups de mesa)? */
 export function hasVariants(type: string): boolean {
   return objectColors(type).length > 1 || deskSetups(type).length > 0;
@@ -85,7 +92,7 @@ export function ColorTab({ type, color, setup, onColor, onSetup, note, onHide, c
             aria-pressed={it.id === current}
             data-testid={`${testid}-${tab}-${it.id}`}
             onClick={() => pick(it.id)}
-            className={cx('relative grid aspect-square place-items-center rounded-lg border-2 bg-panel-2', it.id === current ? 'border-gold' : 'border-transparent hover:border-line')}
+            className={cx('relative grid aspect-square place-items-center rounded-lg border-2 bg-[#5d6270]', it.id === current ? 'border-gold' : 'border-transparent hover:border-line')}
           >
             <img src={it.icon} alt="" className="pixel h-12 w-12" />
             {it.hex ? <span className="absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full border border-black/50" style={{ background: it.hex }} /> : null}
