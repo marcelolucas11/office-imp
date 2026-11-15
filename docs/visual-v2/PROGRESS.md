@@ -13,7 +13,7 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 | D. Avatar: mais opções | pronto | `AvatarConfig` v2 (acessórios múltiplos, 16 cores por peça, 15 cabelos, barba, roupa de cima, estampa, roupa de baixo, calçado, cor dos acessórios), regras de exclusão, editor com abas e prévia nas 4 direções, folha `avatares.png` em seções. Os 40 hashes dos avatares antigos não mudaram. Guia logo abaixo do guia da Fase C3 |
 | E. Cores e setup da mesa | pronto | Aba "Cor" (com "Setup" nas mesas) no Mapmaker e na Build Tool, cor e setup da própria mesa por cima do mapa publicado (`desks.look`, migração `0001_desk_look`), `decor:color`, `desk:look`, "Deixar o posto" e remoção voltam ao inicial, `decor:add` com cor e tampo real, objetos de parede só na parede, gerador com setups e cadeiras variados (versão 2+), E2E do fluxo. Guia logo abaixo do guia da Fase D |
 | F. Animações | pronto | Quadros pré-gerados (4 a 8) desenhados pelo mesmo `SpritePainter` com `info.frame` (quadro 0 = estático, hash travado): telas dos 6 setups, RGB e LED do PC gamer, teclado RGB, vapor na caneca e nas cafeteiras, peixes, neon, relógio com a hora do escritório, plantas perto do split, árvores e nuvens das janelas. Relógio único na cena (`Animator`), pausa com a aba oculta e fora da câmera, opção "Reduzir animações" (padrão = `prefers-reduced-motion`), folha `animacoes.png`, `/dev/cena?animados=1`, `e2e/dev-fps.mjs` (sem diferença de FPS). Guia logo abaixo do guia da Fase E |
-| G. QA e release | pendente | |
+| G. QA e release | pronto, falta só publicar a release | Câmera mostra o exterior (7 blocos além da borda, ou escritório centralizado), árvores cobrem a tela em escritório pequeno, grama de fora em faixas (recuperou o FPS da v1.0.8), miniaturas e prévia do avatar sobre fundo cinza médio, gravata não some na cor da roupa, prints antes/depois, README, CHANGELOG 1.1.0, guia do ADM. CI verde em `60045f4` (lint, typecheck, testes, build e E2E). **Pendente: publicar a v1.1.0** (ver "Release v1.1.0" abaixo) |
 
 ## Checklist final (andamento)
 
@@ -25,7 +25,29 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 - [x] Aba "Cor" por objeto, sem objetos duplicados por cor (Fase E)
 - [x] Setup da própria mesa + "Deixar o posto" volta ao inicial (Fase E)
 - [x] Animações de contexto + opção "Reduzir animações" (Fase F)
-- [ ] Os demais itens do checklist do `PROMPT.md` dependem da Fase G
+- [x] Prints antes/depois, FPS e memória medidos (Fase G; `prints/antes-depois*.png`, medição abaixo)
+- [ ] Release v1.1.0 publicada — **falta o Marcelo disparar** (ver abaixo)
+- [x] Agendamentos de retomada apagados (a cargo do coordenador, feito em 15/11/2026)
+
+## Release v1.1.0 (como publicar)
+
+O código está pronto na `main` (commit `60045f4`, CI verde) e o `CHANGELOG.md` já tem a entrada 1.1.0. A sessão que fez o trabalho não tem permissão para enviar tags nem para disparar o workflow de release, então a publicação fica com o dono do repositório. Qualquer um dos dois caminhos serve:
+
+- **Pelo GitHub:** Actions → Release → Run workflow → branch `main`, versão `v1.1.0`.
+- **Pelo terminal:** `git pull && git tag v1.1.0 && git push origin v1.1.0`.
+
+O workflow gera as imagens do servidor e os instaladores de Mac e Windows e cria a release. Depois: Painel do ADM → Atualizações → **Atualizar servidor** (a migração `0001_desk_look` roda sozinha, com backup antes) e **Atualizar todos agora**.
+
+## Medição final (Fase G, 15/11/2026)
+
+Chrome sem janela, WebGL por software, 640×360, cena parada, `node e2e/dev-fps.mjs`, 2 rodadas de 5 s:
+
+| Escritório | FPS animando | FPS reduzido | Texturas | Heap de JS | Troca de período |
+|---|---|---|---|---|---|
+| 15 pessoas + vitrine de animados | 56,6 | 56,6 a 57,0 | 66 (7,4 MB) | 15,9 MB | 77 ms de script |
+| 40 pessoas + vitrine de animados | 57,2 a 58,8 | 57,2 a 57,6 | 72 (10,4 MB) | 16,2 MB | 119 ms de script |
+
+A v1.0.8 fazia 49 a 57 FPS no mesmo ambiente com 15 pessoas: não há perda. O ambiente não tem GPU, então os números valem como comparação; a conferência numa máquina real (Mac M1 e o app desktop) fica como verificação manual depois de atualizar.
 
 ## Guia da base (Fase A) para as próximas fases
 
@@ -265,6 +287,8 @@ Arquivos novos ou com mudança grande:
 
 ## Problemas conhecidos
 
+- FPS e memória foram medidos só com WebGL por software (sem GPU no ambiente). Falta conferir num Mac M1 e no app desktop depois de atualizar.
+- A troca de período (4 vezes por dia) refaz os blocos estáticos de uma vez: 77 a 119 ms de script nos escritórios de 15 e 40 pessoas; em mapas muito maiores pode custar alguns quadros.
 - A página `/dev/arte` foi conferida só pelo servidor do Vite (os módulos compilam e a rota responde); não havia navegador no ambiente da Fase A para abri-la. As folhas PNG saem do mesmo código (`sheet.ts`).
 - Sofá virado para a esquerda ou direita usa o desenho de frente (já era assim na arte antiga). A Fase C3 manteve: o sofá é 2×1 fixo, e um sofá de lado precisaria de um footprint 1×2 (mudaria a colisão de mapas salvos).
 - Objetos postos na coluna do setup ficam por cima dele (o setup é parte do sprite da mesa): um mousepad ali cobre o teclado do setup.
@@ -274,19 +298,13 @@ Arquivos novos ou com mudança grande:
 - Fase F: as nuvens das janelas vão 7 px e voltam (com 8 quadros, uma volta contínua pela paisagem de 128 px exigiria saltos de 16 px); a 2,5 s por passo, é um vaivém lento.
 - Fase F: o exterior visto de cima não tem céu, então as nuvens só andam na vista das janelas; à noite nada anima ali (sem nuvens; as estrelas ficam paradas).
 - Fase F: o ponteiro de segundos anda em 8 posições (de 7,5 em 7,5 s), não segundo a segundo.
-- Fase F: o FPS foi medido só com WebGL por software (sem diferença entre animado e reduzido); a Fase G mede numa máquina com GPU.
 - O letreiro neon redimensionado em altura continua com a placa na primeira linha (só a largura muda o desenho).
-- A câmera continua presa aos limites do mapa (decisão 1 do plano: não mexer na câmera). Por isso o exterior aparece nos vazios do mapa, na faixa de 28 px acima dele e em volta quando o escritório é menor que a tela. Num escritório grande com zoom alto, quem está no meio vê pouco exterior; a vista das janelas aparece sempre.
-- Além dos 16 blocos de margem há só grama, sem árvores (aparece em telas muito largas com zoom mínimo e escritório pequeno).
 - A lua aparece em uma de cada quatro janelas (a paisagem repete a cada 4 blocos) e pode ficar atrás de um objeto alto encostado na parede.
 - Janela num trecho vertical de parede (parede com outra embaixo) vira só um filete de vidro no topo: o modelo de parede não tem face lateral.
-- A troca de período refaz os blocos estáticos do mapa de uma vez (4 vezes por dia). Em mapas muito grandes pode custar alguns quadros; a Fase G deve medir.
-- `/dev/cena` foi conferida com o Chrome sem janela (WebGL por software); o FPS real fica para a Fase G.
 - Pôsteres postos sobre um bloco de chão ficam com o desenho um pouco mais baixo que antes (o pôster agora cabe na face da parede).
 - Avatar: um cliente aberto numa versão anterior à Fase D (aba antiga, app desktop sem atualizar) desenha os avatares novos sem acessórios, porque só conhece o campo `accessory`. Some quando o cliente atualiza; o servidor aceita os dois formatos.
 - Avatar: a saia não balança ao andar (só as pernas animam, como a calça); a gravata aparece só de frente (como antes); o relógio aparece nos dois lados de perfil.
 - Avatar: o topete (cabelo 4) continua aparecendo acima do boné e os fones de antes, de perfil, continuam com a concha na frente do rosto: é o desenho de antes, que não pode mudar. Os cabelos novos ficam recortados debaixo do boné.
-- Avatar: com a cor do acessório igual à da roupa (ex.: gravata azul em camisa azul) a gravata some; o editor não impede.
 - Fase E: objetos de parede já postos no chão em mapas salvos continuam onde estão (a validação só avisa); o Mapmaker só impede colocar e arrastar para fora da parede.
 - Fase E: um cliente aberto numa versão anterior à Fase E (aba antiga, app desktop sem atualizar) não conhece o look e mostra as mesas como no mapa publicado, até atualizar.
 - Fase E: a aba "Cor" do Mapmaker fica por cima do canto de cima à direita do mapa (dá para recolher com "–"; volta pelo botão "🎨 Cor").
