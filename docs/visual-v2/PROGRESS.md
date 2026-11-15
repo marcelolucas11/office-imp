@@ -13,7 +13,7 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 | D. Avatar: mais opções | pronto | `AvatarConfig` v2 (acessórios múltiplos, 16 cores por peça, 15 cabelos, barba, roupa de cima, estampa, roupa de baixo, calçado, cor dos acessórios), regras de exclusão, editor com abas e prévia nas 4 direções, folha `avatares.png` em seções. Os 40 hashes dos avatares antigos não mudaram. Guia logo abaixo do guia da Fase C3 |
 | E. Cores e setup da mesa | pronto | Aba "Cor" (com "Setup" nas mesas) no Mapmaker e na Build Tool, cor e setup da própria mesa por cima do mapa publicado (`desks.look`, migração `0001_desk_look`), `decor:color`, `desk:look`, "Deixar o posto" e remoção voltam ao inicial, `decor:add` com cor e tampo real, objetos de parede só na parede, gerador com setups e cadeiras variados (versão 2+), E2E do fluxo. Guia logo abaixo do guia da Fase D |
 | F. Animações | pronto | Quadros pré-gerados (4 a 8) desenhados pelo mesmo `SpritePainter` com `info.frame` (quadro 0 = estático, hash travado): telas dos 6 setups, RGB e LED do PC gamer, teclado RGB, vapor na caneca e nas cafeteiras, peixes, neon, relógio com a hora do escritório, plantas perto do split, árvores e nuvens das janelas. Relógio único na cena (`Animator`), pausa com a aba oculta e fora da câmera, opção "Reduzir animações" (padrão = `prefers-reduced-motion`), folha `animacoes.png`, `/dev/cena?animados=1`, `e2e/dev-fps.mjs` (sem diferença de FPS). Guia logo abaixo do guia da Fase E |
-| G. QA e release | pronto, falta só publicar a release | Câmera mostra o exterior (7 blocos além da borda, ou escritório centralizado), árvores cobrem a tela em escritório pequeno, grama de fora em faixas (recuperou o FPS da v1.0.8), miniaturas e prévia do avatar sobre fundo cinza médio, gravata não some na cor da roupa, prints antes/depois, README, CHANGELOG 1.1.0, guia do ADM. CI verde em `60045f4` (lint, typecheck, testes, build e E2E). **Pendente: publicar a v1.1.0** (ver "Release v1.1.0" abaixo) |
+| G. QA e release | pronto | Câmera mostra o exterior (7 blocos além da borda, ou escritório centralizado), árvores cobrem a tela em escritório pequeno, grama de fora em faixas (recuperou o FPS da v1.0.8), miniaturas e prévia do avatar sobre fundo cinza médio, gravata não some na cor da roupa, prints antes/depois, README, CHANGELOG 1.1.0, guia do ADM. CI verde em `60045f4` (lint, typecheck, testes, build e E2E). Release v1.1.0 publicada em 15/11/2026 |
 
 ## Checklist final (andamento)
 
@@ -26,7 +26,7 @@ Plano: `PROMPT.md`. Decisões: `DECISIONS.md`.
 - [x] Setup da própria mesa + "Deixar o posto" volta ao inicial (Fase E)
 - [x] Animações de contexto + opção "Reduzir animações" (Fase F)
 - [x] Prints antes/depois, FPS e memória medidos (Fase G; `prints/antes-depois*.png`, medição abaixo)
-- [ ] Release v1.1.0 publicada — **falta o Marcelo disparar** (ver abaixo)
+- [x] Release v1.1.0 publicada em 15/11/2026 (workflow de release pelo GitHub Actions, instaladores e imagens gerados)
 - [x] Agendamentos de retomada apagados (a cargo do coordenador, feito em 15/11/2026)
 
 ## Release v1.1.0 (como publicar)
