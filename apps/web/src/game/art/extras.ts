@@ -376,7 +376,8 @@ const corkboard: SpritePainter = (s, info) => {
 /** Ponta de um ponteiro de comprimento `len` no ângulo `deg` (graus, horário a partir do 12). */
 export function handEnd(deg: number, len: number): [number, number] {
   const r = (deg * Math.PI) / 180;
-  return [Math.round(Math.sin(r) * len), Math.round(-Math.cos(r) * len)];
+  // `+ 0` tira o −0 do arredondamento (ex.: −cos(90°) ≈ −0)
+  return [Math.round(Math.sin(r) * len) + 0, Math.round(-Math.cos(r) * len) + 0];
 }
 
 /** Comprimento (px) dos ponteiros de horas, minutos e segundos. */
