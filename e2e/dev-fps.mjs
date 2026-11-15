@@ -3,6 +3,7 @@
 // (requestAnimationFrame) e tempo de CPU da página (métricas do DevTools: script e tarefas), com
 // as animações de contexto ligadas e com "Reduzir animações". Uso, com o `pnpm dev` rodando:
 //   node e2e/dev-fps.mjs ["http://localhost:5173/dev/cena?pessoas=15&animados=1"] [segundos] [rodadas] [largura] [altura]
+// No fim mostra a memória de texturas, o heap de JS e o custo da troca de período (dia → noite).
 // O Chrome vem de CHROME_PATH (ou /usr/bin/google-chrome). Sem GPU (WebGL por software), o FPS
 // absoluto é bem menor que numa máquina comum: compare as duas colunas entre si.
 import { chromium } from '@playwright/test';
@@ -55,8 +56,26 @@ for (let r = 0; r < Number(rounds); r++) {
   rows.push({ mode: 'reduzido', ...(await measure(true)) });
 }
 await page.evaluate(() => window.__oi.motion.set(false));
+// memória: texturas da cena (largura × altura × 4 bytes) e heap de JS depois de coletar o lixo
+const tex = await page.evaluate(() => window.__oi.textures?.() ?? null);
+await cdp.send('HeapProfiler.collectGarbage');
+const heap = (await metrics()).JSHeapUsedSize / 1048576;
+// troca de período (refaz os blocos estáticos se o mapa tem janela): tempo até a cena voltar a desenhar
+const periodMs = await page.evaluate(
+  () =>
+    new Promise((done) => {
+      window.__oi.bus.emit('period', 'day');
+      const t0 = performance.now();
+      window.__oi.bus.emit('period', 'night');
+      const sync = performance.now() - t0;
+      requestAnimationFrame(() => requestAnimationFrame(() => done({ sync, frames: performance.now() - t0 })));
+    }),
+);
+await page.evaluate(() => window.__oi.bus.emit('period', null));
 const fmt = (v) => v.toFixed(1).padStart(7);
 console.log(`[dev-fps] ${url} ${w}x${h} (${secs} s por janela)`);
 console.log('  modo        fps   script ms/s  tarefas ms/s  heap MB');
 for (const row of rows) console.log(`  ${row.mode.padEnd(9)}${fmt(row.fps)}${fmt(row.scriptMsPerSec)}      ${fmt(row.taskMsPerSec)}       ${fmt(row.heapMb)}`);
+if (tex) console.log(`  texturas: ${tex.count} (${(tex.bytes / 1048576).toFixed(1)} MB na GPU), ${tex.objects} objetos na cena; heap de JS após coleta: ${heap.toFixed(1)} MB`);
+console.log(`  troca de período (dia → noite): ${periodMs.sync.toFixed(0)} ms de script, ${periodMs.frames.toFixed(0)} ms até 2 quadros depois`);
 await browser.close();

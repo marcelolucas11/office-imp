@@ -104,10 +104,13 @@ export function wallTileAt(map: OfficeMap, x: number, y: number, period: DayPeri
 }
 
 /**
- * Desenha um trecho (em tiles) do chão e das paredes do mapa. Blocos sem piso nem parede ficam
- * transparentes (é onde o exterior aparece). `period` só muda a vista e o vidro das janelas externas.
+ * Desenha um trecho (em tiles) do chão e das paredes do mapa. Blocos sem piso ficam transparentes
+ * (é onde o exterior aparece), a não ser que venha `ground`: o padrão de grama de 256 px, que então
+ * é desenhado nesses blocos alinhado ao mundo (a cena faz assim, para não pintar a grama duas vezes).
+ * `period` só muda a vista e o vidro das janelas externas.
  */
-export function drawStatic(ctx: Ctx, map: OfficeMap, x0: number, y0: number, w: number, h: number, period: DayPeriod = 'day') {
+export function drawStatic(ctx: Ctx, map: OfficeMap, x0: number, y0: number, w: number, h: number, period: DayPeriod = 'day', ground: CanvasImageSource | null = null) {
+  const G = ground ? Math.floor((ground as HTMLCanvasElement).width / T) : 0;
   for (let ty = Math.max(0, y0); ty < Math.min(map.height, y0 + h); ty++) {
     for (let tx = Math.max(0, x0); tx < Math.min(map.width, x0 + w); tx++) {
       const i = ty * map.width + tx;
@@ -115,6 +118,7 @@ export function drawStatic(ctx: Ctx, map: OfficeMap, x0: number, y0: number, w: 
       const oy = (ty - y0) * T;
       const f = map.layers.floor[i];
       if (f) drawFloor(ctx, f, ox, oy, tx, ty);
+      else if (ground) ctx.drawImage(ground, (tx % G) * T, (ty % G) * T, T, T, ox, oy, T, T);
       const wall = wallTileAt(map, tx, ty, period);
       if (wall) ctx.drawImage(wallCanvas(wall), ox, oy);
     }

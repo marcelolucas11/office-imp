@@ -43,3 +43,39 @@ export function exteriorMarginFor(mapW: number, mapH: number, viewW: number, vie
   const need = Math.max(-b.x, -b.y, b.x + b.w - mapW * TILE, b.y + b.h - mapH * TILE) / TILE;
   return Math.min(EXTERIOR_MARGIN_MAX, Math.max(min, Math.ceil(need) + 1));
 }
+
+export interface GrassStrip {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Deslocamento do padrão (px) para a grama continuar alinhada ao mundo. */
+  tx: number;
+  ty: number;
+}
+
+/**
+ * Grama de fora do escritório: até 4 faixas (cima, baixo, esquerda, direita) cobrindo só a parte
+ * da tela que fica **fora do retângulo do mapa**. Dentro dele, a grama dos vazios vem desenhada
+ * nos blocos estáticos, então nenhum pixel é pintado duas vezes (com WebGL por software, uma
+ * camada de grama do tamanho da tela embaixo de tudo custava ~20% dos quadros).
+ * A tela é alargada até a grade do padrão (`pattern` px, com um padrão de folga) para as faixas
+ * só mudarem de tamanho quando a câmera cruza essa grade. `null` = faixa fora da tela.
+ */
+export function grassStrips(mapW: number, mapH: number, viewX: number, viewY: number, viewW: number, viewH: number, pattern = 256): (GrassStrip | null)[] {
+  const P = pattern;
+  const W = mapW * TILE;
+  const H = mapH * TILE;
+  const x0 = (Math.floor(viewX / P) - 1) * P;
+  const y0 = (Math.floor(viewY / P) - 1) * P;
+  const x1 = (Math.ceil((viewX + viewW) / P) + 1) * P;
+  const y1 = (Math.ceil((viewY + viewH) / P) + 1) * P;
+  const mod = (v: number) => ((v % P) + P) % P;
+  const rect = (ax: number, ay: number, bx: number, by: number): GrassStrip | null => (bx > ax && by > ay ? { x: ax, y: ay, w: bx - ax, h: by - ay, tx: mod(ax), ty: mod(ay) } : null);
+  return [
+    rect(x0, y0, x1, Math.min(y1, 0)), // cima (toda a largura)
+    rect(x0, Math.max(y0, H), x1, y1), // baixo (toda a largura)
+    rect(x0, Math.max(y0, 0), Math.min(x1, 0), Math.min(y1, H)), // esquerda (só na altura do mapa)
+    rect(Math.max(x0, W), Math.max(y0, 0), x1, Math.min(y1, H)), // direita
+  ];
+}

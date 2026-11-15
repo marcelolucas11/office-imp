@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
 import { TILE } from '@office-imp/shared';
-import { CAMERA_MARGIN, EXTERIOR_MARGIN_MAX, cameraBounds, exteriorMarginFor } from '../src/game/camera';
+import { CAMERA_MARGIN, EXTERIOR_MARGIN_MAX, cameraBounds, exteriorMarginFor, grassStrips } from '../src/game/camera';
 import { EXTERIOR_MARGIN } from '../src/game/art/exterior';
 
 describe('limites da câmera (exterior visível)', () => {
@@ -52,5 +52,46 @@ describe('limites da câmera (exterior visível)', () => {
     expect(exteriorMarginFor(34, 21, 2560, 1440, EXTERIOR_MARGIN)).toBe(24);
     // tela absurda: para no teto
     expect(exteriorMarginFor(10, 10, 20000, 12000, EXTERIOR_MARGIN)).toBe(EXTERIOR_MARGIN_MAX);
+  });
+});
+
+describe('faixas de grama fora do mapa (sem pintar a tela duas vezes)', () => {
+  const area = (r: { w: number; h: number } | null) => (r ? r.w * r.h : 0);
+  const inter = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+  it('câmera toda dentro do mapa (longe das bordas): nenhuma faixa', () => {
+    expect(grassStrips(100, 100, 1200, 1200, 640, 360)).toEqual([null, null, null, null]);
+  });
+
+  it('as faixas cobrem tudo o que a tela mostra fora do mapa, sem entrar nele e sem se sobrepor', () => {
+    const mapW = 34;
+    const mapH = 21;
+    const map = { x: 0, y: 0, w: mapW * TILE, h: mapH * TILE };
+    for (const [vx, vy, vw, vh] of [
+      [-224, -224, 960, 540],
+      [300, 400, 960, 540],
+      [-700, -500, 2560, 1440],
+      [900, -100, 427, 240],
+      [5000, 5000, 640, 360],
+    ] as const) {
+      const view = { x: vx, y: vy, w: vw, h: vh };
+      const strips = grassStrips(mapW, mapH, vx, vy, vw, vh).filter((s) => s !== null);
+      let covered = 0;
+      for (const s of strips) {
+        expect(inter(s, map), 'faixa dentro do mapa').toBe(0);
+        covered += inter(s, view);
+        // alinhada ao mundo: o deslocamento do padrão é a posição módulo 256
+        expect(s.tx).toBe(((s.x % 256) + 256) % 256);
+        expect(s.ty).toBe(((s.y % 256) + 256) % 256);
+      }
+      for (let i = 0; i < strips.length; i++) for (let j = i + 1; j < strips.length; j++) expect(inter(strips[i], strips[j]), 'faixas sobrepostas').toBe(0);
+      expect(covered).toBe(area(view) - inter(view, map));
+    }
+  });
+
+  it('o tamanho das faixas só muda quando a câmera cruza a grade de 256 px', () => {
+    const a = grassStrips(34, 21, -100, -100, 960, 540);
+    const b = grassStrips(34, 21, -60, -90, 960, 540);
+    expect(b).toEqual(a);
   });
 });

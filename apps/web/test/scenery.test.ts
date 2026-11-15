@@ -265,6 +265,33 @@ describe('paredes', () => {
     expect(b.alpha(T, T)).toBe(0);
     expect(b.alpha(2 * T + 4, 2 * T + 4)).toBe(255);
   });
+
+  it('com `ground`, os blocos sem piso recebem a grama alinhada ao mundo (Fase G: a cena não pinta a grama duas vezes)', () => {
+    const map = room();
+    map.layers.floor[2 * 8 + 3] = 0;
+    const grass = exteriorGrass('day');
+    const g = Sprite.fromCanvas(grass);
+    // o mesmo trecho desenhado a partir de origens diferentes: o bloco vazio sempre mostra o recorte (3, 2) do padrão
+    for (const [x0, y0] of [
+      [0, 0],
+      [2, 1],
+    ] as const) {
+      const c = makeCanvas(8 * T, 6 * T);
+      drawStatic(c.getContext('2d')!, map, x0, y0, 8, 6, 'day', grass);
+      const s = Sprite.fromCanvas(c);
+      for (let y = 0; y < T; y += 5) for (let x = 0; x < T; x += 5) expect(s.get((3 - x0) * T + x, (2 - y0) * T + y)).toBe(g.get(3 * T + x, 2 * T + y));
+      // o piso ao lado não muda
+      expect(s.get((4 - x0) * T + 16, (2 - y0) * T + 16)).not.toBe(g.get(4 * T + 16, 2 * T + 16));
+    }
+    // sem `ground` nada muda fora do bloco vazio
+    const a = makeCanvas(8 * T, 6 * T);
+    drawStatic(a.getContext('2d')!, map, 0, 0, 8, 6);
+    const b = makeCanvas(8 * T, 6 * T);
+    drawStatic(b.getContext('2d')!, map, 0, 0, 8, 6, 'day', grass);
+    const sa = Sprite.fromCanvas(a);
+    const sb = Sprite.fromCanvas(b);
+    for (let ty = 0; ty < 6; ty++) for (let tx = 0; tx < 8; tx++) if (map.layers.floor[ty * 8 + tx]) expect(sb.get(tx * T + 7, ty * T + 7)).toBe(sa.get(tx * T + 7, ty * T + 7));
+  });
 });
 
 describe('exterior e períodos do dia', () => {
