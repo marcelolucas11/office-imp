@@ -71,9 +71,20 @@ Todos os horários são registrados pelo servidor. No primeiro acesso, cada pess
 
 Dentro do escritório: **⋯ → Mapmaker e Build Tool**.
 
-- **Objetos** — escolha e clique no mapa. Interativos: quadro branco, site, TV (YouTube), pôster,
-  jogo e placa. Selecione um objeto para editar título, endereço, imagem ou texto. `R` gira, `Delete` apaga.
-- **Chão e paredes** — pintar, preencher, apagar, marcar os pontos de entrada e mudar o tamanho do mapa.
+- **Objetos** — a paleta é dividida em grupos (interativos, estrutura, mesas de trabalho, cadeiras e
+  sofás, mesas e móveis, objetos de mesa, copa e equipamentos, de parede, plantas e decoração) e
+  cada objeto aparece uma vez só. Escolha e clique no mapa. Interativos: quadro branco, site, TV
+  (YouTube), pôster, jogo e placa. Selecione um objeto para editar título, endereço, imagem ou
+  texto (o letreiro neon tem o campo "Texto do letreiro"). `R` gira, `Delete` apaga.
+- **Aba "Cor"** — no canto de cima à direita do mapa. Com um objeto selecionado, mostra as cores
+  dele (e, nas mesas de trabalho, o **Setup**: monitor, PC gamer, dois monitores, notebook prata,
+  all-in-one, notebook ou vazio). Sem seleção, vale para o próximo objeto que você colocar daquele
+  tipo. O botão "–" recolhe a aba; "🎨 Cor" abre de novo.
+- **Objetos de parede** (quadro de cortiça, relógio, letreiro neon, split, samambaia pendurada e
+  jardim vertical) só podem ser colocados na face de uma parede.
+- **Chão e paredes** — pintar, preencher, apagar, marcar os pontos de entrada e mudar o tamanho do
+  mapa. São 15 pisos e 7 paredes (lisa, tijolo, painel de madeira, divisória de vidro…). A janela
+  adota o acabamento da parede vizinha e mostra a paisagem quando dá para fora.
 - **Áreas** — arraste um retângulo para criar uma **área privada** (sala, mesa de conversa) ou um
   **palco**. Defina nome, capacidade, "sala de reunião" (permite notas) e "somente equipe".
 - **Portal** — coloque o objeto, selecione e clique em "Clicar no destino".
@@ -81,7 +92,29 @@ Dentro do escritório: **⋯ → Mapmaker e Build Tool**.
   **Publicar** envia a nova versão para todos na hora. Em **Versões** dá para restaurar qualquer
   versão anterior e exportar para o Tiled.
 
-Cada funcionário decora a própria mesa em **⋯ → Minha mesa → Decorar**.
+O lado de fora do escritório (grama e árvores) e o dia e a noite são automáticos: o período segue o
+horário do **fuso do escritório** (Painel do ADM → Configurações). Não há nada para desenhar no mapa.
+
+### Minha mesa (cada pessoa)
+
+Em **⋯ → Minha mesa → Decorar**, cada funcionário:
+
+- coloca objetos na própria mesa e em volta dela (objetos de mesa, plantas, quadros), escolhendo a
+  cor de cada um na aba "Cor";
+- troca a **cor e o setup da própria mesa**. Isso não altera o mapa publicado: a escolha vale
+  enquanto a mesa for da pessoa. Uma mesa com a escolha do ocupante aparece com um aviso no Mapmaker;
+- usa **"Deixar o posto"** para liberar a mesa. A mesa volta à cor e ao setup do mapa; os objetos
+  colocados continuam nela. O mesmo acontece quando a pessoa é removida ou troca de mesa.
+
+### Avatar e animações
+
+- **Avatar** — em ⋯ → Personalizar o avatar: abas por peça (pele, cabelo, barba, roupa de cima, estampa, roupa de
+  baixo, calçado e acessórios), 16 cores por peça e prévia nas 4 direções. Dá para usar vários
+  acessórios ao mesmo tempo; o editor bloqueia só as combinações impossíveis (dois óculos, boné com
+  chapéu, chapéu com fones).
+- **Reduzir animações** — em ⋯ → Áudio, vídeo e preferências, "Reduzir animações do cenário" deixa telas, luzes,
+  vapor, peixes, árvores e nuvens parados. É uma preferência de cada aparelho; sem escolha, segue a
+  configuração de movimento reduzido do sistema.
 
 ## Pessoas e links de convite
 

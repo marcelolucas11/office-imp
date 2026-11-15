@@ -92,3 +92,30 @@ describe('avatar do visual v2', () => {
     for (const a of AVATAR_ACCESSORIES) expect(text).toContain(`${a.id} `);
   });
 });
+
+describe('gravata na cor da roupa (Fase G)', () => {
+  it('com a cor do acessório igual à da camisa, a gravata continua aparecendo', () => {
+    const O = AVATAR_OPTIONS;
+    let checked = 0;
+    for (let shirt = 0; shirt < O.shirt.length; shirt++) {
+      for (let accColor = 1; accColor < O.accColor.length; accColor++) {
+        const without = pixels(sanitizeAvatar({ ...BASE, shirt, accColor }));
+        const withTie = pixels(sanitizeAvatar({ ...BASE, shirt, accColor, accessories: [4] }));
+        // conta pixels do tronco que mudaram com a gravata: tem que ser a gravata inteira (2×8 + 4×2 por quadro de frente)
+        let changed = 0;
+        for (let i = 0; i < without.length; i += 4) if (without[i] !== withTie[i] || without[i + 1] !== withTie[i + 1] || without[i + 2] !== withTie[i + 2]) changed++;
+        expect(changed, `camisa ${shirt}, cor ${accColor}`).toBeGreaterThanOrEqual(3 * 20);
+        checked++;
+      }
+    }
+    expect(checked).toBe(O.shirt.length * (O.accColor.length - 1));
+  });
+
+  it('a gravata na cor original (avatares de antes) não muda com a camisa vermelha', () => {
+    const cfg = sanitizeAvatar({ ...BASE, shirt: 5, accessories: [4] });
+    const sheet = Sprite.fromCanvas(avatarSheet(cfg));
+    // quadro parado de frente: a gravata continua no vermelho de sempre
+    expect(sheet.get(15, 21 + 3)).toBe('#b91c1c');
+  });
+});
+

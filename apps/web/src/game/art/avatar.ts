@@ -27,6 +27,13 @@ function lum(c: string): number {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
+/** Duas cores quase iguais (um detalhe numa delas sumiria sobre a outra). */
+function sameTone(a: string, b: string): boolean {
+  const [ar, ag, ab] = rgba(a);
+  const [br, bg, bb] = rgba(b);
+  return Math.abs(ar - br) + Math.abs(ag - bg) + Math.abs(ab - bb) < 90;
+}
+
 /** Tom de detalhe que se destaca de `c`: escurece cor clara e clareia cor escura. */
 function detail(c: string, k: number): string {
   return tint(c, lum(c) > 0.42 ? -k : k);
@@ -165,7 +172,9 @@ export function paintAvatarFrame(ctx: Ctx, ox: number, oy: number, cfg: AvatarCo
     if (dir === 'down') {
       if (top === 0) p(14, by, 4, 2, shade(shirt, -0.15));
       if (acc.has(ACC.Tie)) {
-        const tie = accColor ?? '#b91c1c';
+        // cor escolhida quase igual à da roupa: a gravata escurece (ou clareia, se for escura) para não sumir (a cor original,
+        // de antes do visual v2, não muda: avatares antigos saem iguais)
+        const tie = accColor ? (sameTone(accColor, shirt) ? tint(accColor, lum(accColor) < 0.25 ? 0.45 : -0.45) : accColor) : '#b91c1c';
         if (top === 3) {
           // no blazer abotoado a gravata só aparece no decote
           p(15, by + 1, 2, 4, tie);
