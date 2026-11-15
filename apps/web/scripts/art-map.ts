@@ -15,8 +15,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCanvas } from '@napi-rs/canvas';
-import { CORRIDOR_H, ROOM_H, buildWing, generateOffice, modulesForInput, validateOffice } from '@office-imp/map-engine';
-import { DAY_PERIODS, emptyMap, validateMapShape, type DayPeriod, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
+import { CORRIDOR_H, LEGACY_ROOM_H, buildWing, generateOffice, modulesForInput, validateOffice } from '@office-imp/map-engine';
+import { DAY_PERIODS, emptyMap, migrateMap, validateMapShape, type DayPeriod, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
 import { setCanvasFactory } from '../src/game/art/canvas';
 import { renderScene } from '../src/game/art/render';
 import { scaleCanvas } from '../src/game/art/sheet';
@@ -38,10 +38,10 @@ const scale = int(arg('scale'), 1, 1, 4);
 const theme = int(arg('theme'), 2, 1, 2);
 const outDir = path.resolve(root, arg('out') ?? 'docs/visual-v2/prints');
 
-/** Escritório com os pisos de antes do visual v2 (o que o gerador fazia na versão 1). */
+/** Escritório com os pisos de antes do visual v2 (o que o gerador fazia na versão 1), de paredes finas: o render atualiza como o servidor. */
 function legacyOffice(inp: WizardInput): OfficeMap {
-  const map = emptyMap(1, ROOM_H * 2 + CORRIDOR_H);
-  const gen: GeneratorMeta = { version: 1, corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, counters: {} };
+  const map = { ...emptyMap(1, LEGACY_ROOM_H * 2 + CORRIDOR_H), version: 1 };
+  const gen: GeneratorMeta = { version: 1, corridorY: LEGACY_ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: LEGACY_ROOM_H, counters: {} };
   buildWing(map, gen, modulesForInput(inp), 0, false);
   map.meta = { gen };
   return map;
@@ -53,10 +53,10 @@ function loadMap(): { map: OfficeMap; label: string } {
     const map = JSON.parse(readFileSync(path.resolve(process.cwd(), json), 'utf8')) as OfficeMap;
     const error = validateMapShape(map);
     if (error) throw new Error(`mapa inválido: ${error}`);
-    return { map, label: path.basename(json).replace(/\.json$/i, '') };
+    return { map: migrateMap(map), label: path.basename(json).replace(/\.json$/i, '') };
   }
   const people = input.size === 'custom' ? String(input.customCount) : input.size;
-  return { map: theme === 1 ? legacyOffice(input) : generateOffice(input), label: `${people}p${theme === 1 ? '-pisos-antigos' : ''}` };
+  return { map: theme === 1 ? migrateMap(legacyOffice(input)) : generateOffice(input), label: `${people}p${theme === 1 ? '-pisos-antigos' : ''}` };
 }
 
 const started = performance.now();

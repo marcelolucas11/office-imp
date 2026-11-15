@@ -3,6 +3,36 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.2.0 — 15/11/2026 — Paredes altas
+
+As paredes eram finas demais para o tamanho do boneco: o personagem ficava maior que a porta e os
+objetos encostados na parede passavam por cima dela. Agora paredes, portas e janelas têm a escala
+do avatar.
+
+![Antes e depois](docs/paredes-altas/antes-depois.png)
+
+- **Paredes de 2 blocos de altura.** A face da parede (a parte de frente) ocupa 2 fileiras: o boneco
+  tem cerca de 3/4 da altura da parede, e geladeira, estante, quadro branco e TV ficam encostados
+  nela em vez de passar por cima. Os cantos e os trechos verticais continuam como topo de parede.
+- **Portas de 2 blocos.** O vão da porta atravessa a parede inteira, com verga por cima no
+  acabamento da parede; o boneco passa por ela com folga. Fechada, a porta bloqueia o vão todo; dá
+  para abrir e fechar dos dois lados (X perto dela).
+- **Janelas altas**, com mais céu na vista, travessa e peitoril. Todos os acabamentos (ardósia,
+  escura, lisa, tijolo, madeira e vidro) foram adaptados.
+- **Árvores maiores** no exterior, na escala do prédio (2 a 3 vezes a altura de uma pessoa).
+- Ao entrar numa sala privada, o recorte claro pega a parede alta inteira.
+
+### Antes de atualizar
+
+- **Mapas salvos:** nenhum passo manual. Ao carregar, o servidor atualiza o mapa sozinho: cada
+  parede com face ganha uma fileira, e tudo o que fica abaixo dela desce junto (mesas, áreas,
+  spawns, portas). Por isso o mapa fica algumas fileiras mais alto. Objetos de parede (relógio,
+  split, neon…) ficam na fileira de cima da face. A versão atualizada passa a ser a salva na
+  próxima publicação pelo Mapmaker. A ala nova de uma expansão já sai com paredes altas.
+- **Posições salvas:** quem estava numa posição que virou parede volta para a entrada.
+- **Mapmaker:** uma parede desenhada com 1 fileira continua aparecendo fina (como antes). Para a
+  parede alta, desenhe 2 fileiras.
+
 ## 1.1.0 — 14/11/2026 — Visual v2
 
 A arte do cenário e dos objetos foi refeita com mais detalhe, mais objetos e mais variações, e o

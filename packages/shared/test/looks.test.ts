@@ -88,7 +88,9 @@ describe('objetos de parede', () => {
     const m = emptyMap(6, 5);
     m.layers.floor.fill(1);
     for (let x = 0; x < 6; x++) m.layers.walls[x] = Wall.Wall; // parede de cima, face à mostra
-    m.layers.walls[6 + 5] = Wall.Wall; // trecho vertical à direita (parede em cima de parede)
+    // trecho vertical à direita: 3 blocos de parede, então o de cima é só topo (a face alta tem 2)
+    m.layers.walls[6 + 5] = Wall.Wall;
+    m.layers.walls[12 + 5] = Wall.Wall;
     return m;
   };
 

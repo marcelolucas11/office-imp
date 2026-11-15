@@ -3,7 +3,13 @@
 // tiles + grupos de objetos), com tiles de 32×32.
 
 export const TILE = 32;
-export const MAP_FORMAT_VERSION = 1;
+/**
+ * Versão do formato do mapa. A 2 (paredes altas) tem a face das paredes em 2 fileiras de blocos;
+ * mapas da versão 1 passam por `migrateMap` ao carregar (ver `thickenWalls`).
+ */
+export const MAP_FORMAT_VERSION = 2;
+/** Quantas fileiras de blocos a face de uma parede ocupa (paredes altas, formato 2). */
+export const WALL_FACE_ROWS = 2;
 export const MAX_MAP_SIZE = 300;
 
 export const Floor = {
@@ -338,7 +344,7 @@ const defs: ObjectDef[] = [
   { type: 'rug', label: 'Tapete', w: 3, h: 2, solid: false, category: 'decor', resizable: true, colors: RUGS },
   { type: 'rug_logo', label: 'Tapete com logo', w: 4, h: 2, solid: false, category: 'decor', colors: RUGS },
   { type: 'podium', label: 'Púlpito', w: 1, h: 1, solid: false, category: 'decor', colors: CABINET_WOODS },
-  { type: 'door', label: 'Porta', w: 1, h: 1, solid: false, category: 'structure', colors: [
+  { type: 'door', label: 'Porta', w: 1, h: 1, solid: false, category: 'structure', tall: 1, colors: [
     { id: 'wood', label: 'Madeira', hex: '#8a5a3a' },
     { id: 'oak', label: 'Madeira clara', hex: '#b98a5c' },
     { id: 'white', label: 'Branca', hex: '#dcd9d2' },
@@ -539,6 +545,8 @@ export interface GeneratorMeta {
   bottomX: number;
   endX: number;
   roomHeight: number;
+  /** Fileiras das paredes com face (de cima e de baixo de cada cômodo). Ausente = 1 (mapas de antes das paredes altas). */
+  wallRows?: number;
   counters: Record<string, number>;
 }
 
@@ -796,10 +804,26 @@ export function deskTopAt(desk: MapObject, x: number, y: number): boolean {
   return objSolidAt(desk, x - desk.x, y - desk.y);
 }
 
+function wallAt(map: Pick<OfficeMap, 'width' | 'height' | 'layers'>, x: number, y: number): boolean {
+  return inBounds(map, x, y) && map.layers.walls[idx(map, x, y)] !== 0;
+}
+
+/**
+ * Nível da face de parede no bloco: -1 = não é face (sem parede, ou topo de um trecho vertical);
+ * 0 = fileira de baixo da face (com chão logo abaixo); 1 = a fileira de cima (paredes altas).
+ * A face é a parte da parede que fica de frente para quem olha; ela sobe até `WALL_FACE_ROWS` blocos.
+ */
+export function wallFaceLevel(map: Pick<OfficeMap, 'width' | 'height' | 'layers'>, x: number, y: number): number {
+  if (!wallAt(map, x, y)) return -1;
+  let d = 0;
+  while (d < WALL_FACE_ROWS && wallAt(map, x, y + d + 1)) d++;
+  return d < WALL_FACE_ROWS ? d : -1;
+}
+
 /**
  * Erro de posição de um objeto de parede (`wallOnly`), ou `null`: cada bloco da linha de cima do
- * footprint tem que ser parede com a face à mostra (sem outra parede logo abaixo), que é onde o
- * desenho desses objetos fica. Tipos que não são de parede sempre dão `null`.
+ * footprint tem que ser face de parede (`wallFaceLevel` ≥ 0), que é onde o desenho desses objetos
+ * fica. Tipos que não são de parede sempre dão `null`.
  */
 export function wallMountError(map: Pick<OfficeMap, 'width' | 'height' | 'layers'>, o: Pick<MapObject, 'type' | 'x' | 'y' | 'w' | 'h'>): string | null {
   const def = OBJECT_DEFS[o.type];
@@ -808,11 +832,111 @@ export function wallMountError(map: Pick<OfficeMap, 'width' | 'height' | 'layers
   for (let dx = 0; dx < w; dx++) {
     const x = o.x + dx;
     if (!inBounds(map, x, o.y)) return `${def.label} fora do mapa`;
-    const wall = map.layers.walls[idx(map, x, o.y)] !== 0;
-    const below = inBounds(map, x, o.y + 1) && map.layers.walls[idx(map, x, o.y + 1)] !== 0;
-    if (!wall || below) return `${def.label} vai na face de uma parede (bloco de parede com chão logo abaixo)`;
+    if (wallFaceLevel(map, x, o.y) < 0) return `${def.label} vai na face de uma parede (a parte da parede de frente, com chão logo abaixo)`;
   }
   return null;
+}
+
+/**
+ * Blocos que uma porta ocupa: o dela e, numa parede alta, o vão logo acima (parede dos dois lados).
+ * Fechada, a porta bloqueia todos; aberta, dá para passar por todos.
+ */
+export function doorTiles(map: Pick<OfficeMap, 'width' | 'height' | 'layers'>, o: Pick<MapObject, 'x' | 'y'>): Point[] {
+  const out: Point[] = [{ x: o.x, y: o.y }];
+  for (let k = 1; k < WALL_FACE_ROWS; k++) {
+    const y = o.y - k;
+    if (!inBounds(map, o.x, y) || wallAt(map, o.x, y)) break;
+    if (!wallAt(map, o.x - 1, y) || !wallAt(map, o.x + 1, y)) break;
+    out.push({ x: o.x, y });
+  }
+  return out;
+}
+
+/** Distância (a maior entre x e y) de (x, y) até o bloco mais perto da porta. */
+export function doorDistance(map: Pick<OfficeMap, 'width' | 'height' | 'layers'>, o: Pick<MapObject, 'x' | 'y'>, x: number, y: number): number {
+  return Math.min(...doorTiles(map, o).map((t) => Math.max(Math.abs(t.x - x), Math.abs(t.y - y))));
+}
+
+/**
+ * Paredes altas (formato 2): cada fileira com face de parede fina (parede com chão — ou vazio —
+ * logo abaixo e sem parede em cima, num trecho horizontal) ganha uma fileira nova logo acima, e a
+ * face passa a ocupar 2 blocos. Na fileira nova: a face vira parede (janela continua janela), o
+ * trecho vertical de parede continua e o vão de porta continua vão. Tudo o que fica abaixo desce
+ * (objetos, áreas, spawns, zonas e assentos das mesas, o corredor do gerador); objetos de parede
+ * (`wallOnly`) ficam na fileira nova, a de cima da face. Mapas já no formato 2 voltam iguais.
+ */
+export function thickenWalls(source: OfficeMap): OfficeMap {
+  if ((source.version ?? 1) >= 2) return source;
+  const map: OfficeMap = JSON.parse(JSON.stringify(source));
+  const { width: W, height: H } = map;
+  const at = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && map.layers.walls[y * W + x] !== 0;
+  const rows = new Set<number>();
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (at(x, y) && !at(x, y + 1) && !at(x, y - 1) && (at(x - 1, y) || at(x + 1, y))) {
+        rows.add(y);
+        break;
+      }
+    }
+  }
+  map.version = MAP_FORMAT_VERSION;
+  if (!rows.size) return map;
+  const shift: number[] = [];
+  let n = 0;
+  for (let y = 0; y < H; y++) {
+    if (rows.has(y)) n++;
+    shift[y] = n;
+  }
+  const ny = (y: number) => (y < 0 ? y : y >= H ? y + n : y + shift[y]);
+  const H2 = H + n;
+  if (H2 > MAX_MAP_SIZE) return map;
+  const floor = new Array(W * H2).fill(0);
+  const walls = new Array(W * H2).fill(0);
+  for (let y = 0; y < H; y++) {
+    const to = ny(y);
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      floor[to * W + x] = map.layers.floor[i];
+      walls[to * W + x] = map.layers.walls[i];
+      if (!rows.has(y)) continue;
+      // fileira nova logo acima: a face cresce, o trecho vertical continua, o vão (porta) continua vão
+      floor[(to - 1) * W + x] = map.layers.floor[i];
+      walls[(to - 1) * W + x] = at(x, y) ? map.layers.walls[i] : 0;
+    }
+  }
+  const mountedOnFace = (o: MapObject) => OBJECT_DEFS[o.type]?.wallOnly && rows.has(o.y) && at(o.x, o.y);
+  const span = (y: number, h: number) => {
+    const y0 = ny(y);
+    return { y: y0, h: ny(y + h - 1) - y0 + 1 };
+  };
+  map.objects = map.objects.map((o) => {
+    const out: MapObject = { ...o, y: mountedOnFace(o) ? ny(o.y) - 1 : ny(o.y) };
+    if (o.props?.zone || o.props?.seat) {
+      const props = JSON.parse(JSON.stringify(o.props));
+      if (props.zone) Object.assign(props.zone, span(props.zone.y, props.zone.h ?? 1));
+      if (props.seat) props.seat.y = ny(props.seat.y);
+      out.props = props;
+    }
+    return out;
+  });
+  map.areas = map.areas.map((a) => ({ ...a, rects: a.rects.map((r) => ({ ...r, ...span(r.y, r.h) })) }));
+  map.spawns = map.spawns.map((p) => ({ x: p.x, y: ny(p.y) }));
+  const gen = map.meta?.gen;
+  if (gen) {
+    const top = gen.corridorY - gen.roomHeight;
+    const cy = ny(gen.corridorY);
+    gen.roomHeight = cy - (ny(top) - (rows.has(top) ? 1 : 0));
+    gen.corridorY = cy;
+    gen.wallRows = WALL_FACE_ROWS;
+  }
+  map.layers = { floor, walls };
+  map.height = H2;
+  return map;
+}
+
+/** Atualiza um mapa salvo para o formato atual (hoje: paredes altas). */
+export function migrateMap(map: OfficeMap): OfficeMap {
+  return thickenWalls(map);
 }
 
 export function rectContains(r: Rect, x: number, y: number): boolean {

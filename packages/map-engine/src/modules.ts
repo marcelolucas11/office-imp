@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Floor, Wall, type MapArea, type MapObject, type Point, type Dir } from '@office-imp/shared';
+import { Floor, WALL_FACE_ROWS, Wall, emptyMap, thickenWalls, type MapArea, type MapObject, type Point, type Dir } from '@office-imp/shared';
 
-export const ROOM_H = 9; // altura de um cômodo, incluindo paredes
+/** Altura de um cômodo com paredes finas (1 fileira), incluindo as paredes: a dos escritórios de antes das paredes altas. */
+export const LEGACY_ROOM_H = 9;
+/** Altura de um cômodo, incluindo as paredes: com paredes altas, as de cima e de baixo têm 2 fileiras. */
+export const ROOM_H = LEGACY_ROOM_H + 2 * (WALL_FACE_ROWS - 1);
+
+/** Altura do cômodo para `wallRows` fileiras de parede (1 = escritório de antes das paredes altas). */
+export function roomHeight(wallRows: number | undefined): number {
+  return LEGACY_ROOM_H + 2 * (Math.max(1, wallRows ?? 1) - 1);
+}
 export const CORRIDOR_H = 3;
 
 export type Side = 'top' | 'bottom';
@@ -166,7 +174,7 @@ export interface Chunk {
 }
 
 function shell(kind: ModuleSpec['kind'], w: number, floorType: number, side: Side): Chunk {
-  const h = ROOM_H;
+  const h = LEGACY_ROOM_H;
   const floor = new Array(w * h).fill(floorType);
   const walls = new Array(w * h).fill(0);
   const exteriorY = side === 'top' ? 0 : h - 1;
@@ -327,10 +335,33 @@ function buildBlank(side: Side, f: FloorTheme, width = 14): Chunk {
  * `theme` = pisos do cômodo; sem ele, valem os dos escritórios novos. `version` = versão do
  * gerador (escolhe as plantas, ver `plantFor`).
  */
-export function buildChunk(spec: ModuleSpec, side: Side, theme: FloorTheme = floorTheme(GENERATOR_VERSION), version: number = GENERATOR_VERSION): Chunk {
+export function buildChunk(spec: ModuleSpec, side: Side, theme: FloorTheme = floorTheme(GENERATOR_VERSION), version: number = GENERATOR_VERSION, wallRows: number = WALL_FACE_ROWS): Chunk {
   const c = buildRoom(spec, side, theme);
   for (const o of c.objects) if (o.type === 'plant') o.type = plantFor(version, spec.kind, o.x, o.y, c.w, c.h);
-  return c;
+  return wallRows > 1 ? thickChunk(c) : c;
+}
+
+/**
+ * Cômodo com paredes altas: o desenho é o mesmo, e a parede de cima e a de baixo ganham a fileira
+ * extra pelo mesmo caminho da atualização dos mapas salvos (`thickenWalls`), então um escritório
+ * novo e um antigo atualizado ficam iguais.
+ */
+function thickChunk(c: Chunk): Chunk {
+  const tmp = { ...emptyMap(c.w, c.h), version: 1 };
+  tmp.layers = { floor: [...c.floor], walls: [...c.walls] };
+  tmp.objects = c.objects.map((o, i) => ({ ...o, id: `c${i}` }));
+  tmp.areas = c.areas.map((a, i) => ({ ...a, id: `a${i}`, name: a.nameKey }));
+  tmp.spawns = c.spawns;
+  const t = thickenWalls(tmp);
+  return {
+    ...c,
+    h: t.height,
+    floor: t.layers.floor,
+    walls: t.layers.walls,
+    objects: t.objects.map(({ id: _id, ...o }) => o),
+    areas: t.areas.map(({ id: _id, name: _name, ...a }) => a as Chunk['areas'][number]),
+    spawns: t.spawns,
+  };
 }
 
 function buildRoom(spec: ModuleSpec, side: Side, theme: FloorTheme): Chunk {

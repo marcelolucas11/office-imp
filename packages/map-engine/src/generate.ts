@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {
   DEFAULT_DESK_SETUP,
+  WALL_FACE_ROWS,
   DESKS_PER_BLOCK,
   Wall,
   MAX_MAP_SIZE,
@@ -17,7 +18,7 @@ import {
   type OfficeMap,
   type WizardInput,
 } from '@office-imp/shared';
-import { AREA_NAMES, CORRIDOR_H, GENERATOR_VERSION, ROOM_H, buildChunk, chairColorFor, floorTheme, hash32, setupFor, type Chunk, type ModuleSpec, type Side } from './modules';
+import { AREA_NAMES, CORRIDOR_H, GENERATOR_VERSION, ROOM_H, buildChunk, roomHeight, chairColorFor, floorTheme, hash32, setupFor, type Chunk, type ModuleSpec, type Side } from './modules';
 
 export const MAX_CUSTOM_EMPLOYEES = 100;
 export const MAX_PARTNERS = 10;
@@ -125,21 +126,24 @@ export function buildWing(map: OfficeMap, gen: GeneratorMeta, modules: ModuleSpe
   const cy = gen.corridorY;
   // os pisos seguem a versão do gerador que criou o escritório (uma ala nova combina com o que já existe)
   const theme = floorTheme(gen.version);
-  const canTop = cy - ROOM_H >= 0;
+  // paredes altas (2 fileiras) nos escritórios novos e nos atualizados; finas nos de antes
+  const wallRows = gen.wallRows ?? 1;
+  const roomH = roomHeight(wallRows);
+  const canTop = cy - roomH >= 0;
   let top = isExpansion ? gen.topX : startX;
   let bottom = isExpansion ? gen.bottomX : startX;
   for (const spec of modules) {
     const side: Side = canTop && top <= bottom ? 'top' : 'bottom';
-    const chunk = buildChunk(spec, side, theme, gen.version);
+    const chunk = buildChunk(spec, side, theme, gen.version, wallRows);
     const ox = side === 'top' ? top : bottom;
-    const oy = side === 'top' ? cy - ROOM_H : cy + CORRIDOR_H;
+    const oy = side === 'top' ? cy - roomH : cy + CORRIDOR_H;
     placeChunk(map, gen, chunk, ox, oy);
     if (side === 'top') top = ox + chunk.w - 1;
     else bottom = ox + chunk.w - 1;
   }
   const endX = Math.max(top, bottom, gen.endX);
   const needW = endX + 1;
-  const needH = Math.max(map.height, cy + CORRIDOR_H + 1);
+  const needH = Math.max(map.height, cy + CORRIDOR_H + wallRows);
   if (map.width < needW || map.height < needH) resizeMap(map, Math.max(map.width, needW), needH);
   const W = map.width;
   // piso do corredor
@@ -149,9 +153,11 @@ export function buildWing(map: OfficeMap, gen: GeneratorMeta, modules: ModuleSpe
       map.layers.walls[y * W + x] = 0;
     }
   }
-  // paredes ao longo do corredor onde não há cômodo
+  // paredes ao longo do corredor onde não há cômodo (da espessura das paredes dos cômodos)
+  const sideRows: number[] = [];
+  for (let k = 1; k <= wallRows; k++) sideRows.push(cy - k, cy + CORRIDOR_H + k - 1);
   for (let x = startX; x <= endX; x++) {
-    for (const y of [cy - 1, cy + CORRIDOR_H]) {
+    for (const y of sideRows) {
       if (y < 0 || y >= map.height) continue;
       const i = y * W + x;
       if (map.layers.floor[i] === 0 && map.layers.walls[i] === 0) {
@@ -191,7 +197,7 @@ export function officeSeed(input: WizardInput): number {
 /** Gera um escritório novo. Determinístico: a mesma entrada produz o mesmo mapa. */
 export function generateOffice(input: WizardInput): OfficeMap {
   const map = emptyMap(1, ROOM_H * 2 + CORRIDOR_H);
-  const gen: GeneratorMeta = { version: GENERATOR_VERSION, seed: officeSeed(input), corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, counters: {} };
+  const gen: GeneratorMeta = { version: GENERATOR_VERSION, seed: officeSeed(input), corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, wallRows: WALL_FACE_ROWS, counters: {} };
   buildWing(map, gen, modulesForInput(input), 0, false);
   map.meta = { gen };
   return map;
@@ -274,7 +280,7 @@ function fallbackGen(map: OfficeMap): GeneratorMeta {
   counters.area = Math.max(counters.area ?? 0, maxNum('area_'));
   counters['area:meeting'] = Math.max(counters['area:meeting'] ?? 0, map.areas.filter((a) => a.meeting && !a.partners).length);
   const end = map.width - 1;
-  return { version, corridorY: cy, topX: end, bottomX: end, endX: end, roomHeight: ROOM_H, counters };
+  return { version, corridorY: cy, topX: end, bottomX: end, endX: end, roomHeight: ROOM_H, wallRows: WALL_FACE_ROWS, counters };
 }
 
 function runExpansion(source: OfficeMap, modules: ModuleSpec[]): ExpansionPlan {

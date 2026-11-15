@@ -7,12 +7,15 @@ import {
   OBJECT_DEFS,
   STATUS_COLOR,
   STEP_MS,
+  WALL_FACE_ROWS,
   buildAreaIndex,
   buildCollision,
   can,
   dayPeriod,
   deskSeat,
   deskZone,
+  doorDistance,
+  doorTiles,
   findPath,
   isDesk,
   localClock,
@@ -39,7 +42,7 @@ import { FLOOR_PATTERN } from '../game/art/floors';
 import { doorClosedKey, doorClosedSprite, objectKey, objectSprite, objectStrip, objectTall } from '../game/art/objects';
 import { FLAT_ON_SURFACE, surfaceIndex } from '../game/art/render';
 import { T, drawStatic, hasPeriodWalls, makeCanvas, wallTileAt } from '../game/art/tiles';
-import { wallCanvas, wallKey } from '../game/art/walls';
+import { faceOf, wallCanvas, wallKey } from '../game/art/walls';
 import { bus } from '../game/bus';
 import { cameraBounds, exteriorMarginFor, grassStrips } from '../game/camera';
 import { useMotion } from '../game/motion';
@@ -288,7 +291,7 @@ export class OfficeScene extends Phaser.Scene {
         const closed = doorClosedKey(o);
         if (!this.textures.exists(closed)) this.textures.addCanvas(closed, doorClosedSprite(o));
         this.doorImgs.set(o.id, img);
-        this.doorAt.set(o.y * map.width + o.x, o.id);
+        for (const t of doorTiles(map, o)) this.doorAt.set(t.y * map.width + t.x, o.id);
         // fechada fica na altura dos avatares (bloqueia, como uma parede); aberta fica no chão
         this.applyDoor(o.id);
       } else if (FLOOR_TYPES.has(o.type)) img.setDepth(D_RUG);
@@ -348,7 +351,7 @@ export class OfficeScene extends Phaser.Scene {
     for (let ty = 0; ty < map.height; ty++) {
       for (let tx = 0; tx < map.width; tx++) {
         const tile = wallTileAt(map, tx, ty, this.period);
-        if (tile?.window !== 'view' || tile.n.below) continue;
+        if (tile?.window !== 'view' || faceOf(tile).level < 0) continue;
         const key = this.stripTexture(`win:${wallKey(tile)}`, () => {
           const c = makeCanvas(T * frames, T);
           const ctx = c.getContext('2d')!;
@@ -581,7 +584,7 @@ export class OfficeScene extends Phaser.Scene {
     const wallish = (x: number, y: number) => {
       if (x < 0 || y < 0 || x >= this.map.width || y >= this.map.height) return false;
       if (this.map.layers.walls[y * this.map.width + x] !== 0) return true;
-      return this.map.objects.some((o) => o.type === 'door' && o.x === x && o.y === y);
+      return this.map.objects.some((o) => o.type === 'door' && doorTiles(this.map, o).some((t) => t.x === x && t.y === y));
     };
     const sideIsWall = (xs: number, xe: number, ys: number, ye: number) => {
       let n = 0;
@@ -592,8 +595,11 @@ export class OfficeScene extends Phaser.Scene {
       }
       return n > 0 && w === n;
     };
-    const pT = sideIsWall(x0, x1, y0 - 1, y0) ? 1 : 0;
-    const pB = sideIsWall(x0, x1, y1, y1 + 1) ? 1 : 0;
+    // em cima e embaixo, a parede alta tem 2 fileiras: o recorte claro pega a parede inteira
+    let pT = 0;
+    while (pT < WALL_FACE_ROWS && sideIsWall(x0, x1, y0 - pT - 1, y0 - pT)) pT++;
+    let pB = 0;
+    while (pB < WALL_FACE_ROWS && sideIsWall(x0, x1, y1 + pB, y1 + pB + 1)) pB++;
     const pL = sideIsWall(x0 - 1, x0, y0, y1) ? 1 : 0;
     const pR = sideIsWall(x1, x1 + 1, y0, y1) ? 1 : 0;
     const bx0 = (x0 - pL) * T;
@@ -1054,8 +1060,9 @@ export class OfficeScene extends Phaser.Scene {
       let bestD = Infinity;
       for (const o of this.map.objects) {
         if (o.type !== 'door') continue;
-        const d = Math.abs(o.x - me.tx) + Math.abs(o.y - me.ty);
-        if (Math.max(Math.abs(o.x - me.tx), Math.abs(o.y - me.ty)) > 1 || d >= bestD) continue;
+        // no vão de uma parede alta, a porta ocupa 2 blocos: vale o mais perto
+        const d = Math.min(...doorTiles(this.map, o).map((t) => Math.abs(t.x - me.tx) + Math.abs(t.y - me.ty)));
+        if (doorDistance(this.map, o, me.tx, me.ty) > 1 || d >= bestD) continue;
         best = o;
         bestD = d;
       }

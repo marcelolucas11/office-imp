@@ -126,9 +126,10 @@ export function doorClosedSprite(o: Pick<MapObject, 'color'> = {}): HTMLCanvasEl
   const key = doorClosedKey(o);
   const hit = cache.get(key);
   if (hit) return hit;
-  const s = new Sprite(T, T);
+  const tall = objectTall('door') * T;
+  const s = new Sprite(T, T + tall);
   const door: MapObject = { id: 'door', type: 'door', x: 0, y: 0, color: o.color };
-  paintDoorClosed(s, { o: door, w: T, h: T, top: 0, color: objColor(door), setup: null, text: null });
+  paintDoorClosed(s, { o: door, w: T, h: T, top: tall, color: objColor(door), setup: null, text: null });
   const c = s.toCanvas();
   cache.set(key, c);
   return c;

@@ -84,7 +84,9 @@ Dentro do escritório: **⋯ → Mapmaker e Build Tool**.
   jardim vertical) só podem ser colocados na face de uma parede.
 - **Chão e paredes** — pintar, preencher, apagar, marcar os pontos de entrada e mudar o tamanho do
   mapa. São 15 pisos e 7 paredes (lisa, tijolo, painel de madeira, divisória de vidro…). A janela
-  adota o acabamento da parede vizinha e mostra a paisagem quando dá para fora.
+  adota o acabamento da parede vizinha e mostra a paisagem quando dá para fora. As paredes de cima
+  e de baixo dos cômodos têm **2 fileiras** (a face da parede fica na altura do boneco); uma parede
+  pintada com 1 fileira aparece fina. A porta vai na fileira de baixo do vão e ocupa as duas.
 - **Áreas** — arraste um retângulo para criar uma **área privada** (sala, mesa de conversa) ou um
   **palco**. Defina nome, capacidade, "sala de reunião" (permite notas) e "somente equipe".
 - **Portal** — coloque o objeto, selecione e clique em "Clicar no destino".

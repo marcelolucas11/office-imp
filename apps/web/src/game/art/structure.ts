@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Estrutura do visual v2 (Fase C3): porta (aberta e fechada) e portal.
-// A porta fica no vão da parede. Aberta, é desenhada no chão (os avatares passam por cima):
+// A porta fica no vão da parede e tem 2 blocos em pé (a altura da parede alta). Aberta, é desenhada no chão (os avatares passam por cima):
 // batentes, verga, a folha encostada no batente esquerdo e a soleira. Fechada, a folha inteira
 // ocupa o vão na altura dos avatares, como uma parede. As duas usam a cor da variante.
 import { GOLD, PAL, ramp, type Mat } from './palette';
@@ -13,35 +13,42 @@ const M = PAL.metal;
 /** Cor do batente: madeira um pouco mais escura que a folha (na porta preta, grafite). */
 const frameOf = (m: Mat): Mat => ramp(mix(m.dark, '#2a1d16', 0.35));
 
-/** Batentes (2 px de cada lado) e a verga no alto. */
+/** Onde o vão começa no sprite da porta (2 blocos em pé): acima fica a verga da parede (`DOOR_HEAD`). */
+const HEAD = 14;
+/** Pé do sprite (64 px). */
+const FOOT = 64;
+
+/** Batentes (3 px de cada lado) e a guarnição no alto do vão. */
 function doorFrame(s: Parameters<SpritePainter>[0], f: Mat): void {
   s.piece((p) => {
-    p.rect(1, 1, 30, 5, f.base);
-    p.rect(1, 1, 30, 1, f.light);
-    p.rect(1, 5, 30, 1, f.dark);
-    p.rect(1, 6, 3, 25, f.base);
-    p.rect(1, 6, 1, 25, f.light);
-    p.rect(28, 6, 3, 25, f.base);
-    p.rect(30, 6, 1, 25, f.dark);
+    p.rect(1, HEAD, 30, 3, f.base);
+    p.rect(1, HEAD, 30, 1, f.light);
+    p.rect(1, HEAD + 2, 30, 1, f.dark);
+    p.rect(1, HEAD + 3, 3, FOOT - HEAD - 4, f.base);
+    p.rect(1, HEAD + 3, 1, FOOT - HEAD - 4, f.light);
+    p.rect(28, HEAD + 3, 3, FOOT - HEAD - 4, f.base);
+    p.rect(30, HEAD + 3, 1, FOOT - HEAD - 4, f.dark);
   });
 }
 
-/** Porta aberta (o sprite do tipo `door`). */
+/** Porta aberta (o sprite do tipo `door`, 2 blocos em pé: o vão da parede alta). */
 const door: SpritePainter = (s, info) => {
   const m = matOf(info, '#8a5a3a');
   doorFrame(s, frameOf(m));
   s.piece((p) => {
     // soleira de metal no chão
-    p.rect(4, 28, 24, 3, M.base);
-    p.rect(4, 28, 24, 1, M.hi);
-    p.rect(4, 30, 24, 1, M.dark);
+    p.rect(4, FOOT - 4, 24, 3, M.base);
+    p.rect(4, FOOT - 4, 24, 1, M.hi);
+    p.rect(4, FOOT - 2, 24, 1, M.dark);
   });
   s.piece((p) => {
     // folha aberta, vista de quina, encostada no batente esquerdo
-    p.rect(4, 6, 4, 23, m.base);
-    p.rect(4, 6, 1, 23, m.light);
-    p.rect(7, 6, 1, 23, m.dark);
-    p.px(6, 17, GOLD);
+    const y0 = HEAD + 3;
+    const h = FOOT - 4 - y0;
+    p.rect(4, y0, 4, h, m.base);
+    p.rect(4, y0, 1, h, m.light);
+    p.rect(7, y0, 1, h, m.dark);
+    p.rect(6, y0 + Math.floor(h / 2), 1, 2, GOLD);
   });
 };
 
@@ -50,23 +57,24 @@ export const paintDoorClosed: SpritePainter = (s, info) => {
   const m = matOf(info, '#8a5a3a');
   doorFrame(s, frameOf(m));
   s.piece((p) => {
-    p.rect(4, 6, 24, 25, m.base);
-    p.rect(4, 6, 24, 1, m.hi);
-    p.rect(4, 7, 1, 23, m.light);
-    p.rect(27, 7, 1, 24, m.dark);
+    const y0 = HEAD + 3;
+    p.rect(4, y0, 24, FOOT - 1 - y0, m.base);
+    p.rect(4, y0, 24, 1, m.hi);
+    p.rect(4, y0 + 1, 1, FOOT - 2 - y0, m.light);
+    p.rect(27, y0 + 1, 1, FOOT - 2 - y0, m.dark);
     for (const [y, h] of [
-      [9, 8],
-      [19, 7],
+      [y0 + 3, 16],
+      [y0 + 22, 15],
     ]) {
       p.rect(7, y, 18, h, m.dark);
       p.rect(8, y + 1, 17, h - 1, m.base);
       p.rect(8, y + 1, 16, 1, m.light);
     }
-    p.rect(4, 28, 24, 3, mix(m.dark, '#000000', 0.2));
-    p.rect(4, 28, 24, 1, M.light);
+    p.rect(4, FOOT - 4, 24, 3, mix(m.dark, '#000000', 0.2));
+    p.rect(4, FOOT - 4, 24, 1, M.light);
     // maçaneta
-    p.rect(22, 17, 3, 2, GOLD);
-    p.px(22, 17, PAL.gold.hi);
+    p.rect(22, y0 + 20, 3, 2, GOLD);
+    p.px(22, y0 + 20, PAL.gold.hi);
   });
 };
 

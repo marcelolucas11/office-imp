@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DESK_SETUP, OBJECT_DEFS, buildCollision, deskSeat, emptyMap, Floor, objColor, objColorError, objSetupError, objectGroup, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
-import { buildWing, CORRIDOR_H, expandOffice, FLOOR_THEMES, generateOffice, GENERATOR_VERSION, modulesForInput, PLANT_PAIRS, renderAscii, reserveBlankWing, ROOM_H, toTiled, validateOffice } from '../src';
+import { DEFAULT_DESK_SETUP, OBJECT_DEFS, thickenWalls, buildCollision, deskSeat, emptyMap, Floor, objColor, objColorError, objSetupError, objectGroup, floodFill, mapDesks, MAX_MAP_SIZE, rectContains, rectsOverlap, stripDerivedAreas, withDeskAreas, type GeneratorMeta, type OfficeMap, type WizardInput } from '@office-imp/shared';
+import { buildWing, CORRIDOR_H, expandOffice, FLOOR_THEMES, generateOffice, GENERATOR_VERSION, modulesForInput, PLANT_PAIRS, renderAscii, reserveBlankWing, LEGACY_ROOM_H, toTiled, validateOffice } from '../src';
 
 const base: WizardInput = { name: 'Impera', size: 'small', partners: 2, partnersShareRoom: true };
 
@@ -123,8 +123,8 @@ describe('gerador de escritórios', () => {
 
 /** Escritório como o gerador fazia antes do visual v2 (versão 1 do meta). */
 function legacyOffice(input: WizardInput): OfficeMap {
-  const map = emptyMap(1, ROOM_H * 2 + CORRIDOR_H);
-  const gen: GeneratorMeta = { version: 1, corridorY: ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: ROOM_H, counters: {} };
+  const map = { ...emptyMap(1, LEGACY_ROOM_H * 2 + CORRIDOR_H), version: 1 };
+  const gen: GeneratorMeta = { version: 1, corridorY: LEGACY_ROOM_H, topX: 0, bottomX: 0, endX: 0, roomHeight: LEGACY_ROOM_H, counters: {} };
   buildWing(map, gen, modulesForInput(input), 0, false);
   map.meta = { gen };
   return map;
@@ -242,7 +242,8 @@ describe('plantas do visual v2 no gerador', () => {
       expect([type, def.w, def.h, def.solid, def.tall]).toEqual([type, 1, 1, true, 1]);
     }
     const fresh = generateOffice(input);
-    const legacy = legacyOffice(input);
+    // o escritório antigo, atualizado para as paredes altas (como fica ao carregar)
+    const legacy = thickenWalls({ ...legacyOffice(input), version: 1 });
     // mesmas posições de planta, mesmo mapa de colisão
     expect(plants(fresh).map((o) => [o.x, o.y])).toEqual(plants(legacy).map((o) => [o.x, o.y]));
     const a = { ...fresh, layers: { ...fresh.layers, floor: legacy.layers.floor } };

@@ -202,13 +202,13 @@ describe('sprites dos objetos', () => {
     expect(OBJECT_TYPES.filter((type) => !REDESIGNED_TYPES.includes(type))).toEqual([]);
   });
 
-  it('a porta fechada tem uma textura por cor, do tamanho de um bloco', () => {
+  it('a porta fechada tem uma textura por cor, do tamanho do vão da parede alta (1×2 blocos)', () => {
     const keys = new Set(objectColors('door').map((c) => doorClosedKey({ color: c.id })));
     expect(keys.size).toBe(objectColors('door').length);
     expect(doorClosedKey({})).toBe(doorClosedKey({ color: objectColors('door')[0].id }));
     expect(doorClosedKey({ color: 'nao-existe' })).toBe(doorClosedKey({}));
     const def = Sprite.fromCanvas(doorClosedSprite());
-    expect([def.w, def.h]).toEqual([T, T]);
+    expect([def.w, def.h]).toEqual([T, 2 * T]);
     for (const c of objectColors('door').slice(1)) expect([c.id, same(def, Sprite.fromCanvas(doorClosedSprite({ color: c.id })))]).toEqual([c.id, false]);
     // aberta e fechada são desenhos diferentes
     expect(same(def, pixels(obj('door')))).toBe(false);

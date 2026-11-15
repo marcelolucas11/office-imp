@@ -136,10 +136,11 @@ export const DECOR_KINDS: DecorKind[] = ['tree_round', 'tree_tall', 'tree_small'
 
 /** Tamanho do sprite de cada tipo (o ponto de apoio é o meio da base). */
 export const DECOR_SIZE: Record<DecorKind, { w: number; h: number }> = {
-  tree_round: { w: 48, h: 64 },
-  tree_tall: { w: 36, h: 72 },
-  tree_small: { w: 32, h: 44 },
-  pine: { w: 34, h: 68 },
+  // árvores na escala das paredes altas e dos avatares (uma árvore tem 2 a 3 vezes a altura de uma pessoa)
+  tree_round: { w: 76, h: 108 },
+  tree_tall: { w: 52, h: 120 },
+  tree_small: { w: 46, h: 70 },
+  pine: { w: 52, h: 112 },
   bush: { w: 30, h: 20 },
   bush_bloom: { w: 34, h: 22 },
   flowers: { w: 18, h: 12 },
@@ -180,37 +181,37 @@ function paintDecor(kind: DecorKind, pal: ExteriorPalette): Sprite {
   const cx = Math.floor(w / 2);
   switch (kind) {
     case 'tree_round':
-      s.piece((p) => trunk(p, cx, 40, h - 2, 6, pal.trunk));
+      s.piece((p) => trunk(p, cx, 66, h - 2, 8, pal.trunk));
       s.piece((p) => {
-        canopy(p, 2, 1, 44, 44, pal.leaf, 3);
+        canopy(p, 2, 1, 72, 70, pal.leaf, 3);
       });
       break;
     case 'tree_tall':
-      s.piece((p) => trunk(p, cx, 46, h - 2, 5, pal.trunk));
+      s.piece((p) => trunk(p, cx, 86, h - 2, 7, pal.trunk));
       s.piece((p) => {
-        canopy(p, 3, 1, 30, 54, pal.leaf, 5);
+        canopy(p, 3, 1, 46, 90, pal.leaf, 5);
       });
       break;
     case 'tree_small':
-      s.piece((p) => trunk(p, cx, 26, h - 2, 4, pal.trunk));
+      s.piece((p) => trunk(p, cx, 42, h - 2, 5, pal.trunk));
       s.piece((p) => {
-        canopy(p, 2, 1, 28, 30, pal.leaf, 7);
+        canopy(p, 2, 1, 42, 46, pal.leaf, 7);
       });
       break;
     case 'pine':
-      s.piece((p) => trunk(p, cx, 54, h - 2, 4, pal.trunk));
+      s.piece((p) => trunk(p, cx, 92, h - 2, 6, pal.trunk));
       s.piece((p) => {
         // três saias sobrepostas, da base para a ponta
         const tiers: [number, number, number][] = [
-          [30, 58, 15],
-          [12, 42, 12],
-          [1, 26, 9],
+          [50, 96, 24],
+          [22, 72, 19],
+          [1, 46, 14],
         ];
         for (const [top, bottom, half] of tiers) {
           p.poly([[cx, top], [cx + half, bottom], [cx - half, bottom]], pal.pine.base);
           p.poly([[cx, top + 2], [cx - 2, bottom - 2], [cx - half + 2, bottom - 1]], pal.pine.light);
           p.rect(cx - half + 1, bottom - 1, half * 2 - 1, 2, pal.pine.dark);
-          for (let i = 0; i < 5; i++) {
+          for (let i = 0; i < 8; i++) {
             const lx = cx - half + 3 + Math.floor(noise(i, top, 11) * (half * 2 - 6));
             const ly = bottom - 3 - Math.floor(noise(i, top, 12) * 3);
             if (p.alpha(lx, ly - 2) > 0) p.px(lx, ly, pal.pine.dark).px(lx, ly - 1, pal.pine.dark);
@@ -279,7 +280,7 @@ function paintDecor(kind: DecorKind, pal: ExteriorPalette): Sprite {
  * Árvores que balançam (Fase F) e a última linha da copa de cada uma (logo acima do tronco):
  * só a copa anda, o tronco e a base ficam parados. Arbustos, flores e pedras são estáticos.
  */
-export const TREE_FOLIAGE: Partial<Record<DecorKind, number>> = { tree_round: 39, tree_tall: 45, tree_small: 25, pine: 53 };
+export const TREE_FOLIAGE: Partial<Record<DecorKind, number>> = { tree_round: 65, tree_tall: 85, tree_small: 41, pine: 91 };
 
 /** Quadros de animação de um elemento do exterior (1 = estático). */
 export function decorFrames(kind: DecorKind): number {
@@ -430,32 +431,36 @@ export function viewFrames(period: DayPeriod): number {
  * e grama. De dia há nuvens; ao amanhecer e ao entardecer, o sol no horizonte; à noite, estrelas
  * e a lua (ela aparece em uma de cada quatro janelas). `variant` = tx mod 4, e a paisagem é
  * contínua entre janelas vizinhas. `frame` (Fase F) empurra as nuvens `frame` px para a direita;
- * o quadro 0 é a vista estática.
+ * o quadro 0 é a vista estática. `h` = altura da vista (a janela da parede alta tem 28 px: mais céu).
  */
-export function windowView(period: DayPeriod, variant: number, frame = 0): Sprite {
+export function windowView(period: DayPeriod, variant: number, frame = 0, h = VIEW_H): Sprite {
   const pal = EXTERIOR[period];
-  const s = new Sprite(T, VIEW_H);
+  const H = Math.max(VIEW_H, Math.round(h));
+  const s = new Sprite(T, H);
+  // janela alta: mais céu em cima; o horizonte (árvores e grama) fica no mesmo lugar em relação ao pé
+  const oy = H - VIEW_H;
+  const sky = Math.round(oy * 0.45);
   const off = (((variant % VIEW_VARIANTS) + VIEW_VARIANTS) % VIEW_VARIANTS) * T;
-  s.rect(0, 0, T, 6, pal.sky);
-  s.rect(0, 6, T, 2, pal.skyLow);
+  s.rect(0, 0, T, oy + 6, pal.sky);
+  s.rect(0, oy + 6, T, 2, pal.skyLow);
   // desenha cada elemento também uma volta antes e depois, para a paisagem dar a volta
   const each = (draw: (dx: number) => void) => {
     for (const lap of [-VIEW_W, 0, VIEW_W]) draw(lap - off);
   };
   if (pal.star) {
-    for (let y = 0; y < 7; y++) for (let x = 0; x < T; x++) if (noise(x + off, y, 301) > 0.95) s.px(x, y, pal.star);
+    for (let y = 0; y < oy + 7; y++) for (let x = 0; x < T; x++) if (noise(x + off, y, 301) > 0.95) s.px(x, y, pal.star);
   }
   if (pal.moon) {
     const moon = pal.moon;
     each((dx) => {
-      s.ellipse(dx + 50, 1, 5, 5, moon);
-      s.px(dx + 53, 1, pal.sky).px(dx + 54, 2, pal.sky).px(dx + 53, 2, pal.sky);
+      s.ellipse(dx + 50, sky + 1, 5, 5, moon);
+      s.px(dx + 53, sky + 1, pal.sky).px(dx + 54, sky + 2, pal.sky).px(dx + 53, sky + 2, pal.sky);
     });
   }
   if (pal.sun) {
     const sun = pal.sun;
     each((dx) => {
-      s.ellipse(dx + 84, 4, 8, 8, sun);
+      s.ellipse(dx + 84, oy + 4, 8, 8, sun);
     });
   }
   if (pal.cloud) {
@@ -464,14 +469,16 @@ export function windowView(period: DayPeriod, variant: number, frame = 0): Sprit
     each((lap) => {
       const dx = lap + drift;
       for (const [cx, cy, cw] of [[14, 2, 8], [70, 1, 10], [108, 3, 7]] as const) {
-        s.rect(dx + cx, cy, cw, 1, cloud);
-        s.rect(dx + cx + 2, cy - 1, cw - 4, 1, cloud);
+        s.rect(dx + cx, sky + cy, cw, 1, cloud);
+        s.rect(dx + cx + 2, sky + cy - 1, cw - 4, 1, cloud);
+        // janela alta: as nuvens ganham corpo
+        if (oy > 0) s.rect(dx + cx + 1, sky + cy + 1, cw - 2, 1, cloud);
       }
     });
   }
   // grama (cobre a metade de baixo do sol)
-  s.rect(0, 8, T, 1, pal.grass.light);
-  s.rect(0, 9, T, 3, pal.grass.base);
+  s.rect(0, oy + 8, T, 1, pal.grass.light);
+  s.rect(0, oy + 9, T, 3, pal.grass.base);
   // linha de árvores: 6 por volta, com tamanho e posição variando. Há duas clareiras, onde
   // ficam a lua (noite) e o sol (amanhecer e entardecer)
   each((dx) => {
@@ -479,9 +486,9 @@ export function windowView(period: DayPeriod, variant: number, frame = 0): Sprit
       const cx = dx + k * 16 + 3 + Math.floor(noise(k, 0, 311) * 8);
       const cw = 9 + Math.floor(noise(k, 1, 311) * 4);
       const ch = 6 + Math.floor(noise(k, 2, 311) * 3);
-      const top = 1 + Math.floor(noise(k, 3, 311) * 2);
+      const top = oy + 1 + Math.floor(noise(k, 3, 311) * 2);
       const x = cx - Math.floor(cw / 2);
-      s.rect(cx, top + ch - 1, 1, 10 - (top + ch - 1), pal.trunk.base);
+      s.rect(cx, top + ch - 1, 1, oy + 10 - (top + ch - 1), pal.trunk.base);
       s.ellipse(x, top, cw, ch, pal.leaf.dark);
       s.ellipse(x, top, cw - 2, ch - 1, pal.leaf.base);
       s.px(x + 2, top + 1, pal.leaf.light).px(x + 3, top + 1, pal.leaf.light).px(x + 2, top + 2, pal.leaf.light);

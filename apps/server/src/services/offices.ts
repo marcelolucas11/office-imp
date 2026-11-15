@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { and, desc, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
-import { mapDesks, normalizeObjectVariants, stripDerivedAreas, withDeskAreas, type DeskInfo, type OfficeMap } from '@office-imp/shared';
+import { mapDesks, migrateMap, normalizeObjectVariants, stripDerivedAreas, withDeskAreas, type DeskInfo, type OfficeMap } from '@office-imp/shared';
 import { validateOffice } from '@office-imp/map-engine';
 import { db, schema } from '../db';
 import { newId } from '../lib/crypto';
@@ -26,8 +26,9 @@ export async function currentMap(office: OfficeRow): Promise<{ id: string; map: 
   const [v] = await db().select().from(schema.mapVersions).where(eq(schema.mapVersions.id, office.mapVersionId));
   if (!v) throw notFound('Versão do mapa não encontrada.');
   // as áreas das mesas são derivadas das mesas a cada carga (valem também para mapas antigos);
-  // uma cor de objeto que saiu do catálogo volta para a padrão
-  return { id: v.id, map: normalizeObjectVariants(withDeskAreas(v.json)) };
+  // uma cor de objeto que saiu do catálogo volta para a padrão; mapa de formato antigo é atualizado
+  // (paredes altas), e a versão atualizada é a que fica salva na próxima publicação
+  return { id: v.id, map: normalizeObjectVariants(withDeskAreas(migrateMap(v.json))) };
 }
 
 /** Mantém a tabela de mesas em sincronia com os objetos "desk" do mapa. */
@@ -49,7 +50,7 @@ export async function syncDesks(officeId: string, map: OfficeMap): Promise<numbe
 
 /** Valida, grava como nova versão publicada e atualiza as mesas. */
 export async function publishMap(officeId: string, input: OfficeMap, author: { id: string; name: string } | null, note: string): Promise<string> {
-  const map = normalizeObjectVariants(stripDerivedAreas(input));
+  const map = normalizeObjectVariants(stripDerivedAreas(migrateMap(input)));
   const res = validateOffice(map);
   if (!res.ok) throw badRequest(`O mapa tem problemas: ${res.errors.join(' ')}`, 'invalid_map');
   const id = newId();

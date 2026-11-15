@@ -27,6 +27,8 @@ import {
   isSpotlightAt,
   mapDesks,
   musicPosition,
+  doorDistance,
+  doorTiles,
   nearestFree,
   objColorError,
   objSetupError,
@@ -126,7 +128,7 @@ export class OfficeRoom extends Room {
     this.grid = buildCollision(this.map);
     this.areaIndex = buildAreaIndex(this.map);
     this.doorAt.clear();
-    for (const o of this.map.objects) if (o.type === 'door') this.doorAt.set(o.y * this.map.width + o.x, o.id);
+    for (const o of this.map.objects) if (o.type === 'door') for (const t of doorTiles(this.map, o)) this.doorAt.set(t.y * this.map.width + t.x, o.id);
     for (const id of [...this.openDoors]) if (![...this.doorAt.values()].includes(id)) this.openDoors.delete(id);
   }
 
@@ -511,12 +513,12 @@ export class OfficeRoom extends Room {
     this.on('door', (p, d) => {
       const door = this.map.objects.find((o) => o.type === 'door' && o.id === String(d.id ?? ''));
       if (!door) return;
-      if (Math.max(Math.abs(door.x - p.state.x), Math.abs(door.y - p.state.y)) > 1) return;
+      if (doorDistance(this.map, door, p.state.x, p.state.y) > 1) return;
       const open = typeof d.open === 'boolean' ? d.open : !this.openDoors.has(door.id);
       if (open === this.openDoors.has(door.id)) return;
       if (!open) {
         for (const q of this.players.values()) {
-          if (q.state.x === door.x && q.state.y === door.y) {
+          if (doorDistance(this.map, door, q.state.x, q.state.y) === 0) {
             p.client.send('notice', { code: 'door_blocked' });
             return;
           }

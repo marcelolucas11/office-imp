@@ -2,15 +2,15 @@
 // Pisos, paredes, janelas e exterior do visual v2 (Fase B).
 import { createCanvas } from '@napi-rs/canvas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DAY_PERIODS, Floor, Wall, emptyMap, type OfficeMap } from '@office-imp/shared';
+import { DAY_PERIODS, Floor, Wall, emptyMap, migrateMap, type OfficeMap } from '@office-imp/shared';
 import { generateOffice } from '@office-imp/map-engine';
 import { setCanvasFactory } from '../src/game/art/canvas';
 import { DECOR_KINDS, DECOR_SIZE, EXTERIOR, EXTERIOR_MARGIN, decorSprite, exteriorDecor, exteriorGrass, isVoid, windowView } from '../src/game/art/exterior';
 import { FLOOR_COLOR, FLOOR_PATTERN, FLOOR_PERIOD, paintFloorPattern } from '../src/game/art/floors';
 import { Sprite, rgba } from '../src/game/art/prim';
 import { renderFull, renderMini, renderScene } from '../src/game/art/render';
-import { T, drawFloor, drawStatic, hasPeriodWalls, makeCanvas, tilesetCanvas, wallStyle, wallTileAt, windowKind } from '../src/game/art/tiles';
-import { WALL_MINI, paintWall } from '../src/game/art/walls';
+import { T, drawFloor, drawStatic, faceStack, hasPeriodWalls, makeCanvas, tilesetCanvas, wallStyle, wallTileAt, windowKind } from '../src/game/art/tiles';
+import { TALL_CAP, WALL_MINI, paintWall } from '../src/game/art/walls';
 
 beforeAll(() => setCanvasFactory((w, h) => createCanvas(w, h) as unknown as HTMLCanvasElement));
 afterAll(() => setCanvasFactory());
@@ -291,6 +291,55 @@ describe('paredes', () => {
     const sa = Sprite.fromCanvas(a);
     const sb = Sprite.fromCanvas(b);
     for (let ty = 0; ty < 6; ty++) for (let tx = 0; tx < 8; tx++) if (map.layers.floor[ty * 8 + tx]) expect(sb.get(tx * T + 7, ty * T + 7)).toBe(sa.get(tx * T + 7, ty * T + 7));
+  });
+});
+
+describe('paredes altas', () => {
+  /** Sala com paredes de 2 fileiras (a sala de antes, atualizada) e uma porta na parede de baixo. */
+  const tall = () => {
+    const m = { ...room(Wall.Wall, 8, 7), version: 1 };
+    m.layers.walls[6 * 8 + 4] = 0;
+    m.objects.push({ id: 'd', type: 'door', x: 4, y: 6 });
+    m.layers.walls[3] = Wall.Window;
+    return migrateMap(m);
+  };
+
+  it('a face tem 2 blocos em pé: o de cima com o topo, o de baixo com o rodapé; o canto é topo', () => {
+    const m = tall();
+    expect(faceStack(m, 2, 1)).toEqual({ level: 0, stack: 2, topY: 0 });
+    expect(faceStack(m, 2, 0)).toEqual({ level: 1, stack: 2, topY: 0 });
+    expect(faceStack(m, 0, 0)).toBeNull();
+    const top = paintWall(wallTileAt(m, 2, 0)!);
+    const bottom = paintWall(wallTileAt(m, 2, 1)!);
+    // topo escuro só nos primeiros px do bloco de cima; o de baixo é face do começo ao fim
+    expect(lum(top.get(10, 2)!)).toBeLessThan(lum(top.get(10, TALL_CAP + 4)!));
+    expect(lum(bottom.get(10, 2)!)).toBeGreaterThan(lum(top.get(10, 2)!));
+    // os dois blocos fazem uma coluna contínua (nenhum é igual ao desenho da parede fina)
+    expect(same(top, bottom)).toBe(false);
+    for (const s of [top, bottom]) for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) expect(s.alpha(x, y)).toBe(255);
+  });
+
+  it('a janela ocupa a coluna inteira da face e mostra a vista alta', () => {
+    const m = tall();
+    const up = wallTileAt(m, 3, 0)!;
+    const down = wallTileAt(m, 3, 1)!;
+    expect([up.window, down.window]).toEqual(['view', 'view']);
+    expect(windowView('day', 0, 0, 28).h).toBe(28);
+  });
+
+  it('o vão da porta ganha a verga por cima (só na fileira de cima) e o chão aparece embaixo', () => {
+    const m = tall();
+    const c = makeCanvas(m.width * T, m.height * T);
+    drawStatic(c.getContext('2d')!, m, 0, 0, m.width, m.height);
+    const px = (x: number, y: number) => Array.from(c.getContext('2d')!.getImageData(x, y, 1, 1).data);
+    // parede de baixo: fileiras 7 e 8, com o vão em x = 4 (a porta fica na 8)
+    const wallTop = px(2 * T + 10, 7 * T + 2);
+    expect(px(4 * T + 10, 7 * T + 2)).toEqual(wallTop);
+    // no bloco de baixo do vão, e abaixo da verga no de cima, aparece o piso
+    const floorOnly = makeCanvas(T, T);
+    drawFloor(floorOnly.getContext('2d')!, Floor.Wood, 0, 0, 4, 8);
+    expect(px(4 * T + 16, 8 * T + 16)).toEqual(Array.from(floorOnly.getContext('2d')!.getImageData(16, 16, 1, 1).data));
+    expect(px(4 * T + 16, 7 * T + 28)).not.toEqual(wallTop);
   });
 });
 
