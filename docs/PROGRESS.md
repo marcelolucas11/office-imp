@@ -1,6 +1,6 @@
 # Progresso
 
-Atualizado em 12/11/2026. Versão 1.0.0.
+Atualizado em 15/11/2026. Versão 1.1.0.
 
 ## Pronto e verificado
 
@@ -18,6 +18,7 @@ Atualizado em 12/11/2026. Versão 1.0.0.
 | F10 Desktop e atualizações | Electron (Mac universal e Windows), bandeja, atalhos, Modo Mini, atualização; serviço `updater` | CI: instalador `.dmg` universal (assinatura ad-hoc conferida com `codesign`) e `.exe` gerados; 3 testes do atualizador |
 | F11 Produção | Compose, `install.sh`, backup/restore/update, exemplos de proxy | CI: as três imagens são construídas, o `install.sh` roda do zero numa máquina limpa e o `smoke.sh` confere configuração inicial, serviços, atualizador, ffmpeg, Whisper, backup e restauração |
 | F12 Docs | README, INSTALL, ADMIN, ARCHITECTURE, DECISIONS, licença e marcas | — |
+| Visual v2 (1.1.0) | Arte do cenário e dos objetos refeita em 32 px com traço de 1 px (15 pisos, 7 paredes, 69 objetos com 274 variantes de cor), exterior com grama e árvores, dia e noite pelo fuso do escritório, cor e setup da própria mesa, aba "Cor", avatar com acessórios múltiplos e 16 cores por peça, animações de contexto com "Reduzir animações". Só estética: mapas e avatares salvos continuam válidos (migração `0001_desk_look` aplicada sozinha) | Testes de hash dos avatares antigos e do quadro estático dos objetos, testes de servidor do look da mesa, E2E (Build Tool e preferência de animação), folhas e prints conferidos, FPS e memória medidos. Detalhes em [visual-v2/PROGRESS.md](visual-v2/PROGRESS.md) |
 
 ## Não verificado (só dá para conferir no ambiente real)
 
@@ -29,6 +30,7 @@ Atualizado em 12/11/2026. Versão 1.0.0.
 | Google Calendar | Precisa de um OAuth Client do Google | Criar as credenciais (INSTALL, seção 7) e conectar uma conta |
 | App de desktop em uso (bandeja, Modo Mini, atualização automática, aviso do Gatekeeper no Mac) | O CI gera e confere os instaladores, mas não abre o app | Instalar no Mac e no Windows e seguir o roteiro do INSTALL |
 | Transcrição em português com o modelo escolhido pela memória da VPS | O teste transcreve uma fala em inglês com o modelo `tiny` | Fazer uma reunião curta com as notas ligadas |
+| FPS do visual v2 em placa de vídeo de verdade | O ambiente de desenvolvimento e o CI só têm WebGL por software (medições relativas em `docs/visual-v2/PROGRESS.md`) | Abrir o escritório no app e no navegador, andar pelo mapa e conferir se fica fluido; se não ficar, ligar "Reduzir animações" e avisar |
 | Carga com 10 pessoas de câmera ligada | Os testes usam 3 pessoas | Acompanhar `docker stats` na primeira reunião cheia |
 
 ## Depende do dono da VPS

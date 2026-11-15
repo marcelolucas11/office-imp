@@ -10,16 +10,18 @@ e **Windows**, além do navegador.
 
 > Interface em português do Brasil. Licença [AGPL-3.0](LICENSE). Marcas: veja [TRADEMARKS.md](TRADEMARKS.md).
 
+![Escritório à noite, com o exterior, o letreiro neon e o aquário](docs/visual-v2/prints/fase-g-cena-40p-noite.png)
+
 ## O que tem
 
 | Área | Recursos |
 |---|---|
-| **Mapa e avatar** | Movimento por setas, WASD ou clique duplo (com desvio de obstáculos), tecla **X** para interagir, seguir e liderar pessoas, mini-mapa, avatar personalizável |
+| **Mapa e avatar** | Movimento por setas, WASD ou clique duplo (com desvio de obstáculos), tecla **X** para interagir, seguir e liderar pessoas, mini-mapa, exterior com grama e árvores, **dia e noite** pelo fuso do escritório, avatar com acessórios múltiplos e 16 cores por peça |
 | **Áudio e vídeo** | Conexão por proximidade (raio de 2 blocos de fábrica; só a administração aumenta, até 10; volume cai com a distância), **área de conversa em cada mesa** (a câmera liga ao chegar), **salas privadas** isoladas de verdade, palco (**Spotlight**) que fala para todos, compartilhamento de tela por várias pessoas, entrada sempre com o microfone mudo, Visualização Simplificada e **Modo Mini** (só as câmeras flutuando, sem moldura; no app desktop entra sozinho ao minimizar ou trocar de app, e o ícone na barra de menus tem a chave para ligar ou desligar isso) |
 | **Status** | Disponível, Ocupado e **Não incomodar** (⌘/Ctrl + O / I / U), ausência automática, status personalizado com emoji |
 | **Comunicação** | Chat (perto de mim, todos, direta), reações, aceno, levantar a mão, lista de participantes, perfil |
-| **Mesas** | Cada pessoa tem a sua mesa, decora com a Build Tool e recebe recados e presentes mesmo offline |
-| **Construção** | **Mapmaker** completo (chão, paredes, objetos, áreas, portais, versões) e objetos interativos: quadro branco colaborativo, site, TV, pôster, jogo e placa |
+| **Mesas** | Cada pessoa tem a sua mesa, escolhe a **cor e o setup** dela (monitor, PC gamer, notebook…), decora com a Build Tool e recebe recados e presentes mesmo offline |
+| **Construção** | **Mapmaker** completo (15 pisos, 7 paredes, 69 objetos com 274 variantes de cor na aba "Cor", áreas, portais, versões) e objetos interativos: quadro branco colaborativo, site, TV, pôster, jogo e placa |
 | **Escritórios prontos** | Assistente cria o escritório para 1–10, 11–21 ou N pessoas, pergunta quantos sócios e se dividem a sala; **expansão** com aprovação quando a equipe cresce |
 | **Painel do ADM** | Em tempo real: horas online e ativas, tempo em cada status, tempo em call e com quem; linha do tempo por pessoa; CSV |
 | **Notas de reunião** | Áudio (sem vídeo) transcrito no próprio servidor com Whisper, com o nome de quem falou; cópia no painel e por e-mail |
@@ -29,6 +31,35 @@ e **Windows**, além do navegador.
 | **Atualizações** | Botão para atualizar o servidor, "atualizar todos agora" e atualização automática ao abrir |
 
 Papéis: **Dono**, **Admin**, **Funcionário** e **Convidado**. A tabela completa está em [docs/ADMIN.md](docs/ADMIN.md).
+
+## Visual v2 (versão 1.1.0)
+
+A arte do cenário e dos objetos foi refeita em pixel art de 32 px com traço de 1 px. A mudança é só
+estética: os mapas e os avatares já salvos continuam valendo, sem migração manual.
+
+![Antes e depois na cena: v1.0.8 e v1.1.0](docs/visual-v2/prints/antes-depois-cena.png)
+
+![Antes e depois do escritório gerado para 15 pessoas](docs/visual-v2/prints/antes-depois.png)
+
+- **Cenário:** pisos e paredes novos (porcelanato, cimento queimado, espinha de peixe, tijolo,
+  painel de madeira, divisória de vidro), janelas com vista, **exterior com grama e árvores** e
+  **dia e noite** pelo horário do fuso do escritório.
+- **Objetos:** 8 mesas de trabalho, 6 assentos, 7 setups de mesa (do notebook ao PC gamer), objetos
+  de mesa, plantas, copa, aquário, letreiro neon com texto editável, relógio com a hora do
+  escritório e mais. Cada objeto aparece uma vez na paleta e tem as cores na **aba "Cor"**.
+- **Mesa de cada pessoa:** cor e setup escolhidos pelo ocupante; "Deixar o posto" devolve ao padrão.
+- **Avatar:** mesmo boneco, com acessórios múltiplos, 16 cores por peça, mais cabelos, barba,
+  roupas, estampas e calçados.
+- **Animações de contexto:** telas, RGB, vapor do café, peixes, neon, árvores e nuvens, com a opção
+  "Reduzir animações".
+
+| Dia | Noite |
+|---|---|
+| ![Canto do escritório de dia](docs/visual-v2/prints/fase-g-canto-exterior-dia.png) | ![Canto do escritório à noite](docs/visual-v2/prints/fase-g-canto-exterior-noite.png) |
+
+Mais prints (escritórios de 7, 15 e 40 pessoas, antes e depois, Mapmaker e Build Tool) em
+[docs/visual-v2/prints](docs/visual-v2/prints); o que mudou em cada versão está no
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Instalação rápida (VPS com Ubuntu ou Debian)
 
@@ -94,6 +125,8 @@ Veja [CONTRIBUTING.md](CONTRIBUTING.md).
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — como as peças se encaixam
 - [docs/DECISIONS.md](docs/DECISIONS.md) — decisões técnicas e alternativas descartadas
 - [docs/PROGRESS.md](docs/PROGRESS.md) — o que está pronto, o que foi verificado e pendências
+- [CHANGELOG.md](CHANGELOG.md) — o que mudou em cada versão e as notas de atualização
+- [docs/visual-v2/PROGRESS.md](docs/visual-v2/PROGRESS.md) — o visual v2: guias por fase, medições e problemas conhecidos
 - [SECURITY.md](SECURITY.md) · [TRADEMARKS.md](TRADEMARKS.md) · [assets/LICENSES.md](assets/LICENSES.md)
 
 ## Licença
