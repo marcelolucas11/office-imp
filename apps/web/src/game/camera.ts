@@ -28,3 +28,18 @@ export function cameraBounds(mapW: number, mapH: number, viewW: number, viewH: n
   const [y, h] = axis(mapH * TILE, viewH);
   return { x, y, w, h };
 }
+
+/** Teto da faixa de exterior com árvores (blocos): limita a quantidade de sprites em telas enormes. */
+export const EXTERIOR_MARGIN_MAX = 48;
+
+/**
+ * Quantos blocos de exterior precisam de árvores para cobrir a tela: a margem da câmera quando o
+ * mapa é maior que a tela; quando o mapa fica centralizado (escritório pequeno em tela grande),
+ * a metade do que sobra de cada lado. `viewW`/`viewH` em pixels do mundo, no zoom mínimo;
+ * `min` é a faixa de sempre. Limitado a `EXTERIOR_MARGIN_MAX`.
+ */
+export function exteriorMarginFor(mapW: number, mapH: number, viewW: number, viewH: number, min: number, margin = CAMERA_MARGIN): number {
+  const b = cameraBounds(mapW, mapH, viewW, viewH, margin);
+  const need = Math.max(-b.x, -b.y, b.x + b.w - mapW * TILE, b.y + b.h - mapH * TILE) / TILE;
+  return Math.min(EXTERIOR_MARGIN_MAX, Math.max(min, Math.ceil(need) + 1));
+}

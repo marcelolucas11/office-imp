@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
 import { TILE } from '@office-imp/shared';
-import { CAMERA_MARGIN, cameraBounds } from '../src/game/camera';
+import { CAMERA_MARGIN, EXTERIOR_MARGIN_MAX, cameraBounds, exteriorMarginFor } from '../src/game/camera';
 import { EXTERIOR_MARGIN } from '../src/game/art/exterior';
 
 describe('limites da câmera (exterior visível)', () => {
@@ -43,5 +43,14 @@ describe('limites da câmera (exterior visível)', () => {
   it('a margem da câmera cabe dentro da faixa que tem árvores', () => {
     expect(CAMERA_MARGIN).toBeGreaterThanOrEqual(6);
     expect(CAMERA_MARGIN).toBeLessThanOrEqual(EXTERIOR_MARGIN);
+  });
+
+  it('faixa com árvores: a de sempre no mapa grande, maior no escritório pequeno em tela grande, com teto', () => {
+    // mapa maior que a tela: a câmera só mostra 7 blocos de fora
+    expect(exteriorMarginFor(100, 100, 960, 540, EXTERIOR_MARGIN)).toBe(EXTERIOR_MARGIN);
+    // 34×21 blocos numa tela de 2560×1440 no zoom 1: sobram 23 blocos de cada lado
+    expect(exteriorMarginFor(34, 21, 2560, 1440, EXTERIOR_MARGIN)).toBe(24);
+    // tela absurda: para no teto
+    expect(exteriorMarginFor(10, 10, 20000, 12000, EXTERIOR_MARGIN)).toBe(EXTERIOR_MARGIN_MAX);
   });
 });

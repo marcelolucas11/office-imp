@@ -34,14 +34,14 @@ import {
 import { Animator } from '../game/animator';
 import { ANIM_CLOUDS, ANIM_TREE, animPhase, clockFrame, objectAnim, plantsInBreeze } from '../game/art/anim';
 import { AV_FRAMES, AV_H, AV_W, avatarKey, avatarSheet } from '../game/art/avatar';
-import { DECOR_SIZE, EXTERIOR, decorFrames, decorSprite, decorStrip, exteriorDecor, exteriorGrass, viewFrames, type DecorKind } from '../game/art/exterior';
+import { DECOR_SIZE, EXTERIOR, EXTERIOR_MARGIN, decorFrames, decorSprite, decorStrip, exteriorDecor, exteriorGrass, viewFrames, type DecorKind } from '../game/art/exterior';
 import { FLOOR_PATTERN } from '../game/art/floors';
 import { doorClosedKey, doorClosedSprite, objectKey, objectSprite, objectStrip, objectTall } from '../game/art/objects';
 import { FLAT_ON_SURFACE, surfaceIndex } from '../game/art/render';
 import { T, drawStatic, hasPeriodWalls, makeCanvas, wallTileAt } from '../game/art/tiles';
 import { wallCanvas, wallKey } from '../game/art/walls';
 import { bus } from '../game/bus';
-import { cameraBounds } from '../game/camera';
+import { cameraBounds, exteriorMarginFor } from '../game/camera';
 import { useMotion } from '../game/motion';
 import { net } from '../game/net';
 import { serverNow, useGame } from '../game/store';
@@ -149,6 +149,7 @@ export class OfficeScene extends Phaser.Scene {
   /** Grama do período anterior, enquanto a nova aparece por cima. */
   private grassOld: Phaser.GameObjects.TileSprite | null = null;
   private decor: { img: Phaser.GameObjects.Image; kind: DecorKind }[] = [];
+  private extMargin = EXTERIOR_MARGIN;
   /** Animações de contexto (Fase F): um relógio só para todos os sprites animados. */
   private anim = new Animator();
   private animAt = 0;
@@ -440,7 +441,8 @@ export class OfficeScene extends Phaser.Scene {
     for (const d of this.decor) d.img.destroy();
     this.decor = [];
     this.anim.clear('ext');
-    for (const d of exteriorDecor(this.map)) {
+    this.extMargin = this.neededExteriorMargin();
+    for (const d of exteriorDecor(this.map, this.extMargin)) {
       // mesma camada para todos; a fração da profundidade mantém a ordem de cima para baixo
       const depth = D_DECOR + (d.y + DECOR_SIZE[d.kind].h) * 1e-4;
       const animated = decorFrames(d.kind) > 1;
@@ -453,6 +455,16 @@ export class OfficeScene extends Phaser.Scene {
       this.anim.add('ext', img, ANIM_TREE, phase, { x: d.x, y: d.y, width: w, height: h });
     }
     this.syncGrass();
+  }
+
+  /**
+   * Faixa de exterior (em blocos) que precisa de árvores: a de sempre, ou mais quando o escritório
+   * é pequeno e fica centralizado numa tela grande (medido no zoom mínimo, para não refazer ao dar zoom).
+   */
+  private neededExteriorMargin(): number {
+    const cam = this.cameras.main;
+    const minZoom = Math.max(1, Math.round(ZOOMS[0] * this.dpr * 2) / 2);
+    return exteriorMarginFor(this.map.width, this.map.height, cam.width / minZoom, cam.height / minZoom, EXTERIOR_MARGIN);
   }
 
   /** Mantém a grama cobrindo a tela, sempre alinhada ao padrão de 256 px do mundo. */
@@ -884,6 +896,8 @@ export class OfficeScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     this.updateBounds();
+    // a janela cresceu além da faixa com árvores (escritório pequeno em tela grande): refaz o exterior
+    if (this.map && this.grass && this.neededExteriorMargin() > this.extMargin) this.buildExterior();
     this.syncGrass();
     // animações de contexto: um passo a cada 100 ms (trocar quadro não redesenha nada)
     if (time - this.animAt >= ANIM_TICK_MS) {
@@ -1121,7 +1135,8 @@ export class OfficeScene extends Phaser.Scene {
 
   zoom(dir: number) {
     this.zoomIdx = Math.max(0, Math.min(ZOOMS.length - 1, this.zoomIdx + (dir > 0 ? 1 : -1)));
-    this.cameras.main.zoomTo(this.effZoom, 140);
+    // force: um passo de zoom durante a transição não é ignorado (a roda do mouse dispara vários)
+    this.cameras.main.zoomTo(this.effZoom, 140, 'Linear', true);
   }
 }
 
