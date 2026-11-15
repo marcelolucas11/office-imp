@@ -41,6 +41,7 @@ import { FLAT_ON_SURFACE, surfaceIndex } from '../game/art/render';
 import { T, drawStatic, hasPeriodWalls, makeCanvas, wallTileAt } from '../game/art/tiles';
 import { wallCanvas, wallKey } from '../game/art/walls';
 import { bus } from '../game/bus';
+import { cameraBounds } from '../game/camera';
 import { useMotion } from '../game/motion';
 import { net } from '../game/net';
 import { serverNow, useGame } from '../game/store';
@@ -867,26 +868,18 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Limites da câmera: o avatar fica no centro, mas perto da borda do escritório a câmera para
-   * e o avatar sai do centro — assim a tela não mostra o vazio preto de fora do mapa.
-   * Se o mapa for menor que a tela naquele eixo, ele fica centralizado.
+   * Limites da câmera: o avatar fica no centro e, perto da borda do escritório, a câmera ainda
+   * anda `CAMERA_MARGIN` blocos para fora, mostrando o exterior (grama e árvores); só então ela
+   * para e o avatar sai do centro. É só a câmera: colisão e movimento continuam nos limites do mapa.
+   * Se o mapa com a margem for menor que a tela naquele eixo, ele fica centralizado.
    */
   private updateBounds() {
     if (!this.map) return;
     const cam = this.cameras.main;
-    const vw = cam.width / cam.zoom;
-    const vh = cam.height / cam.zoom;
-    // folga só em cima: nome e reações de quem está encostado na parede de cima continuam visíveis
-    const top = 28;
-    const W = this.map.width * T;
-    const H = this.map.height * T + top;
-    const bx = W < vw ? (W - vw) / 2 : 0;
-    const by = H < vh ? (H - vh) / 2 - top : -top;
-    const bw = Math.max(W, vw);
-    const bh = Math.max(H, vh);
-    const b = cam.getBounds();
-    if (cam.useBounds && Math.abs(b.x - bx) < 0.5 && Math.abs(b.y - by) < 0.5 && Math.abs(b.width - bw) < 0.5 && Math.abs(b.height - bh) < 0.5) return;
-    cam.setBounds(bx, by, bw, bh);
+    const b = cameraBounds(this.map.width, this.map.height, cam.width / cam.zoom, cam.height / cam.zoom);
+    const cur = cam.getBounds();
+    if (cam.useBounds && Math.abs(cur.x - b.x) < 0.5 && Math.abs(cur.y - b.y) < 0.5 && Math.abs(cur.width - b.w) < 0.5 && Math.abs(cur.height - b.h) < 0.5) return;
+    cam.setBounds(b.x, b.y, b.w, b.h);
   }
 
   update(time: number, delta: number) {
