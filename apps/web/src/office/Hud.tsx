@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { Track } from 'livekit-client';
-import { EMOTES, ROLE_LABEL, STATUS_COLOR, STATUS_LABEL, can, deskSeat, isAdminRole, mapDesks, type ChatMessage, type PlayerState, type Status } from '@office-imp/shared';
+import { EMOTES, ROLE_LABEL, STATUS_COLOR, STATUS_LABEL, can, deskSeat, isAdminRole, mapDesks, type ChatMessage, type PlayerState, type TrackedStatus } from '@office-imp/shared';
 import { Badge, Button, IconButton, Input, Tabs, cx } from '@office-imp/ui';
 import { avatarPortrait } from '../game/art/avatar';
 import { renderMini } from '../game/art/render';
@@ -18,7 +18,7 @@ import { Emo, EmoText } from '../lib/icons';
 
 export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 export const MOD = isMac ? '⌘' : 'Ctrl';
-export const STATUS_KEYS: Record<Status, string> = { AVAILABLE: 'O', BUSY: 'I', DND: 'U' };
+export const STATUS_KEYS: Partial<Record<TrackedStatus, string>> = { AVAILABLE: 'O', BUSY: 'I', DND: 'U' };
 
 // ---------- ícones ----------
 const I = ({ d, off }: { d: string; off?: boolean }) => (
@@ -238,12 +238,16 @@ export function VideoBar() {
   const mini = useGame((s) => s.mini && !s.miniExt);
   const players = useGame((s) => s.players);
   const meId = useGame((s) => s.meId);
+  // janela escondida (Modo Mini do app desktop): os vídeos ficam só na janela mini, sem uma segunda cópia
+  // tocando aqui atrás (e sem pedir ao servidor a qualidade dos quadros grandes desta janela)
+  const winHidden = useGame((s) => s.winHidden);
   const me = players[meId];
   const portraits = useMemo(() => {
     const out: Record<string, string> = {};
     for (const p of Object.values(players)) out[p.id] = avatarPortrait(p.avatar, 2);
     return out;
   }, [players]);
+  if (winHidden) return null;
 
   const tiles: React.ReactNode[] = [];
   for (const p of peers) {
@@ -316,18 +320,21 @@ function FocusOverlay({ track, name, contain, mirror, peer, kind }: { track: Tra
 // ---------- status ----------
 export function StatusMenu({ onClose }: { onClose: () => void }) {
   const me = useGame((s) => s.players[s.meId]);
-  const pick = (s: Status) => {
+  const current: TrackedStatus | null = me ? (me.away ? 'AWAY' : me.status) : null;
+  const pick = (s: TrackedStatus) => {
     net.setStatus(s);
     onClose();
   };
-  const row = (s: Status, extra?: string) => (
-    <button key={s} type="button" data-testid={`status-${s}`} onClick={() => pick(s)} className={cx('block w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-panel-3', me?.status === s && 'bg-panel-3')}>
+  const row = (s: TrackedStatus, extra?: string) => (
+    <button key={s} type="button" data-testid={`status-${s}`} onClick={() => pick(s)} className={cx('block w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-panel-3', current === s && 'bg-panel-3')}>
       <span className="flex items-center gap-3">
         <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS_COLOR[s], boxShadow: s === 'DND' ? 'inset 0 0 0 1px #0008' : undefined }} />
         <span className="flex-1 text-sm font-medium">{STATUS_LABEL[s]}</span>
-        <kbd className="text-xs text-muted">
-          {MOD} + {STATUS_KEYS[s]}
-        </kbd>
+        {STATUS_KEYS[s] ? (
+          <kbd className="text-xs text-muted">
+            {MOD} + {STATUS_KEYS[s]}
+          </kbd>
+        ) : null}
       </span>
       {extra ? <span className="mt-1 block pl-[22px] text-xs leading-snug text-muted">{extra}</span> : null}
     </button>
@@ -337,6 +344,7 @@ export function StatusMenu({ onClose }: { onClose: () => void }) {
       {row('AVAILABLE')}
       {row('BUSY')}
       {row('DND', t('status.dndHelp', 'Ninguém poderá falar com você. Use esta opção quando estiver em outra ligação.'))}
+      {row('AWAY', t('status.awayHelp', 'Para quando sair do computador. Fica até você escolher outro status.'))}
       <div className="my-1 border-t border-line" />
       <button
         type="button"
@@ -547,7 +555,7 @@ function MenuItem({ onClick, children, 'data-testid': testid }: { onClick: () =>
 export function MiniMap() {
   const map = useGame((s) => s.map);
   const mapRev = useGame((s) => s.mapRev);
-  const show = useGame((s) => s.minimap && !s.simplified && !(s.mini && !s.miniExt));
+  const show = useGame((s) => s.minimap && !s.simplified && !(s.mini && !s.miniExt) && !s.winHidden);
   const ref = useRef<HTMLCanvasElement>(null);
   const px = map ? Math.max(1, Math.min(4, Math.floor(232 / map.width))) : 2;
   const base = useMemo(() => (map ? renderMini(map, px) : null), [mapRev, px]);

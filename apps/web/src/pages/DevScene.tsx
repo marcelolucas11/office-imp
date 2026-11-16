@@ -16,7 +16,7 @@ import { useGame } from '../game/store';
 import { t } from '../lib/i18n';
 import { MiniMap } from '../office/Hud';
 import { MyDeskModal } from '../office/Modals';
-import { createGame, forcePeriod, textureStats } from '../office/scene';
+import { createGame, forcePeriod, loopStats, textureStats } from '../office/scene';
 
 const Mapmaker = lazy(() => import('../office/Mapmaker'));
 
@@ -141,8 +141,8 @@ export default function DevScene() {
       canAdmin: true,
       modal: open === 'mapmaker' ? { kind: 'mapmaker' } : open === 'mesa' ? { kind: 'myDesk' } : null,
     });
-    // conferência: window.__oi.motion.set(true) para "Reduzir animações"; window.__oi.textures() conta as texturas
-    (window as any).__oi = { game: useGame, bus, motion: { set: setReduceMotion, store: useMotion }, textures: textureStats };
+    // conferência: window.__oi.motion.set(true) para "Reduzir animações"; window.__oi.textures() conta as texturas; window.__oi.loop() mostra o ritmo do mapa
+    (window as any).__oi = { game: useGame, bus, motion: { set: setReduceMotion, store: useMotion }, textures: textureStats, loop: loopStats };
     const game = createGame(ref.current!);
     return () => {
       game.destroy();

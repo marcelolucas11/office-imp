@@ -305,7 +305,6 @@ function OfficeSettingsForm({ office, onSaved }: { office: AdminOffice; onSaved:
         <Field label={t('oset.planned', 'Funcionários previstos')} hint={t('oset.plannedHint', 'Se passar da capacidade, o painel sugere uma nova ala.')}>
           <Input type="number" min={0} max={400} value={planned} onChange={(e) => setPlanned(Math.max(0, Number(e.target.value) || 0))} />
         </Field>
-        {num('awayMinutes', t('oset.away', 'Ausente depois de (minutos)'), t('oset.awayHint', 'Sem teclado, mouse ou movimento.'))}
         {num('chatRetentionDays', t('oset.chatDays', 'Guardar o chat por (dias)'))}
         {num('interactionDistance', t('oset.distance', 'Distância de interação (blocos)'), t('oset.distanceHint', 'Raio de proximidade de todos no escritório. Padrão: 2. Só a administração muda.'), MAX_INTERACTION_DISTANCE)}
         {num('audioRetentionDays', t('oset.audioDays', 'Guardar áudios de reunião por (dias)'), t('oset.audioHint', 'O texto das notas fica guardado sem prazo.'))}

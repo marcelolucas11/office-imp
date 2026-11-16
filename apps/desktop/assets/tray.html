@@ -50,7 +50,7 @@
       .leave:disabled { background: var(--panel-3); color: var(--muted); box-shadow: none; cursor: default; }
       .sep { height: 1px; background: var(--line); margin: 10px 2px; }
       .label { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 0 4px 6px; }
-      .status { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .status { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
       .st { all: unset; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); border-radius: 10px; padding: 8px 4px 7px; text-align: center; font-size: 11.5px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 5px; transition: border-color 0.12s, background 0.12s; }
       .st i { width: 10px; height: 10px; border-radius: 99px; display: block; }
       .st:hover { background: var(--panel-3); }
@@ -102,6 +102,7 @@
           <button class="st" data-s="AVAILABLE"><i style="background: var(--ok)"></i>Disponível</button>
           <button class="st" data-s="BUSY"><i style="background: var(--warn)"></i>Ocupado</button>
           <button class="st" data-s="DND"><i style="background: var(--danger)"></i>Não incomodar</button>
+          <button class="st" data-s="AWAY"><i style="background: #9ca3af"></i>Ausente</button>
         </div>
 
         <div class="sep"></div>
@@ -133,7 +134,7 @@
     <script>
       const $ = (id) => document.getElementById(id);
       let state = { office: null, status: 'AVAILABLE', autoMini: true, mini: false, version: '', productName: 'Office Impera' };
-      const STATUS = { AVAILABLE: 'Disponível', BUSY: 'Ocupado', DND: 'Não incomodar' };
+      const STATUS = { AVAILABLE: 'Disponível', BUSY: 'Ocupado', DND: 'Não incomodar', AWAY: 'Ausente' };
 
       function render() {
         const inOffice = Boolean(state.office);

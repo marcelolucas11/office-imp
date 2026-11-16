@@ -139,6 +139,20 @@ export class NoiseReducer implements TrackProcessor<Track.Kind.Audio, AudioProce
     await ctx?.close().catch(() => {});
   }
 
+  private active = true;
+
+  /**
+   * Pausa o processamento com o microfone desligado: a rede neural roda dezenas de vezes por
+   * segundo e, sem isto, seguia filtrando o silêncio do microfone mudo o tempo todo.
+   */
+  setActive(on: boolean) {
+    if (on === this.active) return;
+    this.active = on;
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === 'closed') return;
+    void (on ? ctx.resume() : ctx.suspend()).catch(() => {});
+  }
+
   /** Muda a intensidade do portão sem reiniciar o microfone. */
   setFilter(f: MicFilter) {
     this.filter = f;
@@ -216,6 +230,8 @@ export class NoiseReducer implements TrackProcessor<Track.Kind.Audio, AudioProce
     this.nodes = [src, hp, hp2, this.neural, this.gate, comp, makeup, limiter, dest];
     this.processed = dest.stream.getAudioTracks()[0] ?? null;
     this.processedTrack = this.processed ?? undefined;
+    // reiniciado com o microfone desligado: continua pausado até ligar
+    if (!this.active) void ctx.suspend().catch(() => {});
   }
 
   private teardown() {

@@ -80,6 +80,11 @@ interface AvState extends Prefs {
 }
 
 /** Restrições do microfone. Com o filtro forte: sem ganho automático e mono. */
+/** Câmera a 24 quadros por segundo (o padrão era 30): o vídeo segue fluido e o custo cai 20%. */
+function camResolution(hd: boolean) {
+  return { ...(hd ? VideoPresets.h720 : VideoPresets.h360).resolution, frameRate: 24 };
+}
+
 function micConstraints(st: Pick<Prefs, 'micId' | 'noiseReduce'>) {
   return {
     deviceId: st.micId || undefined,
@@ -296,7 +301,10 @@ class AvManager {
       adaptiveStream: { pixelDensity: 'screen' },
       dynacast: true,
       audioCaptureDefaults: micConstraints(st),
-      videoCaptureDefaults: { deviceId: st.camId || undefined, resolution: (st.hd ? VideoPresets.h720 : VideoPresets.h360).resolution },
+      videoCaptureDefaults: { deviceId: st.camId || undefined, resolution: camResolution(st.hd) },
+      // H.264: o Mac (e a maioria dos PCs com Windows) codifica e decodifica no chip de vídeo, sem
+      // gastar processador. O VP8 (padrão) era todo feito pelo processador, quadro a quadro.
+      publishDefaults: { videoCodec: 'h264' },
       ...(st.outId ? { audioOutput: { deviceId: st.outId } } : {}),
     });
   }
@@ -536,7 +544,11 @@ class AvManager {
     const st = { mic: Boolean(lp?.isMicrophoneEnabled), cam: Boolean(lp?.isCameraEnabled), screen: Boolean(lp?.isScreenShareEnabled) };
     useAv.setState({ ...st, localCam: cam?.track && !cam.isMuted ? cam.track : null, localScreen: scr?.track ?? null });
     const mic = lp?.getTrackPublication(Track.Source.Microphone);
-    this.meter.watch(st.mic && mic?.track && !mic.isMuted ? mic.track.mediaStreamTrack : null);
+    const micLive = Boolean(st.mic && mic?.track && !mic.isMuted);
+    this.meter.watch(micLive ? mic!.track!.mediaStreamTrack : null);
+    // microfone desligado: o filtro de voz (rede neural) para de processar silêncio
+    const proc = mic?.audioTrack?.getProcessor();
+    if (proc instanceof NoiseReducer) proc.setActive(micLive);
     const key = JSON.stringify(st);
     if (key !== this.lastMedia) {
       this.lastMedia = key;
@@ -713,7 +725,7 @@ class AvManager {
     this.applyVolumes();
     if (hdChanged && useAv.getState().cam && this.main) {
       // reabre a câmera na nova resolução
-      const res = (useAv.getState().hd ? VideoPresets.h720 : VideoPresets.h360).resolution;
+      const res = camResolution(useAv.getState().hd);
       await this.main.localParticipant.setCameraEnabled(false).catch(() => {});
       await this.main.localParticipant.setCameraEnabled(true, { resolution: res, deviceId: useAv.getState().camId || undefined }).catch((e) => this.deviceError(e, 'cam'));
       this.pushLocal();
