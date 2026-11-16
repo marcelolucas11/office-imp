@@ -686,8 +686,8 @@ export class OfficeScene extends Phaser.Scene {
     const meId = useGame.getState().meId;
     const sprite = this.add.sprite(px(p.x), py(p.y), this.avatarTexture(p.avatar), frame(p.dir, 0)).setOrigin(0.5, 1);
     sprite.setInteractive({ useHandCursor: true });
-    sprite.on('pointerdown', (_p: unknown, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
-      if (useGame.getState().buildMode) return;
+    sprite.on('pointerdown', (ptr: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+      if (!this.onCanvas(ptr) || useGame.getState().buildMode) return;
       ev.stopPropagation();
       useGame.setState({ modal: { kind: 'profile', playerId: p.id } });
     });
@@ -1100,7 +1100,14 @@ export class OfficeScene extends Phaser.Scene {
     } else useGame.setState({ modal: { kind: 'object', object: o } });
   }
 
+  /** O clique nasceu no próprio canvas (e não num painel/modal por cima dele). */
+  private onCanvas(p: Phaser.Input.Pointer): boolean {
+    const el = p.downElement as Element | null;
+    return !el || el === this.game.canvas;
+  }
+
   private onPointer(p: Phaser.Input.Pointer) {
+    if (!this.onCanvas(p)) return;
     const wp = this.cameras.main.getWorldPoint(p.x, p.y);
     const tx = Math.floor(wp.x / T);
     const ty = Math.floor(wp.y / T);
@@ -1171,6 +1178,10 @@ export function createGame(parent: HTMLElement): { destroy: () => void } {
     banner: false,
     disableContextMenu: true,
     audio: { noAudio: true },
+    // windowEvents: false — por padrão o Phaser também escuta mousedown/mouseup na janela inteira e
+    // trata um clique num painel (editor de avatar, modal, HUD) como clique no mapa por baixo dele.
+    // Só o canvas recebe clique: o que está por cima dele fica com o clique sozinho.
+    input: { windowEvents: false },
     scale: { mode: Phaser.Scale.NONE, width: s.w, height: s.h, zoom: 1 / dpr },
     scene: [OfficeScene],
   });
