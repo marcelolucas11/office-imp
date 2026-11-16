@@ -3,6 +3,20 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.5.1 — 16/11/2026 — Modo Mini pequeno com as câmeras desligadas
+
+- **Câmeras desligadas, Modo Mini pequeno.** Em conversa, se ninguém estiver com a câmera ligada nem
+  compartilhando a tela, o Modo Mini fica em ícones pequenos (um por pessoa, até 4, e "+N" para o
+  resto), em vez dos quadros grandes. Cada ícone mostra o boneco, o primeiro nome, o microfone
+  desligado e a bolinha do status; a borda fica verde em quem está falando. Quando alguém liga a
+  câmera ou a tela, voltam os quadros grandes.
+- **Barra das câmeras estreita.** Com os quadros diminuídos pelas bordas, a barra mostra só a bolinha
+  do status (antes o nome do status aparecia cortado).
+
+### Antes de atualizar
+
+- **Nada manual.** Atualize o servidor pelo botão de sempre (a mudança é toda da parte web).
+
 ## 1.5.0 — 16/11/2026 — Modo Mini em ícone
 
 - **Sozinho, o Modo Mini vira um ícone.** Sem ninguém na conversa, o Modo Mini fica do tamanho de um

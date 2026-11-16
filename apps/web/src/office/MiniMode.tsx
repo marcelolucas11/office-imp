@@ -319,8 +319,10 @@ function useMiniFrame(target: Target, boxRef: React.RefObject<HTMLDivElement | n
 
 function MiniContent({ target }: { target: Target }) {
   const peers = useAv((s) => s.peers);
-  // sozinho na conversa: o ícone pequeno, como no Gather
-  return peers.length === 0 ? <MiniIcon target={target} /> : <MiniTiles target={target} />;
+  const cam = useAv((s) => s.cam);
+  // sozinho, ou ninguém com câmera ou tela aparecendo: ícones pequenos, como no Gather
+  const anyVideo = cam || peers.some((p) => p.cam || p.screen);
+  return peers.length === 0 || !anyVideo ? <MiniIcon target={target} /> : <MiniTiles target={target} />;
 }
 
 /** Menu de status (e fechar) usado no ícone e nas câmeras. */
@@ -361,9 +363,12 @@ function StatusMenu({ me, onDone, extra }: { me: { status: Status }; onDone: () 
   );
 }
 
-/** Sozinho: só o seu boneco (ou a sua câmera), do tamanho de um ícone. */
+/**
+ * Sozinho, ou em conversa com todas as câmeras desligadas: um ícone pequeno por pessoa (o seu primeiro,
+ * com a sua câmera se estiver ligada e você estiver sozinho).
+ */
 function MiniIcon({ target }: { target: Target }) {
-  const { localCam, mic, cam } = useAv();
+  const { localCam, mic, cam, peers, meSpeaking } = useAv();
   const players = useGame((s) => s.players);
   const meId = useGame((s) => s.meId);
   const me = players[meId];
@@ -371,7 +376,11 @@ function MiniIcon({ target }: { target: Target }) {
   const [size, setSize] = useState(() => loadSizes().icon);
   const boxRef = useRef<HTMLDivElement>(null);
   const frame = useMiniFrame(target, boxRef, [menu]);
-  const portrait = useMemo(() => (me ? avatarPortrait(me.avatar, 3) : ''), [me?.avatar]);
+  const portraits = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const p of Object.values(players)) out[p.id] = avatarPortrait(p.avatar, 3);
+    return out;
+  }, [players]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(false);
@@ -386,6 +395,11 @@ function MiniIcon({ target }: { target: Target }) {
   const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
   const dot = Math.max(10, Math.round(size / 6));
   const drag = frame.dragProps();
+  const faces = peers.slice(0, MAX_TILES - 1);
+  const extra = peers.length - faces.length;
+  // arrasto vertical: a altura de todos os ícones muda junto
+  const perY = 1 / (1 + faces.length);
+  const portrait = portraits[meId];
 
   return (
     <div
@@ -416,7 +430,7 @@ function MiniIcon({ target }: { target: Target }) {
         className={cx('relative flex flex-col items-center gap-1.5 rounded-2xl border p-1.5 transition-colors duration-150', show ? 'border-white/15 bg-panel/90 shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur' : 'border-transparent bg-transparent')}
         data-testid="mini-icon"
       >
-        {frame.edges(size, 1, ICON_MIN, ICON_MAX, setSize, (v) => saveSizes({ ...loadSizes(), icon: v }))}
+        {frame.edges(size, perY, ICON_MIN, ICON_MAX, setSize, (v) => saveSizes({ ...loadSizes(), icon: v }))}
         {/* configurações · arrastar · expandir (aparecem com o mouse em cima) */}
         <div className={cx('flex w-full items-center justify-between gap-1 transition-opacity duration-150', show ? 'opacity-100' : 'pointer-events-none opacity-0')} style={{ minWidth: 84 }}>
           <IconBtn label={t('mini.settings', 'Configurações do Modo Mini')} active={menu} onClick={() => setMenu((v) => !v)} testId="mini-settings">
@@ -440,7 +454,7 @@ function MiniIcon({ target }: { target: Target }) {
           title={t('mini.back', 'Clique para voltar ao escritório')}
           data-testid="mini-tile-me"
           style={{ ...noDrag, width: size, height: size }}
-          className={cx('relative shrink-0 overflow-hidden rounded-2xl border-2 bg-gradient-to-b from-panel-3 to-panel-2 shadow-[0_8px_22px_rgba(0,0,0,0.5)]', mic ? 'border-ok/70' : 'border-white/10')}
+          className={cx('relative shrink-0 overflow-hidden rounded-2xl border-2 bg-gradient-to-b from-panel-3 to-panel-2 shadow-[0_8px_22px_rgba(0,0,0,0.5)]', mic && meSpeaking ? 'border-ok' : mic ? 'border-ok/50' : 'border-white/10')}
         >
           {cam && localCam ? (
             <TrackView track={localCam} mirror />
@@ -467,6 +481,39 @@ function MiniIcon({ target }: { target: Target }) {
             data-testid="mini-status-dot"
           />
         </button>
+        {faces.map((p) => {
+          const pl = players[p.id];
+          const st: Status | 'AWAY' | null = pl ? (pl.away ? 'AWAY' : pl.status) : null;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={exitMini}
+              title={p.name}
+              data-testid={`mini-face-${p.id}`}
+              style={{ ...noDrag, width: size, height: size }}
+              className={cx('relative shrink-0 overflow-hidden rounded-2xl border-2 bg-gradient-to-b from-panel-3 to-panel-2 shadow-[0_8px_22px_rgba(0,0,0,0.5)]', p.speaking ? 'border-ok' : 'border-white/10')}
+            >
+              {portraits[p.id] ? (
+                <img src={portraits[p.id]} alt="" className="pixel absolute inset-0 m-auto h-[78%] w-auto object-contain" />
+              ) : (
+                <span className="text-2xl text-muted">{p.name.slice(0, 1).toUpperCase()}</span>
+              )}
+              {size >= 64 ? <span className="absolute bottom-1 left-1 max-w-[70%] truncate rounded-md bg-black/65 px-1 py-px text-[10px] font-semibold">{p.name.split(' ')[0]}</span> : null}
+              {!p.mic ? (
+                <span className="absolute left-1 top-1 rounded-md bg-black/60 p-0.5">
+                  <MicOff />
+                </span>
+              ) : null}
+              {st ? <span className="pointer-events-none absolute rounded-full ring-2 ring-black/70" style={{ background: STATUS_COLOR[st], width: dot, height: dot, right: 4, bottom: 4 }} /> : null}
+            </button>
+          );
+        })}
+        {extra > 0 ? (
+          <button type="button" style={noDrag} onClick={exitMini} title={t('mini.more', '+{{n}} pessoas na conversa', { n: extra })} className="rounded-lg bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold text-gold shadow-lg">
+            +{extra}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -590,7 +637,7 @@ function MiniTiles({ target }: { target: Target }) {
           className={cx('flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-1.5 text-[12px] font-medium hover:bg-panel-3', menu && 'bg-panel-3')}
         >
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: STATUS_COLOR[status] }} />
-          <span className="truncate whitespace-nowrap">{STATUS_LABEL[status]}</span>
+          {!desk || tileW >= 260 ? <span className="truncate whitespace-nowrap">{STATUS_LABEL[status]}</span> : null}
         </button>
         <MiniBtn label={t('bar.exitMini', 'Sair do Modo Mini')} onClick={exitMini} testId="mini-exit">
           <ExpandIcon size={15} />
