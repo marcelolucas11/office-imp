@@ -3,6 +3,32 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.5.0 — 16/11/2026 — Modo Mini em ícone
+
+- **Sozinho, o Modo Mini vira um ícone.** Sem ninguém na conversa, o Modo Mini fica do tamanho de um
+  ícone, como no Gather: o seu boneco (ou a sua câmera, se estiver ligada), a bolinha do status e
+  quantas outras pessoas estão online no escritório. Quando alguém entra na conversa, voltam as
+  câmeras; quando a conversa acaba, volta o ícone.
+- **Controles ao passar o mouse.** Aparecem a moldura e três botões: configurações (status, microfone,
+  câmera, voltar ao escritório e **Fechar o Modo Mini**), arrastar e expandir. Clicar no ícone também
+  volta para o escritório. "Fechar" some com o Modo Mini sem trazer o escritório para a frente (no
+  Windows a janela fica minimizada na barra de tarefas; no Mac, no Dock).
+- **Arrastar para qualquer canto.** Pela alça do meio, o Modo Mini vai para qualquer lugar de qualquer
+  tela e abre no mesmo lugar da próxima vez.
+- **Aumentar e diminuir pelas bordas.** Com o mouse em cima, puxe qualquer borda ou canto: o ícone vai
+  de 56 a 220 px e as câmeras de 220 a 480 px de largura. O canto oposto fica parado e o tamanho fica
+  guardado.
+- **"Não incomodar" esconde o Modo Mini.** No app desktop ele some na hora e volta sozinho quando o
+  status muda; o Modo Mini automático não entra em "Não incomodar". No navegador, o Modo Mini acaba.
+- **Correção.** A janela do Modo Mini no app desktop agora acompanha o tamanho do conteúdo sempre
+  (antes o tamanho só era enviado ao abrir, e a janela não crescia quando alguém entrava na conversa).
+
+### Antes de atualizar
+
+- **Nada manual.** Atualize o servidor e os apps (Mac e Windows) pelos botões de sempre. O arrastar
+  suave e o "Fechar" sem trazer o escritório precisam do app desktop novo; com o app antigo, o
+  arraste usa a alça do sistema e "Fechar" volta para o escritório.
+
 ## 1.4.0 — 16/11/2026 — Controles de áudio e vídeo por pessoa
 
 - **Botão "⋯" em cada vídeo e em cada tela compartilhada.** Passe o mouse no quadro de outra pessoa
