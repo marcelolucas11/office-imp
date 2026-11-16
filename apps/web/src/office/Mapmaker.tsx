@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  DESK_AREA_PREFIX,
+  DESK_AREA_PROPS,
   DIRS,
   Floor,
   MAX_MAP_SIZE,
@@ -9,6 +11,8 @@ import {
   OBJECT_TYPES,
   defaultDeskSeat,
   defaultDeskZone,
+  deskAreaSettings,
+  deskAreas,
   deskSetups,
   isDesk,
   isDeskType,
@@ -63,7 +67,8 @@ export default function Mapmaker() {
   // o Mapmaker edita o mapa publicado: a cor e o setup que cada ocupante escolheu (look) não entram nele
   const live = useGame((s) => s.baseMap ?? s.map)!;
   const desks = useGame((s) => s.desks);
-  // as áreas das mesas são automáticas: não aparecem para edição (só no desenho)
+  // as áreas das mesas são derivadas das mesas: aparecem na aba "Áreas", mas o que se edita nelas
+  // (nome, forma, capacidade…) é gravado nas props da mesa, nunca como área do mapa
   const mapRef = useRef<OfficeMap>(stripDerivedAreas(structuredClone(live)));
   const [rev, setRev] = useState(0);
   const undo = useRef<string[]>([]);
@@ -117,7 +122,12 @@ export default function Mapmaker() {
   };
 
   const selected = map.objects.find((o) => o.id === selObj) ?? null;
-  const area = map.areas.find((a) => a.id === selArea) ?? null;
+  // áreas das mesas como o escritório vai ver (recalculadas a cada edição)
+  const deskAreaList = useMemo(() => deskAreas(map), [rev, map]);
+  const desksOff = useMemo(() => mapDesks(map).filter((d) => deskAreaSettings(d).off), [rev, map]);
+  const selDeskId = selArea?.startsWith(DESK_AREA_PREFIX) ? selArea.slice(DESK_AREA_PREFIX.length) : null;
+  const selDesk = selDeskId ? (mapDesks(map).find((d) => d.id === selDeskId) ?? null) : null;
+  const area = selDeskId ? (deskAreaList.find((a) => a.deskId === selDeskId) ?? null) : (map.areas.find((a) => a.id === selArea) ?? null);
 
   // ---------- desenho ----------
   useEffect(() => {
@@ -306,6 +316,10 @@ export default function Mapmaker() {
         const zone = selected.props.zone as Rect | undefined;
         if (seat) selected.props.seat = { x: seat.x + ox, y: seat.y + oy };
         if (zone) selected.props.zone = { ...zone, x: zone.x + ox, y: zone.y + oy };
+        // a área desenhada da mesa anda junto
+        const custom = selected.props.area as Rect | undefined;
+        if (custom) selected.props.area = { ...custom, x: custom.x + ox, y: custom.y + oy };
+        if (Array.isArray(selected.props.areaRects)) selected.props.areaRects = (selected.props.areaRects as Rect[]).map((r) => ({ ...r, x: r.x + ox, y: r.y + oy }));
         for (const dec of map.objects) {
           if (dec.ownerDeskId === selected.id) {
             dec.x += ox;
@@ -335,7 +349,17 @@ export default function Mapmaker() {
         if (e.altKey) tiles.delete(`${p.x},${p.y}`);
         else tiles.set(`${p.x},${p.y}`, p);
       }
-      area.rects = tilesToRects([...tiles.values()]);
+      const rects = tilesToRects([...tiles.values()]);
+      if (selDesk) {
+        // área de mesa: a forma nova fica na mesa (sem nenhum bloco, a mesa fica sem área)
+        const { area: _old, areaRects: _rects, noArea: _off, ...rest } = selDesk.props ?? {};
+        selDesk.props = rects.length ? { ...rest, areaRects: rects } : { ...rest, noArea: true };
+        if (!rects.length) setSelArea(null);
+      } else area.rects = rects;
+    } else if (selDesk) {
+      // mesa sem área: o retângulo vira a área dela
+      const { noArea: _off, area: _old, ...rest } = selDesk.props ?? {};
+      selDesk.props = { ...rest, areaRects: [rect] };
     } else {
       const a: MapArea = { id: rid('area'), name: t('mm.newArea', 'Nova sala'), kind: 'private', staffOnly: false, meeting: true, capacity: 8, rects: [rect] };
       map.areas.push(a);
@@ -352,9 +376,33 @@ export default function Mapmaker() {
     bump();
   };
   const patchArea = (fn: (a: MapArea) => void) => {
-    if (!area) return;
+    if (!area || selDesk) return;
     snapshot();
     fn(area);
+    bump();
+  };
+  /** Muda uma prop da área de uma mesa (gravada na mesa). `undefined` apaga a prop. */
+  const patchDeskArea = (props: Record<string, unknown>) => {
+    if (!selDesk) return;
+    snapshot();
+    const next = { ...(selDesk.props ?? {}) };
+    for (const [k, v] of Object.entries(props)) {
+      if (v === undefined) delete next[k];
+      else next[k] = v;
+    }
+    selDesk.props = next;
+    bump();
+  };
+  const resetDeskArea = (deskId: string, off: boolean) => {
+    const d = mapDesks(mapRef.current).find((x) => x.id === deskId);
+    if (!d) return;
+    snapshot();
+    const next = { ...(d.props ?? {}) };
+    for (const k of DESK_AREA_PROPS) delete next[k];
+    if (off) next.noArea = true;
+    d.props = next;
+    if (off) setSelArea(null);
+    else setSelArea(`${DESK_AREA_PREFIX}${deskId}`);
     bump();
   };
   const setProp = (k: string, v: unknown) => patchObj((o) => (o.props = { ...(o.props ?? {}), [k]: v }));
@@ -427,9 +475,14 @@ export default function Mapmaker() {
   const deskLook = (() => {
     const info = selected && isDesk(selected) ? desks.find((d) => d.id === selected.id) : null;
     if (!info?.look) return null;
+    const lk = info.look;
+    const type = lk.type ?? selected!.type;
     const what = [
-      info.look.setup ? deskSetups(selected!.type).find((x) => x.id === info.look!.setup)?.label : null,
-      info.look.color ? objectColors(selected!.type).find((x) => x.id === info.look!.color)?.label : null,
+      lk.type ? OBJECT_DEFS[lk.type]?.label : null,
+      lk.setup ? deskSetups(type).find((x) => x.id === lk.setup)?.label : null,
+      lk.color ? objectColors(type).find((x) => x.id === lk.color)?.label : null,
+      lk.chair || lk.chairColor ? t('mm.lookChair', 'cadeira') : null,
+      lk.rug ? t('mm.lookRug', 'tapete') : null,
     ]
       .filter(Boolean)
       .join(', ');
@@ -552,7 +605,7 @@ export default function Mapmaker() {
                 </Button>
               </div>
               <p className="text-[11px] text-muted">{t('mm.areaHelp', 'Área privada: só quem está dentro se vê e se ouve. Palco (Spotlight): quem pisa nele fala para o escritório todo.')}</p>
-              <div className="space-y-1">
+              <div className="space-y-1" data-testid="mm-areas">
                 {map.areas.map((a) => (
                   <button key={a.id} type="button" onClick={() => (setSelArea(a.id), setTool('area'))} className={cx('flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-left text-sm', selArea === a.id ? 'border-gold bg-gold/10' : 'border-line hover:border-muted')}>
                     <span className="truncate">
@@ -563,7 +616,62 @@ export default function Mapmaker() {
                   </button>
                 ))}
               </div>
-              {area ? (
+              {deskAreaList.length || desksOff.length ? (
+                <div className="space-y-1" data-testid="mm-desk-areas">
+                  <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{t('mm.deskAreas', 'Áreas das mesas')}</p>
+                  {deskAreaList.map((a) => [
+                    <button
+                      key={a.id}
+                      type="button"
+                      data-testid={`mm-desk-area-${a.deskId}`}
+                      onClick={() => (setSelArea(a.id), setTool('area'))}
+                      className={cx('flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-left text-sm', selArea === a.id ? 'border-gold bg-gold/10' : 'border-line hover:border-muted')}
+                    >
+                      <span className="truncate">
+                        {a.staffOnly ? <Emo e="🔒" size={14} /> : ''} {a.name}
+                      </span>
+                      <Badge color="gray">{t('mm.cap', '{{n}} lugares', { n: a.capacity })}</Badge>
+                    </button>,
+                    selArea === a.id && area && selDesk ? (
+                      <div key={`${a.id}-form`} className="space-y-2 rounded-xl border border-line p-3" data-testid="mm-desk-area-form">
+                        <p className="text-[11px] leading-snug text-muted">
+                          {t('mm.deskAreaHelp', 'Área de conversa da mesa: quem está nela conversa só com quem também está. Com "Marcar área", arraste para aumentar; com Alt, para diminuir.')}
+                        </p>
+                        <Field label={t('mm.areaName', 'Nome')}>
+                          <Input
+                            value={typeof selDesk.props?.areaName === 'string' ? selDesk.props.areaName : area.name}
+                            placeholder={area.name}
+                            data-testid="mm-desk-area-name"
+                            onChange={(e) => patchDeskArea({ areaName: e.target.value.slice(0, 60) })}
+                          />
+                        </Field>
+                        <Field label={t('mm.areaCap', 'Capacidade')}>
+                          <Input type="number" min={1} max={200} value={area.capacity} onChange={(e) => patchDeskArea({ areaCapacity: Math.max(1, Math.min(200, Math.floor(Number(e.target.value)) || 1)) })} />
+                        </Field>
+                        <Toggle checked={Boolean(area.meeting)} onChange={(v) => patchDeskArea({ areaMeeting: v || undefined })} label={t('mm.areaMeeting', 'Sala de reunião (permite notas de reunião)')} />
+                        <Toggle checked={area.staffOnly} onChange={(v) => patchDeskArea({ areaStaffOnly: v || undefined })} label={t('mm.areaStaff', 'Somente equipe (convidados não entram)')} />
+                        <div className="flex flex-wrap gap-1.5">
+                          <Button small variant="subtle" onClick={() => resetDeskArea(selDesk.id, false)}>
+                            {t('mm.deskAreaAuto', 'Voltar ao padrão (2×2)')}
+                          </Button>
+                          <Button small variant="danger" data-testid="mm-desk-area-off" onClick={() => resetDeskArea(selDesk.id, true)}>
+                            {t('mm.deskAreaOff', 'Tirar a área desta mesa')}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null,
+                  ])}
+                  {desksOff.map((d) => (
+                    <div key={d.id} className="flex items-center justify-between rounded-lg border border-dashed border-line px-2 py-1.5 text-sm text-muted">
+                      <span className="truncate">{deskAreaSettings(d).name ?? t('mm.deskNoArea', 'Mesa sem área')}</span>
+                      <Button small variant="subtle" onClick={() => resetDeskArea(d.id, false)}>
+                        {t('mm.deskAreaRestore', 'Recriar área')}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {area && !selDesk ? (
                 <div className="space-y-2 rounded-xl border border-line p-3">
                   <Field label={t('mm.areaName', 'Nome')}>
                     <Input value={area.name} onChange={(e) => patchArea((a) => (a.name = e.target.value.slice(0, 60)))} />

@@ -6,6 +6,7 @@ import {
   DEFAULT_AVATAR,
   DEFAULT_INTERACTION_DISTANCE,
   DESK_DECOR_TYPES,
+  DESK_LOOK_KEYS,
   DIRS,
   EMOTES,
   MAX_DESK_DECOR,
@@ -20,6 +21,8 @@ import {
   buildCollision,
   can,
   computeAv,
+  deskChair,
+  deskLookFieldError,
   deskSeat,
   deskTopAt,
   deskZone,
@@ -31,7 +34,6 @@ import {
   doorTiles,
   nearestFree,
   objColorError,
-  objSetupError,
   objectColors,
   parseYouTubeUrl,
   privateAreaAt,
@@ -72,7 +74,37 @@ interface Runtime {
   /** Época de movimento: sobe a cada correção; passos de épocas antigas (já em trânsito) são ignorados. */
   epoch: number;
   whiteboards: Set<string>;
+  /** Baldes do limite de mensagens, por tipo: fichas disponíveis e a última recarga. */
+  buckets: Map<string, { tokens: number; at: number }>;
 }
+
+/**
+ * Limite de mensagens por pessoa (balde de fichas): [rajada, fichas por segundo]. Protege o
+ * servidor, o banco e os outros participantes de um cliente com defeito ou mal-intencionado
+ * (chat em loop, gravação no banco a cada mensagem). Os valores ficam bem acima do uso normal; o
+ * excesso é descartado em silêncio. O passo tem também o próprio controle de ritmo.
+ */
+const RATE_LIMITS: Record<string, [number, number]> = {
+  default: [30, 10],
+  step: [40, 20],
+  face: [20, 10],
+  ping: [5, 1],
+  chat: [10, 1],
+  emote: [10, 2],
+  wave: [5, 0.5],
+  lead: [3, 0.2],
+  avatar: [6, 0.5],
+  profile: [6, 0.5],
+  customStatus: [6, 0.5],
+  'desk:item': [5, 0.2],
+  'desk:claim': [5, 0.5],
+  'decor:add': [10, 1],
+  'decor:remove': [10, 1],
+  'decor:color': [30, 5],
+  'desk:look': [30, 5],
+  'wb:update': [20, 8],
+  'music:add': [6, 0.5],
+};
 
 /** Rajada de passos aceita de uma vez: absorve a oscilação da rede (pacotes que chegam juntos) sem "puxar" o avatar de volta. */
 const STEP_BURST = 8;
@@ -198,6 +230,7 @@ export class OfficeRoom extends Room {
       stepCredit: STEP_BURST,
       epoch: 0,
       whiteboards: new Set(),
+      buckets: new Map(),
     });
     this.tracker.join({ id: subject.id, name: subject.name, role: subject.role }, 'AVAILABLE');
 
@@ -473,7 +506,7 @@ export class OfficeRoom extends Room {
           break;
         }
       }
-      if (!p) return;
+      if (!p || !this.allow(p, type)) return;
       try {
         const r = fn(p, data ?? {}, client);
         if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch((e) => console.error(`[sala] erro em ${type}:`, e));
@@ -481,6 +514,20 @@ export class OfficeRoom extends Room {
         console.error(`[sala] erro em ${type}:`, e);
       }
     });
+  }
+
+  /** A mensagem cabe no limite da pessoa? Gasta uma ficha do balde do tipo. */
+  private allow(p: Runtime, type: string): boolean {
+    const [burst, perSec] = RATE_LIMITS[type] ?? RATE_LIMITS.default;
+    const now = Date.now();
+    const key = type in RATE_LIMITS ? type : 'default';
+    const b = p.buckets.get(key) ?? { tokens: burst, at: now };
+    b.tokens = Math.min(burst, b.tokens + ((now - b.at) / 1000) * perSec);
+    b.at = now;
+    p.buckets.set(key, b);
+    if (b.tokens < 1) return false;
+    b.tokens -= 1;
+    return true;
   }
 
   private registerHandlers() {
@@ -666,6 +713,12 @@ export class OfficeRoom extends Room {
         p.client.send('notice', { code: 'desk_taken' });
         return;
       }
+      // mesa da sala dos sócios: só Dono e Admin pegam
+      const obj = mapDesks(this.map).find((o) => o.id === deskId);
+      if (obj?.props?.partner && !isAdminRole(p.state.role)) {
+        p.client.send('notice', { code: 'desk_reserved' });
+        return;
+      }
       // a mesa antiga fica livre e volta ao setup e à cor do mapa publicado; a nova começa como no mapa
       await db()
         .update(schema.desks)
@@ -750,7 +803,8 @@ export class OfficeRoom extends Room {
       if (type === 'note') props.text = str(d.props?.text, 500);
       if (type === 'poster') {
         const url = str(d.props?.url, 300);
-        if (url && !url.startsWith('/api/uploads/') && !/^https:\/\//.test(url)) return;
+        // só imagem enviada ao próprio servidor: um link externo vazaria o IP de quem olha o pôster
+        if (url && !/^\/api\/uploads\/[A-Za-z0-9_-]{10,40}\.(png|jpg|gif|webp)$/.test(url)) return;
         props.url = url;
         props.title = str(d.props?.title, 80);
       }
@@ -791,7 +845,9 @@ export class OfficeRoom extends Room {
       this.broadcast('map:patch', { add: [next], remove: [id] });
     });
 
-    // aba "Cor" da Build Tool na própria mesa: cor e setup por cima do mapa publicado (Dono e Admin, em qualquer mesa ocupada)
+    // Build Tool na própria mesa: modelo, cor, setup, cadeira e tapete por cima do mapa publicado.
+    // Funcionário: só a mesa dele. Dono e Admin: qualquer mesa ocupada (o padrão de uma mesa livre
+    // se muda no Mapmaker). Nada disso mexe na colisão nem em outro objeto do mapa.
     this.on('desk:look', async (p, d) => {
       const fail = () => p.client.send('notice', { code: 'desk_look_invalid' });
       if (p.kind !== 'user') return;
@@ -802,15 +858,21 @@ export class OfficeRoom extends Room {
       if (!obj || !info?.userId) return fail();
       const mine = info.userId === p.state.id;
       if (mine ? !can(p.state.role, 'build.ownDesk') : !can(p.state.role, 'map.edit')) return fail();
-      const next: Record<string, unknown> = d.reset === true ? {} : { ...(sanitizeDeskLook(obj, info.look) ?? {}) };
-      for (const key of ['color', 'setup'] as const) {
+      const chair = deskChair(this.map, obj);
+      const next: Record<string, unknown> = d.reset === true ? {} : { ...(sanitizeDeskLook(obj, info.look, chair) ?? {}) };
+      for (const key of DESK_LOOK_KEYS) {
         if (!(key in d) || d.reset === true) continue;
         const v = d[key];
         if (v === null || v === '') delete next[key];
-        else if (typeof v !== 'string' || (key === 'color' ? objColorError({ type: obj.type, color: v }) : objSetupError({ type: obj.type, setup: v }))) return fail();
+        else if (typeof v !== 'string' || v.length > 40) return fail();
         else next[key] = v;
       }
-      const look: DeskLook | null = sanitizeDeskLook(obj, next);
+      // cada campo pedido tem que existir (no modelo e na cadeira em uso); o resto do look antigo
+      // que deixou de valer (a cor de outro modelo, por exemplo) sai na limpeza
+      for (const key of DESK_LOOK_KEYS) {
+        if (d.reset !== true && key in d && next[key] !== undefined && deskLookFieldError(obj, chair, next as DeskLook, key)) return fail();
+      }
+      const look: DeskLook | null = sanitizeDeskLook(obj, next, chair);
       // só grava se a mesa continua com o mesmo dono (alguém pode ter liberado no meio do caminho)
       const res = await db()
         .update(schema.desks)

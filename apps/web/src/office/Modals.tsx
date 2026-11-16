@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
+  DESK_CHAIR_TYPES,
   DESK_DECOR_TYPES,
+  DESK_RUG_TYPE,
   MAX_DESK_DECOR,
   MAX_INTERACTION_DISTANCE,
   MIN_INTERACTION_DISTANCE,
@@ -13,6 +15,8 @@ import {
   STATUS_LABEL,
   areaCenter,
   can,
+  deskChair,
+  deskModels,
   mapDesks,
   objColor,
   objSetup,
@@ -180,8 +184,37 @@ export function DeskModal({ deskId }: { deskId: string }) {
   );
 }
 
-/** O que a aba "Cor" da Build Tool está mostrando: o objeto que vai ser colocado, um já colocado ou a própria mesa. */
-type BuildTarget = { kind: 'new' } | { kind: 'decor'; id: string } | { kind: 'desk' };
+/** O que a aba "Cor" da Build Tool está mostrando: o objeto que vai ser colocado, um já colocado, a mesa, a cadeira ou o tapete. */
+type BuildTarget = { kind: 'new' } | { kind: 'decor'; id: string } | { kind: 'desk' } | { kind: 'chair' } | { kind: 'rug' };
+
+/** Grade de escolha por miniatura (modelo da mesa, tipo de cadeira), no mesmo visual da aba "Cor". */
+function PickGrid({ title, items, current, onPick, testid, extra }: { title: string; items: { id: string; label: string; icon: string }[]; current: string | null; onPick: (id: string) => void; testid: string; extra?: React.ReactNode }) {
+  return (
+    <div className="w-60 rounded-xl border border-gold/50 bg-panel/95 p-2 shadow-2xl" data-testid={testid}>
+      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gold">{title}</p>
+      <div className="grid grid-cols-4 gap-1">
+        {items.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            title={it.label}
+            aria-label={it.label}
+            aria-pressed={it.id === current}
+            data-testid={`${testid}-${it.id}`}
+            onClick={() => onPick(it.id)}
+            className={cx('grid aspect-square place-items-center rounded-lg border-2 bg-[#5d6270]', it.id === current ? 'border-gold' : 'border-transparent hover:border-line')}
+          >
+            <img src={it.icon} alt="" className="pixel h-12 w-12" />
+          </button>
+        ))}
+        {extra}
+      </div>
+      <p className="mt-1 truncate text-xs">
+        <span className="text-gold">{items.find((i) => i.id === current)?.label ?? t('mydesk.none2', 'Nenhum')}</span>
+      </p>
+    </div>
+  );
+}
 
 export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | 'decor' } = {}) {
   const items = useGame((s) => s.deskItems);
@@ -201,6 +234,9 @@ export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | '
   // a mesa como o escritório vê (com a cor e o setup escolhidos)
   const desk = useMemo(() => (map && me?.deskId ? (mapDesks(map).find((d) => d.id === me.deskId) ?? null) : null), [map, me?.deskId]);
   const look = desks.find((d) => d.id === me?.deskId)?.look ?? null;
+  // a cadeira do assento como o escritório vê (a do mapa, ou a escolhida)
+  const chair = useMemo(() => (map && desk ? deskChair(map, desk) : null), [map, desk]);
+  const models = desk ? deskModels(desk.type) : [];
   const groups = useMemo(() => OBJECT_GROUPS.map((g) => ({ g, types: DESK_DECOR_TYPES.filter((ty) => objectGroup(ty) === g) })).filter((x) => x.types.length), []);
 
   useEffect(() => {
@@ -241,6 +277,15 @@ export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | '
     if (target.kind === 'desk' && desk) {
       return (
         <div className="space-y-2">
+          {models.length > 1 ? (
+            <PickGrid
+              testid="build-model"
+              title={t('mydesk.model', 'Modelo da mesa')}
+              items={models.map((m) => ({ id: m, label: OBJECT_DEFS[m]?.label ?? m, icon: objectIcon(m, undefined, objSetup(desk)?.id, 48, true) }))}
+              current={desk.type}
+              onPick={(id) => net.send('desk:look', { type: id })}
+            />
+          ) : null}
           <ColorTab
             testid="build-color"
             type={desk.type}
@@ -255,6 +300,34 @@ export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | '
               {t('mydesk.deskReset', 'Voltar ao padrão da mesa')}
             </Button>
           ) : null}
+        </div>
+      );
+    }
+    if (target.kind === 'chair' && desk) {
+      return (
+        <div className="space-y-2">
+          <PickGrid
+            testid="build-chair"
+            title={t('mydesk.chair', 'Cadeira')}
+            items={DESK_CHAIR_TYPES.map((c) => ({ id: c, label: OBJECT_DEFS[c]?.label ?? c, icon: objectIcon(c, chair?.type === c ? chair.color : undefined, undefined, 48, true) }))}
+            current={chair?.type ?? null}
+            onPick={(id) => net.send('desk:look', { chair: id })}
+          />
+          {chair && hasVariants(chair.type) ? <ColorTab testid="build-chair-color" type={chair.type} color={chair.color} onColor={(id) => net.send('desk:look', { chairColor: id })} /> : null}
+        </div>
+      );
+    }
+    if (target.kind === 'rug' && desk) {
+      return (
+        <div className="space-y-2" data-testid="build-rug">
+          <ColorTab testid="build-rug-color" type={DESK_RUG_TYPE} color={look?.rug} note={t('mydesk.rugNote', 'Tapete debaixo da mesa e da cadeira.')} onColor={(id) => net.send('desk:look', { rug: id })} />
+          {look?.rug ? (
+            <Button small variant="ghost" data-testid="build-rug-off" onClick={() => net.send('desk:look', { rug: null })}>
+              {t('mydesk.rugOff', 'Tirar o tapete')}
+            </Button>
+          ) : (
+            <p className="text-[11px] text-muted">{t('mydesk.rugNone', 'Sem tapete agora: escolha uma cor para colocar.')}</p>
+          )}
         </div>
       );
     }
@@ -315,7 +388,27 @@ export function MyDeskModal({ initialTab = 'inbox' }: { initialTab?: 'inbox' | '
                     {look ? ` · ${t('mydesk.custom', 'personalizada')}` : ''}
                   </span>
                 </span>
-                <span className="text-xs text-gold">{t('mydesk.deskCustomize', 'Cor e setup')}</span>
+                <span className="text-xs text-gold">{t('mydesk.deskCustomize', 'Modelo, cor e setup')}</span>
+              </button>
+            ) : null}
+            {desk ? (
+              <button type="button" data-testid="build-chair-row" onClick={() => setTarget({ kind: 'chair' })} className={rowClass(target.kind === 'chair')}>
+                <img src={objectIcon(chair?.type ?? 'chair', chair?.color, undefined, 40, true)} alt="" className={cx('pixel h-10 w-10', ICON_TILE, !chair && 'opacity-40')} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{t('mydesk.chair', 'Cadeira')}</span>
+                  <span className="block truncate text-xs text-muted">{chair ? [OBJECT_DEFS[chair.type]?.label, objColor(chair)?.label].filter(Boolean).join(' · ') : t('mydesk.noChair', 'Sem cadeira')}</span>
+                </span>
+                <span className="text-xs text-gold">{t('mydesk.chairCustomize', 'Tipo e cor')}</span>
+              </button>
+            ) : null}
+            {desk ? (
+              <button type="button" data-testid="build-rug-row" onClick={() => setTarget({ kind: 'rug' })} className={rowClass(target.kind === 'rug')}>
+                <img src={objectIcon(DESK_RUG_TYPE, look?.rug, undefined, 40, true)} alt="" className={cx('pixel h-10 w-10', ICON_TILE, !look?.rug && 'opacity-40')} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{t('mydesk.rug', 'Tapete')}</span>
+                  <span className="block truncate text-xs text-muted">{look?.rug ? objColor({ type: DESK_RUG_TYPE, color: look.rug })?.label : t('mydesk.noRug', 'Sem tapete')}</span>
+                </span>
+                <span className="text-xs text-gold">{t('mydesk.rugCustomize', 'Cor')}</span>
               </button>
             ) : null}
             <p className="text-xs text-muted">{t('mydesk.decorHelp', 'Escolha um objeto e depois clique na área da sua mesa. Limite de {{n}} objetos.', { n: MAX_DESK_DECOR })}</p>

@@ -89,6 +89,11 @@ Dentro do escritório: **⋯ → Mapmaker e Build Tool**.
   pintada com 1 fileira aparece fina. A porta vai na fileira de baixo do vão e ocupa as duas.
 - **Áreas** — arraste um retângulo para criar uma **área privada** (sala, mesa de conversa) ou um
   **palco**. Defina nome, capacidade, "sala de reunião" (permite notas) e "somente equipe".
+  Em **Áreas das mesas** ficam as áreas de conversa de cada mesa de trabalho (por padrão 2×2 com a
+  cadeira). Selecione uma para renomear, mudar a capacidade, marcar "somente equipe" ou "sala de
+  reunião", desenhar outra forma com **Marcar área** (arraste para aumentar; com Alt, para
+  diminuir), voltar ao padrão ou tirar a área da mesa. Isso fica gravado na mesa: se ela mudar de
+  lugar no Mapmaker, a área vai junto. Uma área de mesa não pode invadir outra área privada.
 - **Portal** — coloque o objeto, selecione e clique em "Clicar no destino".
 - **Pré-visualizar** esconde as marcações. **Validar** confere se tudo é alcançável.
   **Publicar** envia a nova versão para todos na hora. Em **Versões** dá para restaurar qualquer
@@ -103,10 +108,18 @@ Em **⋯ → Minha mesa → Decorar**, cada funcionário:
 
 - coloca objetos na própria mesa e em volta dela (objetos de mesa, plantas, quadros), escolhendo a
   cor de cada um na aba "Cor";
-- troca a **cor e o setup da própria mesa**. Isso não altera o mapa publicado: a escolha vale
-  enquanto a mesa for da pessoa. Uma mesa com a escolha do ocupante aparece com um aviso no Mapmaker;
+- troca o **modelo da mesa** (entre os do mesmo tamanho: reta, de pé, de vidro, executiva, gamer,
+  bancada), a **cor e o setup**, a **cadeira** (de escritório, gamer, executiva ou banqueta, com a
+  cor) e o **tapete** debaixo da mesa (com a cor, ou sem). Isso não altera o mapa publicado nem a
+  passagem: a escolha vale enquanto a mesa for da pessoa. Uma mesa com a escolha do ocupante
+  aparece com um aviso no Mapmaker;
 - usa **"Deixar o posto"** para liberar a mesa. A mesa volta à cor e ao setup do mapa; os objetos
   colocados continuam nela. O mesmo acontece quando a pessoa é removida ou troca de mesa.
+
+O funcionário **só** mexe na própria mesa (objetos na área verde dela, modelo, cor, setup, cadeira e
+tapete) e no próprio avatar. Todo o resto do mapa é do Mapmaker (Dono e Admin), e o servidor recusa
+qualquer outra mudança, mesmo vinda de um cliente adulterado. As mesas da sala dos sócios só podem
+ser pegas por Dono e Admin.
 
 ### Avatar e animações
 

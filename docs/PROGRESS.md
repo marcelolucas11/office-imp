@@ -1,6 +1,6 @@
 # Progresso
 
-Atualizado em 15/11/2026. Versão 1.1.0.
+Atualizado em 16/11/2026. Versão 1.3.0.
 
 ## Pronto e verificado
 

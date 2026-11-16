@@ -29,6 +29,13 @@
     "typescript-eslint": "^8.24.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "electron", "@parcel/watcher", "msgpackr-extract"]
+    "onlyBuiltDependencies": ["esbuild", "electron", "@parcel/watcher", "msgpackr-extract"],
+    "//overrides": "Correções de segurança em dependências indiretas (colyseus e excalidraw): pnpm audit limpo.",
+    "overrides": {
+      "nanoid@>=3 <4": "^3.3.18",
+      "nanoid@>=4 <6": "^5.1.16",
+      "lodash-es": "^4.18.1",
+      "katex": "^0.18.2"
+    }
   }
 }

@@ -3,6 +3,40 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.3.0 — 16/11/2026 — Áreas das mesas no Mapmaker, mesa do funcionário e auditoria
+
+- **Áreas das mesas no Mapmaker.** A aba "Áreas" agora lista, em "Áreas das mesas", a área de
+  conversa de cada mesa de trabalho. Dá para renomear ("Mesa do João"), mudar a capacidade, marcar
+  "somente equipe" ou "sala de reunião", aumentar ou diminuir com "Marcar área" (arraste; com Alt,
+  diminui), voltar ao padrão 2×2 ou tirar a área da mesa. A configuração fica gravada na mesa e anda
+  junto quando a mesa muda de lugar. A validação recusa área de mesa por cima de outra área privada.
+- **Mesa do funcionário: modelo, cadeira e tapete.** Em Minha mesa → Decorar, além de cor e setup,
+  cada pessoa escolhe o modelo da mesa (entre os do mesmo tamanho), a cadeira (tipo e cor) e um
+  tapete debaixo da mesa (cor, ou sem). Vale só enquanto a mesa for dela e não muda o mapa publicado
+  nem a passagem.
+- **Funcionário mexe só na própria mesa e no avatar.** O servidor já recusava qualquer mudança fora
+  da mesa; agora as mesas da sala dos sócios só podem ser pegas por Dono e Admin, e o pôster da mesa
+  só aceita imagem enviada ao próprio servidor (link externo vazaria o IP de quem olha).
+- **Performance.** O servidor entrega o app já comprimido (brotli/gzip gerados no build): o código
+  do escritório cai de 2,3 MB para 0,47 MB na rede, sem depender do proxy da VPS comprimir. Os
+  arquivos com hash ficam no cache do navegador e do app por 1 ano. No app desktop, o mapa para de
+  ser redesenhado com a janela escondida, minimizada ou no Modo Mini (antes seguia a 60 quadros por
+  segundo sem ninguém ver).
+- **Segurança.** Limite de mensagens por pessoa no tempo real (chat, recados, decoração, quadro…);
+  o IP usado no limite de login só vem de proxies da própria máquina ou da rede privada
+  (`TRUST_PROXY`); teto de tentativas de login por usuário somando todos os IPs; token do
+  atualizador comparado em tempo constante; dependências atualizadas (nodemailer 10, @fastify/static
+  10, drizzle-orm 0.45, zod 4) — o `pnpm audit` passou de 45 alertas (18 altos) para só o nanoid
+  antigo dentro do Colyseus, que não é explorável aqui. Relatório completo em
+  [docs/AUDITORIA-1.3.0.md](docs/AUDITORIA-1.3.0.md).
+
+### Antes de atualizar
+
+- **Nada manual.** Mapas, mesas e personalizações salvas continuam valendo. A variável nova
+  `TRUST_PROXY` é opcional: vazia, o app confia no proxy da própria VPS (nginx no host ou
+  Traefik/Caddy em Docker), que é o caso da instalação atual.
+- **App desktop:** a pausa do mapa com a janela escondida chega com a atualização automática do app.
+
 ## 1.2.2 — 15/11/2026 — Compartilhar a tela no Modo Mini
 
 - **Botão de compartilhar a tela no Modo Mini.** A barrinha da janela flutuante ganhou o botão de

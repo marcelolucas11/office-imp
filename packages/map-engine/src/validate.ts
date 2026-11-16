@@ -3,6 +3,8 @@ import {
   MAX_MAP_SIZE,
   OBJECT_DEFS,
   buildCollision,
+  deskAreaCustomRects,
+  deskAreas,
   deskSeat,
   floodFill,
   mapDesks,
@@ -81,6 +83,22 @@ export function validateOffice(map: OfficeMap): ValidationResult {
         errors.push(`As áreas privadas "${privates[i].name}" e "${privates[j].name}" se sobrepõem.`);
       }
     }
+  }
+  // áreas das mesas desenhadas no Mapmaker: não podem invadir outra área privada nem outra mesa
+  const customDesks = new Set(mapDesks(map).filter((d) => deskAreaCustomRects(d, map)).map((d) => d.id));
+  const derived = deskAreas(map);
+  for (const a of derived) {
+    if (!a.deskId || !customDesks.has(a.deskId)) continue;
+    for (const p of privates) {
+      if (a.rects.some((r) => p.rects.some((q) => rectsOverlap(r, q)))) errors.push(`A área "${a.name}" invade a área privada "${p.name}".`);
+    }
+    for (const b of derived) {
+      if (b === a || (b.deskId && customDesks.has(b.deskId) && b.id < a.id)) continue;
+      if (a.rects.some((r) => b.rects.some((q) => rectsOverlap(r, q)))) errors.push(`As áreas "${a.name}" e "${b.name}" se sobrepõem.`);
+    }
+    let reachable = false;
+    for (const r of a.rects) for (let y = r.y; y < r.y + r.h && !reachable; y++) for (let x = r.x; x < r.x + r.w; x++) if (reach[y * map.width + x] === 1) { reachable = true; break; }
+    if (!reachable) errors.push(`A área "${a.name}" não é alcançável a partir da entrada.`);
   }
   return { ok: errors.length === 0, errors, warnings, desks: mapDesks(map).length };
 }

@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('officeImp', {
   onOpenSettings: (cb: () => void) => on('open-settings', cb),
   onStatusShortcut: (cb: (status: string) => void) => on('status-shortcut', cb),
   onMiniChanged: (cb: (on_: boolean) => void) => on('mini-changed', cb),
+  /** A janela principal ficou visível (true) ou foi escondida/minimizada (false). */
+  onWindowVisible: (cb: (visible: boolean) => void) => on('window-visible', cb),
   checkUpdates: (auto: boolean) => ipcRenderer.send('check-updates', auto),
   installUpdateNow: () => ipcRenderer.send('install-update-now'),
   onUpdateState: (cb: (state: { status: string; version?: string; message?: string }) => void) => on('update-state', cb),

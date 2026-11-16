@@ -47,7 +47,7 @@ export function cspDirectives() {
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: config.logLevel === 'silent' ? false : { level: config.logLevel },
-    trustProxy: true,
+    trustProxy: config.trustProxy,
     bodyLimit: 12 * 1024 * 1024,
   });
 
@@ -92,7 +92,19 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // opcional: servir o cliente web pelo próprio servidor (dev/E2E ou instalação de um container só)
   if (config.webDist && fs.existsSync(path.join(config.webDist, 'index.html'))) {
-    await app.register(fastifyStatic, { root: path.resolve(config.webDist), wildcard: false, maxAge: '1h' });
+    await app.register(fastifyStatic, {
+      root: path.resolve(config.webDist),
+      wildcard: false,
+      // .br/.gz gerados no build: entrega comprimido sem gastar CPU e sem depender do proxy
+      preCompressed: true,
+      cacheControl: false,
+      setHeaders(res, file) {
+        // arquivos com hash no nome nunca mudam: o navegador e o app guardam de vez
+        if (/[\\/]assets[\\/]/.test(file)) res.header('cache-control', 'public, max-age=31536000, immutable');
+        else if (/\.html$/.test(file)) res.header('cache-control', 'no-cache');
+        else res.header('cache-control', 'public, max-age=86400');
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
       const pathname = req.url.split('?')[0];
       // API, tempo real e arquivos (com extensão) que não existem respondem 404; o resto é rota do app (SPA)
