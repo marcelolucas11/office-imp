@@ -196,9 +196,11 @@ function pickSource(sources: Electron.DesktopCapturerSource[]): Promise<Electron
   return new Promise((resolve) => {
     if (!win || !sources.length) return resolve(null);
     if (sources.length === 1) return resolve(sources[0]);
+    // no Modo Mini a janela principal fica escondida: um modal preso a ela não apareceria (no Mac vira folha
+    // da janela invisível), então o seletor abre solto e por cima de tudo
+    const hidden = !win.isVisible() || win.isMinimized();
     const picker = new BrowserWindow({
-      parent: win,
-      modal: true,
+      ...(hidden ? { alwaysOnTop: true } : { parent: win, modal: true }),
       width: 760,
       height: 560,
       backgroundColor: '#0b0b0d',
