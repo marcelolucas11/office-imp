@@ -72,6 +72,34 @@ const D_FLOOR = 0;
 const D_WINDOW = 0.5;
 /** De quanto em quanto tempo o relógio das animações de contexto anda (ms). */
 const ANIM_TICK_MS = 100;
+
+/**
+ * Ritmo do desenho do mapa, em quadros por segundo. Parado, nada muda entre um passo das animações
+ * de contexto e o próximo (a cada 100 ms), então desenhar 10 vezes por segundo mostra exatamente o
+ * mesmo que 60 e gasta 6 vezes menos. Só quando algo anda (você, outra pessoa, o zoom, um efeito) ou
+ * logo depois de mexer no teclado/mouse é que o mapa volta para 60 (ou 30, com o foco em outro app).
+ */
+const PACE = { active: 60, others: 30, idle: 10, bgActive: 30, bgIdle: 5 } as const;
+/** Quanto tempo o mapa fica no ritmo cheio depois de uma tecla, clique, rolagem ou movimento do mouse. */
+const BUSY_MS = 1500;
+let busyUntil = 0;
+let pacedGame: Phaser.Game | null = null;
+
+/** Muda o ritmo do desenho na hora (o próximo quadro da tela já segue o novo ritmo). */
+function setPace(game: Phaser.Game, fps: number) {
+  const loop = game.loop as Phaser.Core.TimeStep & { _limitRate: number };
+  // folga para o relógio da tela: a 60 Hz, 10 qps = exatamente a cada 6 quadros (não 7)
+  const rate = fps >= 60 ? 1000 / 60 - 2 : 1000 / fps - 4;
+  if (loop._limitRate === rate) return;
+  loop._limitRate = rate;
+  loop.fpsLimit = fps;
+}
+
+/** Interação com o mapa: ritmo cheio agora e por mais `BUSY_MS`. */
+export function kickPace() {
+  busyUntil = performance.now() + BUSY_MS;
+  if (pacedGame) setPace(pacedGame, document.hasFocus() ? PACE.active : PACE.bgActive);
+}
 const D_RUG = 2;
 const D_WORLD = 10;
 const D_DIM = 500000;
@@ -893,12 +921,37 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
+    this.step(time, delta);
+    this.pace();
+  }
+
+  /** Escolhe o ritmo do próximo quadro: cheio só enquanto algo se mexe na tela. */
+  private pace() {
+    const g = useGame.getState();
+    const me = this.avas.get(g.meId);
+    const cam = this.cameras.main;
+    const mine = performance.now() < busyUntil || Boolean(me?.moving) || Boolean(this.path?.length) || Boolean(g.following) || cam.zoomEffect.isRunning || cam.panEffect.isRunning || this.tweens.getTweens().length > 0;
+    let others = false;
+    if (!mine) {
+      for (const a of this.avas.values()) {
+        if (a.moving || a.queue.length) {
+          others = true;
+          break;
+        }
+      }
+    }
+    const focused = document.hasFocus();
+    const fps = mine ? (focused ? PACE.active : PACE.bgActive) : others ? PACE.others : focused ? PACE.idle : PACE.bgIdle;
+    setPace(this.game, fps);
+  }
+
+  private step(time: number, delta: number) {
     this.updateBounds();
     // a janela cresceu além da faixa com árvores (escritório pequeno em tela grande): refaz o exterior
     if (this.map && this.grass.length && this.neededExteriorMargin() > this.extMargin) this.buildExterior();
     this.syncGrass();
     // animações de contexto: um passo a cada 100 ms (trocar quadro não redesenha nada)
-    if (time - this.animAt >= ANIM_TICK_MS) {
+    if (time - this.animAt >= ANIM_TICK_MS - 8) {
       this.animAt = time;
       this.tickAnims();
     }
@@ -1168,6 +1221,13 @@ export function textureStats(): { count: number; bytes: number; objects: number 
   return { count, bytes, objects: scene ? scene.children.length : 0 };
 }
 
+/** Conferência: quantos quadros o mapa desenhou por segundo de verdade (o ritmo muda sozinho). */
+export function loopStats(): { fps: number; limit: number; running: boolean } | null {
+  const g = activeGame;
+  if (!g) return null;
+  return { fps: g.loop.actualFps, limit: g.loop.fpsLimit, running: g.loop.running };
+}
+
 export function createGame(parent: HTMLElement): { destroy: () => void } {
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   const size = () => ({ w: Math.max(320, Math.round(parent.clientWidth * dpr)), h: Math.max(240, Math.round(parent.clientHeight * dpr)) });
@@ -1185,23 +1245,61 @@ export function createGame(parent: HTMLElement): { destroy: () => void } {
     // Só o canvas recebe clique: o que está por cima dele fica com o clique sozinho.
     input: { windowEvents: false },
     scale: { mode: Phaser.Scale.NONE, width: s.w, height: s.h, zoom: 1 / dpr },
+    // com limite o Phaser pode pular quadros da tela: o ritmo de verdade é escolhido a cada quadro (pace)
+    fps: { limit: 60 },
     scene: [OfficeScene],
   });
+  pacedGame = game;
+  setPace(game, PACE.active);
   const ro = new ResizeObserver(() => {
     const n = size();
     game.scale.resize(n.w, n.h);
   });
   ro.observe(parent);
-  // app desktop: com a janela escondida (Modo Mini, bandeja) ou minimizada, o mapa não é desenhado.
+  // O mapa não é desenhado quando ninguém o vê: no app desktop com a janela escondida (Modo Mini,
+  // bandeja) ou minimizada, e no Modo Mini/simplificado dentro da página (as câmeras cobrem tudo).
   // No navegador o próprio Phaser já pausa quando a aba fica em segundo plano.
+  let winVisible = true;
+  const covered = (st: ReturnType<typeof useGame.getState>) => st.simplified || (st.mini && !st.miniExt);
+  const apply = () => {
+    if (winVisible && !covered(useGame.getState())) {
+      if (!game.loop.running) {
+        game.loop.wake(true);
+        kickPace();
+      }
+    } else game.loop.sleep();
+  };
   const offVisible = desktop?.onWindowVisible?.((visible) => {
-    if (visible) game.loop.wake();
-    else game.loop.sleep();
+    winVisible = visible;
+    apply();
   });
+  const offStore = useGame.subscribe((st, prev) => {
+    if (covered(st) !== covered(prev)) apply();
+  });
+  // tecla, clique, rolagem e mouse em cima do mapa: ritmo cheio na hora (sem esperar o próximo passo lento)
+  let lastMove = 0;
+  const onKey = () => kickPace();
+  const onMove = () => {
+    const now = performance.now();
+    if (now - lastMove < 200) return;
+    lastMove = now;
+    kickPace();
+  };
+  window.addEventListener('keydown', onKey, true);
+  parent.addEventListener('pointerdown', onKey, true);
+  parent.addEventListener('wheel', onKey, { capture: true, passive: true });
+  parent.addEventListener('pointermove', onMove, { capture: true, passive: true });
   activeGame = game;
+  apply();
   return {
     destroy: () => {
       offVisible?.();
+      offStore();
+      window.removeEventListener('keydown', onKey, true);
+      parent.removeEventListener('pointerdown', onKey, true);
+      parent.removeEventListener('wheel', onKey, true);
+      parent.removeEventListener('pointermove', onMove, true);
+      if (pacedGame === game) pacedGame = null;
       ro.disconnect();
       if (activeGame === game) activeGame = null;
       game.destroy(true);

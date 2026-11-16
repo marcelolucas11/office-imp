@@ -629,6 +629,13 @@ describe('tempo real', () => {
     await sleep(200);
     const again = (await admin.http.get(`/api/offices/${officeId}/analytics`)).json;
     expect(again.rows.find((r: any) => r.name === 'Ana').status.AWAY).toBeGreaterThan(0);
+    // "Ausente" é manual: escolher outro status tira o Ausente
+    a.send('status', { status: 'BUSY' });
+    await sleep(200);
+    const back = (await admin.http.get(`/api/offices/${officeId}/analytics`)).json;
+    expect(back.rows.find((r: any) => r.name === 'Ana').current.status).toBe('BUSY');
+    a.send('status', { status: 'AVAILABLE' });
+    await sleep(100);
     await adm.leave();
   });
 

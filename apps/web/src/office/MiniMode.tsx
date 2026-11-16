@@ -116,6 +116,7 @@ export function MiniMode() {
   const mini = useGame((s) => s.mini);
   const phase = useGame((s) => s.phase);
   const myStatus = useGame((s) => s.players[s.meId]?.status);
+  const myAway = useGame((s) => Boolean(s.players[s.meId]?.away));
   const [target, setTarget] = useState<Target | null>(null);
   const on = mini && phase === 'online';
   const dnd = myStatus === 'DND';
@@ -123,8 +124,8 @@ export function MiniMode() {
   // o app desktop usa o status para esconder o Modo Mini em "Não incomodar" (inclusive o status que volta
   // do servidor ao entrar, que não passa por net.setStatus)
   useEffect(() => {
-    if (myStatus) desktop?.setStatus(myStatus);
-  }, [myStatus]);
+    if (myStatus) desktop?.setStatus(myAway ? 'AWAY' : myStatus);
+  }, [myStatus, myAway]);
 
   // "Não incomodar": no app desktop a janela mini fica escondida (o app cuida disso e ela volta quando o
   // status muda). No navegador a janela PiP não reabre sozinha, então o Modo Mini acaba.
@@ -363,11 +364,12 @@ function MiniContent({ target }: { target: Target }) {
 }
 
 /** Menu de status (e fechar) usado no ícone e nas câmeras. */
-function StatusMenu({ me, onDone, extra }: { me: { status: Status }; onDone: () => void; extra?: React.ReactNode }) {
+function StatusMenu({ me, onDone, extra }: { me: { status: Status; away: boolean }; onDone: () => void; extra?: React.ReactNode }) {
+  const current: Status | 'AWAY' = me.away ? 'AWAY' : me.status;
   const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
   return (
-    <div className="oi-pop w-[220px] rounded-2xl border border-line bg-panel/95 p-1.5 text-stone-100 shadow-[0_10px_28px_rgba(0,0,0,0.6)] backdrop-blur" style={noDrag} data-testid="mini-status-menu">
-      {(['AVAILABLE', 'BUSY', 'DND'] as Status[]).map((s) => (
+    <div className="oi-pop w-[220px] rounded-2xl border border-line bg-panel p-1.5 text-stone-100 shadow-[0_10px_28px_rgba(0,0,0,0.6)]" style={noDrag} data-testid="mini-status-menu">
+      {(['AVAILABLE', 'BUSY', 'DND', 'AWAY'] as const).map((s) => (
         <button
           key={s}
           type="button"
@@ -376,14 +378,16 @@ function StatusMenu({ me, onDone, extra }: { me: { status: Status }; onDone: () 
             net.setStatus(s);
             onDone();
           }}
-          className={cx('block w-full rounded-xl px-2.5 py-2 text-left hover:bg-panel-3', me.status === s && 'bg-panel-3')}
+          className={cx('block w-full rounded-xl px-2.5 py-2 text-left hover:bg-panel-3', current === s && 'bg-panel-3')}
         >
           <span className="flex items-center gap-2.5">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS_COLOR[s] }} />
             <span className="flex-1 text-[13px] font-medium">{STATUS_LABEL[s]}</span>
-            <kbd className="text-[10px] text-muted">
-              {MOD}+{STATUS_KEYS[s]}
-            </kbd>
+            {STATUS_KEYS[s] ? (
+              <kbd className="text-[10px] text-muted">
+                {MOD}+{STATUS_KEYS[s]}
+              </kbd>
+            ) : null}
           </span>
           {s === 'DND' ? <span className="mt-0.5 block pl-5 text-[11px] leading-snug text-muted">{t('mini.dndHelp2', 'Ninguém poderá falar com você e o Modo Mini some.')}</span> : null}
         </button>
@@ -463,7 +467,7 @@ function MiniIcon({ target, size, setSize, max }: { target: Target; size: number
       ) : null}
 
       <div
-        className={cx('relative flex flex-col items-center gap-1.5 rounded-2xl border p-1.5 transition-colors duration-150', show ? 'border-white/15 bg-panel/90 shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur' : 'border-transparent bg-transparent')}
+        className={cx('relative flex flex-col items-center gap-1.5 rounded-2xl border p-1.5 transition-colors duration-150', show ? 'border-white/15 bg-panel/95 shadow-[0_10px_28px_rgba(0,0,0,0.55)]' : 'border-transparent bg-transparent')}
         data-testid="mini-icon"
       >
         {frame.edges(size, perY, ICON_MIN, max, setSize)}
@@ -628,7 +632,7 @@ function MiniTiles({ target, tileW, setTileW }: { target: Target; tileW: number;
               {tile.avatar ? <img src={tile.avatar} alt="" className="pixel h-14" /> : <span className="text-2xl text-muted">{tile.name.slice(0, 1).toUpperCase()}</span>}
             </div>
           )}
-          <span className="absolute bottom-1.5 left-1.5 flex max-w-[85%] items-center gap-1 rounded-lg bg-black/65 px-1.5 py-0.5 text-[11px] font-medium backdrop-blur-sm">
+          <span className="absolute bottom-1.5 left-1.5 flex max-w-[85%] items-center gap-1 rounded-lg bg-black/70 px-1.5 py-0.5 text-[11px] font-medium">
             {tile.screen ? <Emo e="🖥" size={14} /> : tile.mic === false ? <MicOff /> : null}
             <span className="truncate">{tile.name}</span>
           </span>
@@ -650,7 +654,7 @@ function MiniTiles({ target, tileW, setTileW }: { target: Target; tileW: number;
       ) : null}
 
       {/* barra de controles: arrastar, microfone, câmera, tela, status e voltar */}
-      <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-panel/90 p-1 shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur">
+      <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-panel/95 p-1 shadow-[0_10px_28px_rgba(0,0,0,0.55)]">
         {desk ? (
           <span {...drag} className="grid h-8 w-5 shrink-0 cursor-grab touch-none place-items-center text-muted active:cursor-grabbing" title={t('mini.drag', 'Arraste para mover')} data-testid="mini-drag">
             <DragDots />

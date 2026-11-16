@@ -300,6 +300,20 @@ test('status: menu, atalhos e Não incomodar bloqueando a conexão', async () =>
   await emp.keyboard.press(`${MOD}+o`);
   await expect(emp.getByTestId('status-label')).toHaveText('Disponível');
   await expect.poll(() => peerIds(owner)).toEqual([empId]);
+
+  // "Ausente" só manual: escolhido no menu, fica até escolher outro status (mexer no mouse não tira)
+  await emp.getByTestId('status-button').click();
+  await emp.getByTestId('status-AWAY').click();
+  await expect(emp.getByTestId('status-label')).toHaveText('Ausente');
+  await expect.poll(() => game(owner, `g.players['${empId}'].away`)).toBe(true);
+  await emp.mouse.move(300, 300);
+  await emp.mouse.move(500, 400);
+  await emp.keyboard.press('Shift');
+  await emp.waitForTimeout(500);
+  await expect(emp.getByTestId('status-label')).toHaveText('Ausente');
+  await emp.keyboard.press(`${MOD}+o`);
+  await expect(emp.getByTestId('status-label')).toHaveText('Disponível');
+  await expect.poll(() => game(owner, `g.players['${empId}'].away`)).toBe(false);
 });
 
 test('preferências: “Reduzir animações” liga e desliga e fica salva no navegador', async () => {

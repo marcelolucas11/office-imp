@@ -615,9 +615,10 @@ export class OfficeRoom extends Room {
       this.broadcast('tp', { id: p.state.id, x: target.x, y: target.y, e: p.epoch });
     });
 
+    // escolher um status tira o "Ausente" (que é só manual, pela mensagem 'away')
     this.on('status', (p, d) => {
       if (!STATUSES.includes(d.status)) return;
-      this.patch(p, { status: d.status });
+      this.patch(p, p.state.away ? { status: d.status, away: false } : { status: d.status });
       this.tracker.setStatus(p.state.id, this.tracked(p));
       this.avDirty = true;
     });

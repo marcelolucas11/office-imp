@@ -12,7 +12,7 @@ import { trayIcon } from './tray-icon';
 declare const __MAC_SIGNED__: boolean;
 declare const __SERVER_URL__: string;
 
-type Status = 'AVAILABLE' | 'BUSY' | 'DND';
+type Status = 'AVAILABLE' | 'BUSY' | 'DND' | 'AWAY';
 interface UpdateState {
   status: string;
   version?: string;
@@ -21,8 +21,9 @@ interface UpdateState {
 
 const isMac = process.platform === 'darwin';
 const DEFAULT_URL = (__SERVER_URL__ || branding.serverUrl).replace(/\/$/, '');
-const STATUS_LABEL: Record<Status, string> = { AVAILABLE: 'Disponível', BUSY: 'Ocupado', DND: 'Não incomodar' };
-const STATUS_RGB: Record<Status, [number, number, number]> = { AVAILABLE: [52, 211, 153], BUSY: [251, 191, 36], DND: [239, 68, 68] };
+// "Ausente" é só manual: a pessoa escolhe e ele fica até escolher outro status
+const STATUS_LABEL: Record<Status, string> = { AVAILABLE: 'Disponível', BUSY: 'Ocupado', DND: 'Não incomodar', AWAY: 'Ausente' };
+const STATUS_RGB: Record<Status, [number, number, number]> = { AVAILABLE: [52, 211, 153], BUSY: [251, 191, 36], DND: [239, 68, 68], AWAY: [156, 163, 175] };
 const NORMAL_MIN: [number, number] = [940, 600];
 
 let win: BrowserWindow | null = null;
@@ -260,8 +261,8 @@ function sendStatus(s: Status) {
 }
 
 function statusItems(): MenuItemConstructorOptions[] {
-  const key: Record<Status, string> = { AVAILABLE: 'O', BUSY: 'I', DND: 'U' };
-  return (Object.keys(STATUS_LABEL) as Status[]).map((s) => ({ label: STATUS_LABEL[s], type: 'radio' as const, checked: status === s, accelerator: `CmdOrCtrl+${key[s]}`, click: () => sendStatus(s) }));
+  const key: Partial<Record<Status, string>> = { AVAILABLE: 'O', BUSY: 'I', DND: 'U' };
+  return (Object.keys(STATUS_LABEL) as Status[]).map((s) => ({ label: STATUS_LABEL[s], type: 'radio' as const, checked: status === s, ...(key[s] ? { accelerator: `CmdOrCtrl+${key[s]}` } : {}), click: () => sendStatus(s) }));
 }
 
 function buildMenu() {

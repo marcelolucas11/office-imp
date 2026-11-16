@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { areaCenter, isAdminRole, type Status } from '@office-imp/shared';
+import { areaCenter, isAdminRole, type Status, type TrackedStatus } from '@office-imp/shared';
 import { Button, Spinner } from '@office-imp/ui';
 import { bus } from '../game/bus';
 import { net } from '../game/net';
@@ -74,14 +74,13 @@ function kickText(reason: string | null): string {
   }
 }
 
-/** Atalhos de status, ausência automática, sons e avisos de atualização. */
+/** Atalhos de status, sons e avisos de atualização. "Ausente" é só manual (nunca automático). */
 function useOfficeBehaviors() {
-  const awayMinutes = useGame((s) => s.office?.settings.awayMinutes ?? 10);
   const forceUpdateAt = useGame((s) => s.forceUpdateAt);
   const [left, setLeft] = useState<number | null>(null);
 
   useEffect(() => {
-    const setStatus = (s: Status) => {
+    const setStatus = (s: TrackedStatus) => {
       if (useGame.getState().phase !== 'online') return;
       net.setStatus(s);
     };
@@ -94,40 +93,18 @@ function useOfficeBehaviors() {
       setStatus(s);
     };
     window.addEventListener('keydown', onKey, true);
-    const offDesk = desktop?.onStatusShortcut((s) => setStatus(s as Status));
+    const offDesk = desktop?.onStatusShortcut((s) => setStatus(s as TrackedStatus));
     const offMini = desktop?.onMiniChanged((on) => useGame.setState({ mini: on }));
+    const offVisible = desktop?.onWindowVisible?.((visible) => useGame.setState({ winHidden: !visible }));
     const offSound = bus.on('sound', (k) => playSound(k));
     return () => {
       window.removeEventListener('keydown', onKey, true);
       offDesk?.();
       offMini?.();
+      offVisible?.();
       offSound();
     };
   }, []);
-
-  // ausência automática: sem teclado, mouse ou movimento pelo tempo configurado
-  useEffect(() => {
-    let last = Date.now();
-    const mark = () => {
-      last = Date.now();
-      const me = useGame.getState().me();
-      if (me?.away) net.send('away', { away: false });
-    };
-    const evs = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'] as const;
-    for (const ev of evs) window.addEventListener(ev, mark, { passive: true });
-    const offStep = bus.on('me:step', mark);
-    const offAct = bus.on('activity', mark);
-    const id = window.setInterval(() => {
-      const me = useGame.getState().me();
-      if (me && !me.away && Date.now() - last > awayMinutes * 60000) net.send('away', { away: true });
-    }, 15000);
-    return () => {
-      for (const ev of evs) window.removeEventListener(ev, mark);
-      offStep();
-      offAct();
-      clearInterval(id);
-    };
-  }, [awayMinutes]);
 
   // "Atualizar todos agora": contagem regressiva e recarga
   useEffect(() => {

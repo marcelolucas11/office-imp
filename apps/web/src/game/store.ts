@@ -62,6 +62,8 @@ export interface GameState {
   mini: boolean;
   /** O Modo Mini está numa janela à parte (app desktop ou Picture-in-Picture do navegador). */
   miniExt: boolean;
+  /** App desktop: a janela principal está escondida ou minimizada (Modo Mini, bandeja). */
+  winHidden: boolean;
   minimap: boolean;
   buildMode: string | null;
   buildProps: Record<string, any> | null;
@@ -110,6 +112,7 @@ export const useGame = create<GameState>((set, get) => ({
   simplified: false,
   mini: false,
   miniExt: false,
+  winHidden: false,
   minimap: true,
   buildMode: null,
   buildProps: null,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { Client, type Room } from 'colyseus.js';
-import { DIRS, applyDeskLooks, deskLooksKey, type AvView, type ChatMessage, type DeskInfo, type DeskItem, type MapObject, type OfficeMap, type PlayerState, type Status } from '@office-imp/shared';
+import { DIRS, applyDeskLooks, deskLooksKey, type AvView, type ChatMessage, type DeskInfo, type DeskItem, type MapObject, type OfficeMap, type PlayerState, type TrackedStatus } from '@office-imp/shared';
 import { api, ApiError, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { desktop, toast } from '../lib/session';
@@ -307,8 +307,10 @@ class OfficeNet {
     } catch {}
   }
 
-  setStatus(status: Status) {
-    this.send('status', { status });
+  /** Muda o status. "Ausente" é só manual: escolher qualquer outro status tira o Ausente. */
+  setStatus(status: TrackedStatus) {
+    if (status === 'AWAY') this.send('away', { away: true });
+    else this.send('status', { status });
     desktop?.setStatus(status);
   }
 

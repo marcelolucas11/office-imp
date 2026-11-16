@@ -3,6 +3,35 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.6.0 — 16/11/2026 — Ausente manual e app mais leve
+
+- **"Ausente" só manual.** O app não marca mais ninguém como ausente sozinho (antes, 10 minutos sem
+  mexer na janela do escritório deixavam a pessoa "Ausente", inclusive no Modo Mini e com a câmera
+  ligada, e escolher outro status não tirava). Agora "Ausente" é uma opção do menu de status (na barra,
+  no Modo Mini, no menu Status e na caixinha da barra de menus do app desktop) e fica até a pessoa
+  escolher outro status — por exemplo com ⌘/Ctrl + O. A opção "Ausente depois de (minutos)" saiu das
+  configurações do escritório.
+- **Mapa desenhado só quando muda.** Parado, o mapa é desenhado 10 vezes por segundo em vez de 60 (as
+  animações das plantas, nuvens e relógios andam a cada 100 ms, então a tela fica idêntica). Volta para
+  60 na hora em que alguém anda, ao dar zoom ou ao mexer no teclado/mouse; com o foco em outro app,
+  fica em 5 parado e 30 com movimento. Na medição da cena parada, o processamento caiu cerca de 80%.
+- **Modo Mini sem o escritório por trás.** No Modo Mini (e no modo simplificado) o mapa para de ser
+  desenhado por completo. No app desktop, os vídeos e o mini-mapa da janela escondida também param: as
+  câmeras ficam só na janelinha do Modo Mini.
+- **Câmera no chip de vídeo.** A câmera passa a usar H.264, que no Mac (e na maioria dos PCs com
+  Windows) é codificado e decodificado pelo chip de vídeo, e não mais pelo processador (VP8). A câmera
+  também passa a 24 quadros por segundo (antes 30).
+- **Filtro de voz pausado com o microfone desligado.** A redução de ruído (rede neural) seguia
+  processando o silêncio do microfone mudo o tempo todo; agora ela para e volta junto com o microfone.
+- **Modo Mini mais leve para a placa de vídeo.** Sem efeito de desfoque por cima dos vídeos e dos
+  controles do Modo Mini (o desfoque era recalculado a cada quadro do vídeo).
+
+### Antes de atualizar
+
+- **Atualize o servidor e os apps (Mac e Windows)** pelos botões de sempre. A opção "Ausente" no menu
+  Status e na caixinha da barra de menus precisa do app desktop novo; no app antigo, ela aparece no menu
+  de status dentro do escritório e no Modo Mini.
+
 ## 1.5.2 — 16/11/2026 — Painel do ADM sem sair do escritório
 
 - **Painel do ADM dentro do escritório.** Em "⋯ Mais opções → Painel do ADM", o painel abre por cima

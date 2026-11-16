@@ -31,8 +31,8 @@ Uma linha por pessoa (Donos e Admins incluídos), atualizada ao vivo:
 
 - **Online** — tempo dentro do escritório. **Ativo** — online menos o tempo ausente.
 - **Status** — barra com o tempo em Disponível (verde), Ocupado (amarelo), Não incomodar (vermelho)
-  e Ausente (cinza). A pessoa vira "Ausente" depois de 10 minutos sem teclado, mouse ou movimento
-  (o prazo é configurável por escritório).
+  e Ausente (cinza). "Ausente" é só manual: a própria pessoa escolhe no menu de status e ele fica até
+  ela escolher outro status (o app nunca marca ninguém como ausente sozinho).
 - **Em call** — tempo conectada em áudio e vídeo com pelo menos uma pessoa, por proximidade ou na
   mesma sala privada. **Com quem** — as cinco pessoas com mais tempo, e em quais salas.
 - **Agora** — status e local atuais.
@@ -64,7 +64,7 @@ Todos os horários são registrados pelo servidor. No primeiro acesso, cada pess
   Mapmaker** (o mapa cresce com uma área em branco). Nada é expandido sem aprovação.
 - **Mesas** — atribua ou libere mesas. Quando alguém é removido, a mesa fica livre e os objetos dela
   vão para **Achados e perdidos**. Nenhuma área do mapa é apagada.
-- **Configurações** — nome, fuso, prazo de ausência, retenção do chat (90 dias) e dos áudios
+- **Configurações** — nome, fuso, retenção do chat (90 dias) e dos áudios
   (30 dias; o texto das notas não expira), quem pode iniciar notas e quem recebe o e-mail.
 
 ## Mapmaker e Build Tool
