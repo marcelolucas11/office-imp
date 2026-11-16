@@ -60,7 +60,8 @@ import { loadGuestSubject, loadUserSubject, canEnterOffice, inviteUsable, type S
 import { newId, verifyTicket } from '../lib/crypto';
 import { officeSettings } from '../lib/settings';
 import { currentMap, getOffice, listDesks, patchCurrentMap, type OfficeRow } from '../services/offices';
-import { lkRoomName, removeFromLkRoom } from '../services/livekit';
+import { audit } from '../lib/audit';
+import { lkRoomName, muteInLkRoom, removeFromLkRoom, type RemoteMuteKind } from '../services/livekit';
 import { hub } from './hub';
 import { Tracker } from './tracker';
 
@@ -92,6 +93,7 @@ const RATE_LIMITS: Record<string, [number, number]> = {
   chat: [10, 1],
   emote: [10, 2],
   wave: [5, 0.5],
+  'av:mute': [6, 0.5],
   lead: [3, 0.2],
   avatar: [6, 0.5],
   profile: [6, 0.5],
@@ -650,6 +652,27 @@ export class OfficeRoom extends Room {
     this.on('emote', (p, d) => {
       if (!EMOTES.includes(d.emoji)) return;
       this.broadcast('emote', { id: p.state.id, emoji: d.emoji });
+    });
+
+    // desligar o microfone, a câmera ou a tela de alguém para todos: qualquer pessoa pode, mas só de quem
+    // está conversando com ela agora (mesma área privada ou dentro do raio). Quem só assiste ao palco
+    // (Spotlight) não desliga o palco. Para religar, só a própria pessoa.
+    this.on('av:mute', async (p, d) => {
+      const kind = d.kind as RemoteMuteKind;
+      if (kind !== 'mic' && kind !== 'cam' && kind !== 'screen') return;
+      const target = this.players.get(String(d.to));
+      if (!target || target === p) return;
+      const view = this.lastViews.get(p.state.id);
+      if (!view || view.room === 'none' || !view.peers.some((x) => x.id === target.state.id)) {
+        p.client.send('notice', { code: 'mute_far', name: target.state.name });
+        return;
+      }
+      const room = this.lastViews.get(target.state.id)?.room ?? view.room;
+      await muteInLkRoom(lkRoomName(this.officeId, room), target.state.id, kind);
+      // o app da pessoa também desliga do lado dela (some o aviso de "câmera ligada" e o botão fica certo)
+      this.players.get(target.state.id)?.client.send('av:muted', { kind, by: p.state.id, name: p.state.name });
+      p.client.send('notice', { code: `mute_${kind}_sent`, name: target.state.name });
+      void audit({ id: p.state.id, name: p.state.name }, 'av.mute', { officeId: this.officeId, target: target.state.name, meta: { kind } });
     });
 
     this.on('wave', (p, d) => {

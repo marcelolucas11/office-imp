@@ -22,6 +22,10 @@ const NOTICES: Record<string, (d: any) => string> = {
   desk_look_invalid: () => t('notice.deskLookInvalid', 'Não foi possível mudar esta mesa (só a sua, e só com as opções da lista).'),
   music_invalid: () => t('notice.musicInvalid', 'Link do YouTube inválido.'),
   music_locked: () => t('notice.musicLocked', 'O DJ bloqueou a fila.'),
+  mute_mic_sent: (d) => t('notice.muteMicSent', 'Você desligou o microfone de {{name}} para todos.', { name: d.name }),
+  mute_cam_sent: (d) => t('notice.muteCamSent', 'Você desligou a câmera de {{name}} para todos.', { name: d.name }),
+  mute_screen_sent: (d) => t('notice.muteScreenSent', 'Você parou o compartilhamento de tela de {{name}} para todos.', { name: d.name }),
+  mute_far: (d) => t('notice.muteFar', 'Você não está mais conversando com {{name}}.', { name: d.name }),
   server_updating: () => t('notice.serverUpdating', 'O servidor será atualizado agora. A conexão volta em instantes.'),
 };
 
@@ -205,6 +209,7 @@ class OfficeNet {
       toast(t('wave.got', '👋 {{name}} acenou para você.', { name: d.name }), 'info', { label: t('wave.goto', 'Ir até lá'), run: () => this.gotoPlayer(d.from) }, 9000);
       if (document.hidden) notify(t('wave.title', 'Aceno'), t('wave.got', '👋 {{name}} acenou para você.', { name: d.name }));
     });
+    room.onMessage('av:muted', (d) => bus.emit('av:muted', d));
     room.onMessage('lead', (d) => {
       toast(t('lead.ask', '{{name}} pediu para você segui-lo(a).', { name: d.name }), 'info', { label: t('lead.follow', 'Seguir'), run: () => useGame.setState({ following: d.from }) }, 10000);
     });

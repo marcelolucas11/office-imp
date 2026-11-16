@@ -448,6 +448,7 @@ const ACTION_LABEL: Record<string, string> = {
   'server.update': 'Atualizou o servidor',
   'clients.force_update': 'Forçou a atualização dos apps',
   'meeting.delete': 'Excluiu uma reunião',
+  'av.mute': 'Desligou o mic/câmera/tela de alguém para todos',
 };
 
 export function Audit() {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { Track } from 'livekit-client';
 import { EMOTES, ROLE_LABEL, STATUS_COLOR, STATUS_LABEL, can, deskSeat, isAdminRole, mapDesks, type ChatMessage, type PlayerState, type Status } from '@office-imp/shared';
@@ -44,28 +45,189 @@ export function TrackView({ track, mirror, contain }: { track: Track; mirror?: b
   return <video ref={ref} autoPlay playsInline muted className={cx('h-full w-full bg-black', contain ? 'object-contain' : 'object-cover', mirror && '-scale-x-100')} />;
 }
 
-function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar }: { id: string; name: string; track: Track | null; kind: 'cam' | 'screen'; mic?: boolean; speaking?: boolean; mirror?: boolean; big?: boolean; badge?: string; avatar?: string }) {
+function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar, peer }: { id: string; name: string; track: Track | null; kind: 'cam' | 'screen'; mic?: boolean; speaking?: boolean; mirror?: boolean; big?: boolean; badge?: string; avatar?: string; peer?: PeerMedia }) {
   const focus = useAv((s) => s.focus);
+  const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
   const key = `${id}:${kind}`;
+  // oculto só para você: o clique no quadro volta a mostrar
+  const hidden = peer ? (kind === 'cam' ? peer.pref.hideCam && peer.camOn : peer.pref.hideScreen && peer.screenOn) : false;
+  const silenced = peer ? (kind === 'cam' ? peer.pref.mute : peer.pref.smute && peer.screenAudio) : false;
+  const onClick = () => {
+    if (peer && hidden) av.setPeer(peer.id, kind === 'cam' ? { hideCam: false } : { hideScreen: false });
+    else useAv.setState({ focus: focus === key ? null : key });
+  };
   return (
-    <button
-      type="button"
+    <div
       data-testid={`tile-${key}`}
-      onClick={() => useAv.setState({ focus: focus === key ? null : key })}
-      className={cx('relative shrink-0 overflow-hidden rounded-xl border-2 bg-panel-2 transition-all', speaking ? 'border-ok' : 'border-line', big ? 'aspect-video w-full' : 'h-[104px] w-[184px]')}
-      title={t('video.expand', 'Clique para ampliar')}
+      onContextMenu={(e) => {
+        if (!peer) return;
+        e.preventDefault();
+        setMenuAt(new DOMRect(e.clientX, e.clientY, 0, 0));
+      }}
+      className={cx('group relative shrink-0 overflow-hidden rounded-xl border-2 bg-panel-2 transition-all', speaking ? 'border-ok' : 'border-line', big ? 'aspect-video w-full' : 'h-[104px] w-[184px]')}
     >
-      {track ? (
-        <TrackView track={track} mirror={mirror} contain={kind === 'screen'} />
-      ) : (
-        <div className="grid h-full w-full place-items-center">{avatar ? <img src={avatar} alt="" className="pixel h-16" /> : <span className="text-2xl text-muted">{name.slice(0, 1).toUpperCase()}</span>}</div>
-      )}
-      <span className="absolute bottom-1 left-1 flex max-w-[92%] items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px]">
+      <button type="button" onClick={onClick} className="block h-full w-full" title={hidden ? t('video.showAgain', 'Clique para mostrar de novo') : t('video.expand', 'Clique para ampliar')}>
+        {track ? (
+          <TrackView track={track} mirror={mirror} contain={kind === 'screen'} />
+        ) : hidden ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 pb-6 text-center text-[11px] leading-tight text-muted">
+            <Emo e="🙈" size={20} />
+            <span>{kind === 'cam' ? t('video.camHidden', 'Vídeo oculto para você') : t('video.screenHidden', 'Tela oculta para você')}</span>
+          </div>
+        ) : (
+          <div className="grid h-full w-full place-items-center">{avatar ? <img src={avatar} alt="" className="pixel h-16" /> : <span className="text-2xl text-muted">{name.slice(0, 1).toUpperCase()}</span>}</div>
+        )}
+      </button>
+      <span className="pointer-events-none absolute bottom-1 left-1 flex max-w-[92%] items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px]">
         {kind === 'screen' ? <Emo e="🖥" size={16} /> : mic === false ? <Emo e="🔇" size={16} className="bg-danger/80" /> : null}
+        {silenced ? <Emo e="🔕" size={14} title={t('video.silencedForYou', 'Silenciado para você')} /> : null}
         <span className="truncate">{name}</span>
         {badge ? <span className="text-gold">{badge}</span> : null}
       </span>
-    </button>
+      {peer ? <PeerMenu peer={peer} kind={kind} at={menuAt} setAt={setMenuAt} /> : null}
+    </div>
+  );
+}
+
+/** Botão "⋯" do quadro de vídeo/tela de outra pessoa: abre os controles de áudio e vídeo dela. */
+function PeerMenu({ peer, kind, at, setAt, inline }: { peer: PeerMedia; kind: 'cam' | 'screen'; at: DOMRect | null; setAt: (r: DOMRect | null) => void; inline?: boolean }) {
+  const btn = useRef<HTMLButtonElement>(null);
+  const p = peer.pref;
+  const custom = kind === 'cam' ? p.mute || p.vol < 1 || p.hideCam : p.smute || p.svol < 1 || p.hideScreen;
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAt(at ? null : (btn.current?.getBoundingClientRect() ?? null));
+  };
+  const label = kind === 'cam' ? t('peer.menuCam', 'Áudio e vídeo de {{name}}', { name: peer.name }) : t('peer.menuScreen', 'Tela de {{name}}', { name: peer.name });
+  return (
+    <>
+      {inline ? (
+        <button ref={btn} type="button" onClick={toggle} data-testid={`peer-menu-${peer.id}:${kind}`} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-panel-3 px-2.5 py-1 text-xs text-stone-100 transition-colors hover:bg-line">
+          <Emo e="🔊" size={14} />
+          {t('peer.controls', 'Áudio e vídeo')}
+        </button>
+      ) : (
+        <button
+          ref={btn}
+          type="button"
+          onClick={toggle}
+          aria-label={label}
+          title={label}
+          data-testid={`peer-menu-${peer.id}:${kind}`}
+          className={cx(
+            'absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-lg bg-black/70 text-stone-100 transition-opacity hover:bg-black/90 focus-visible:opacity-100',
+            at || custom ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+          )}
+        >
+          <Emo e="⋯" size={16} />
+        </button>
+      )}
+      {at ? createPortal(<PeerPopover id={peer.id} kind={kind} at={at} trigger={btn.current} onClose={() => setAt(null)} />, document.body) : null}
+    </>
+  );
+}
+
+function PeerPopover({ id, kind, at, trigger, onClose }: { id: string; kind: 'cam' | 'screen'; at: DOMRect; trigger: HTMLElement | null; onClose: () => void }) {
+  const peer = useAv((s) => s.peers.find((x) => x.id === id));
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: at.left, top: at.bottom + 6 });
+
+  // abre abaixo do botão; se não couber, acima — sempre dentro da janela
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = Math.min(Math.max(8, at.right - w), window.innerWidth - w - 8);
+    const below = at.bottom + 6;
+    const top = below + h > window.innerHeight - 8 ? Math.max(8, at.top - h - 6) : below;
+    setPos({ left, top });
+  }, [at]);
+
+  useEffect(() => {
+    const down = (e: PointerEvent) => {
+      const el = e.target as Node;
+      // o próprio botão "⋯" fecha pelo clique dele
+      if (ref.current && !ref.current.contains(el) && !trigger?.contains(el)) onClose();
+    };
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key);
+    return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('keydown', key);
+    };
+  }, [onClose, trigger]);
+
+  // a pessoa saiu da conversa: fecha
+  useEffect(() => {
+    if (!peer) onClose();
+  }, [peer, onClose]);
+  if (!peer) return null;
+
+  const p = peer.pref;
+  const forAll = (what: 'mic' | 'cam' | 'screen') => {
+    av.muteForAll(peer.id, what);
+    onClose();
+  };
+  const row = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-panel-3 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
+  const volume = (value: number, muted: boolean, onVol: (v: number) => void, onMute: () => void, label: string, testid: string) => (
+    <div className="px-2.5 py-1.5">
+      <div className="mb-1 flex items-center justify-between text-xs text-muted">
+        <span>{label}</span>
+        <span className="tabular-nums">{muted ? t('peer.muted', 'mudo') : `${Math.round(value * 100)}%`}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={onMute} className={cx('grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-panel-3', muted && 'bg-danger/25 text-danger')} title={muted ? t('peer.unmuteMe', 'Voltar a ouvir') : t('peer.muteMe', 'Silenciar para mim')} aria-label={muted ? t('peer.unmuteMe', 'Voltar a ouvir') : t('peer.muteMe', 'Silenciar para mim')} data-testid={`${testid}-mute`}>
+          <Emo e={muted ? '🔕' : value < 0.5 ? '🔈' : '🔊'} size={18} />
+        </button>
+        <input type="range" min={0} max={100} step={1} value={muted ? 0 : Math.round(value * 100)} onChange={(e) => onVol(Number(e.target.value) / 100)} className="w-full accent-[#d7b870]" aria-label={label} data-testid={`${testid}-vol`} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div ref={ref} className="oi-pop fixed z-50 w-72 rounded-2xl border border-line bg-panel p-1.5 text-stone-100 shadow-2xl" style={pos} data-testid={`peer-popover-${id}:${kind}`} onClick={(e) => e.stopPropagation()}>
+      <div className="truncate px-2.5 pb-1 pt-1.5 text-sm font-semibold">{kind === 'cam' ? peer.name : t('peer.screenOf', 'Tela de {{name}}', { name: peer.name })}</div>
+      <div className="px-2.5 pb-1 text-[11px] uppercase tracking-wide text-muted">{t('peer.forMe', 'Só para você')}</div>
+      {kind === 'cam' ? (
+        <>
+          {volume(p.vol, p.mute, (v) => av.setPeer(id, { vol: v }), () => av.setPeer(id, { mute: !p.mute, ...(p.mute && p.vol === 0 ? { vol: 1 } : {}) }), t('peer.voiceVol', 'Volume da voz'), 'peer-voice')}
+          <button type="button" className={row} disabled={!peer.camOn} onClick={() => av.setPeer(id, { hideCam: !p.hideCam })} data-testid="peer-hide-cam">
+            <Emo e={p.hideCam ? '👁' : '🙈'} size={18} />
+            {p.hideCam ? t('peer.showCam', 'Mostrar o vídeo') : t('peer.hideCam', 'Ocultar o vídeo para mim')}
+          </button>
+        </>
+      ) : (
+        <>
+          {peer.screenAudio ? volume(p.svol, p.smute, (v) => av.setPeer(id, { svol: v }), () => av.setPeer(id, { smute: !p.smute, ...(p.smute && p.svol === 0 ? { svol: 1 } : {}) }), t('peer.screenVol', 'Volume do áudio da tela'), 'peer-screen') : <div className="px-2.5 py-1.5 text-xs text-muted">{t('peer.noScreenAudio', 'Esta tela está sendo compartilhada sem áudio.')}</div>}
+          <button type="button" className={row} onClick={() => av.setPeer(id, { hideScreen: !p.hideScreen })} data-testid="peer-hide-screen">
+            <Emo e={p.hideScreen ? '👁' : '🙈'} size={18} />
+            {p.hideScreen ? t('peer.showScreen', 'Mostrar a tela') : t('peer.hideScreen', 'Ocultar a tela para mim')}
+          </button>
+        </>
+      )}
+      <div className="my-1 border-t border-line" />
+      <div className="px-2.5 pb-1 text-[11px] uppercase tracking-wide text-muted">{t('peer.forAll', 'Para todos na conversa')}</div>
+      {kind === 'cam' ? (
+        <>
+          <button type="button" className={row} disabled={!peer.live || !peer.mic || peer.spotlight} onClick={() => forAll('mic')} data-testid="peer-mute-all">
+            <Emo e="🔇" size={18} />
+            {t('peer.muteAll', 'Desligar o microfone para todos')}
+          </button>
+          <button type="button" className={row} disabled={!peer.live || !peer.camOn || peer.spotlight} onClick={() => forAll('cam')} data-testid="peer-cam-all">
+            <Emo e="📷" size={18} />
+            {t('peer.camAll', 'Desligar a câmera para todos')}
+          </button>
+        </>
+      ) : (
+        <button type="button" className={row} disabled={!peer.live || !peer.screenOn || peer.spotlight} onClick={() => forAll('screen')} data-testid="peer-screen-all">
+          <Emo e="🛑" size={18} />
+          {t('peer.screenAll', 'Parar o compartilhamento para todos')}
+        </button>
+      )}
+      <div className="px-2.5 pb-1.5 pt-0.5 text-[11px] leading-snug text-muted">{peer.spotlight ? t('peer.spotlightHint', 'Quem está no palco só pode ser desligado por quem está na mesma conversa.') : t('peer.forAllHint', 'Só a própria pessoa consegue religar. Ela recebe um aviso com o seu nome.')}</div>
+    </div>
   );
 }
 
@@ -85,8 +247,8 @@ export function VideoBar() {
 
   const tiles: React.ReactNode[] = [];
   for (const p of peers) {
-    if (p.screen) tiles.push(<Tile key={`${p.id}:screen`} id={p.id} name={p.name} track={p.screen} kind="screen" big={simplified} />);
-    tiles.push(<Tile key={`${p.id}:cam`} id={p.id} name={p.name} track={p.cam} kind="cam" mic={p.mic} speaking={p.speaking} big={simplified} badge={p.spotlight ? '★' : undefined} avatar={portraits[p.id]} />);
+    if (p.screenOn) tiles.push(<Tile key={`${p.id}:screen`} id={p.id} name={p.name} track={p.screen} kind="screen" big={simplified} peer={p} />);
+    tiles.push(<Tile key={`${p.id}:cam`} id={p.id} name={p.name} track={p.cam} kind="cam" mic={p.mic} speaking={p.speaking} big={simplified} badge={p.spotlight ? '★' : undefined} avatar={portraits[p.id]} peer={p} />);
   }
   const showSelf = cam || simplified || peers.length > 0;
   if (localScreen) tiles.unshift(<Tile key="me:screen" id="me" name={t('video.yourScreen', 'Sua tela')} track={localScreen} kind="screen" big={simplified} />);
@@ -120,7 +282,7 @@ export function VideoBar() {
   );
 }
 
-function findFocus(focus: string, peers: PeerMedia[], localCam: Track | null, localScreen: Track | null): { track: Track; name: string; contain: boolean; mirror: boolean } | null {
+function findFocus(focus: string, peers: PeerMedia[], localCam: Track | null, localScreen: Track | null): { track: Track; name: string; contain: boolean; mirror: boolean; peer?: PeerMedia; kind?: 'cam' | 'screen' } | null {
   const [id, kind] = focus.split(':');
   if (id === 'me') {
     const track = kind === 'screen' ? localScreen : localCam;
@@ -128,16 +290,18 @@ function findFocus(focus: string, peers: PeerMedia[], localCam: Track | null, lo
   }
   const p = peers.find((x) => x.id === id);
   const track = kind === 'screen' ? p?.screen : p?.cam;
-  return p && track ? { track, name: p.name, contain: kind === 'screen', mirror: false } : null;
+  return p && track ? { track, name: p.name, contain: kind === 'screen', mirror: false, peer: p, kind: kind === 'screen' ? 'screen' : 'cam' } : null;
 }
 
-function FocusOverlay({ track, name, contain, mirror }: { track: Track; name: string; contain: boolean; mirror: boolean }) {
+function FocusOverlay({ track, name, contain, mirror, peer, kind }: { track: Track; name: string; contain: boolean; mirror: boolean; peer?: PeerMedia; kind?: 'cam' | 'screen' }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
   return (
     <div ref={ref} className="absolute inset-x-6 bottom-24 top-32 z-30 overflow-hidden rounded-2xl border border-line bg-black shadow-2xl">
       <TrackView track={track} contain={contain} mirror={mirror} />
       <div className="absolute left-3 top-3 rounded-md bg-black/70 px-2 py-1 text-xs">{name}</div>
       <div className="absolute right-3 top-3 flex gap-2">
+        {peer && kind ? <PeerMenu peer={peer} kind={kind} at={menuAt} setAt={setMenuAt} inline /> : null}
         <Button small variant="subtle" onClick={() => void ref.current?.requestFullscreen?.()}>
           {t('video.fullscreen', 'Tela cheia')}
         </Button>
