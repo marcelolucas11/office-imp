@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Room, RoomEvent, Track, VideoPresets, type LocalTrack, type RemoteParticipant, type RemoteTrackPublication } from 'livekit-client';
+import { Room, RoomEvent, ScreenSharePresets, Track, VideoPresets, type LocalTrack, type RemoteParticipant, type RemoteTrackPublication } from 'livekit-client';
 import { create } from 'zustand';
 import { DEFAULT_INTERACTION_DISTANCE, volumeForDistance, type AvView } from '@office-imp/shared';
 import { bus } from '../game/bus';
@@ -235,7 +235,9 @@ class AvManager {
   private newRoom(): Room {
     const st = useAv.getState();
     return new Room({
-      adaptiveStream: true,
+      // pixelDensity 'screen': em telas Retina (2x) o padrão contava 1 pixel por pixel CSS e pedia ao servidor
+      // a camada de 540p da tela compartilhada mesmo ampliada, deixando o texto borrado
+      adaptiveStream: { pixelDensity: 'screen' },
       dynacast: true,
       audioCaptureDefaults: micConstraints(st),
       videoCaptureDefaults: { deviceId: st.camId || undefined, resolution: (st.hd ? VideoPresets.h720 : VideoPresets.h360).resolution },
@@ -488,7 +490,13 @@ class AvManager {
   async setScreen(on: boolean) {
     if (this.notConnected()) return;
     try {
-      await this.main!.localParticipant.setScreenShareEnabled(on, { audio: true });
+      // 1080p a 30 qps e até 5 Mbps (o padrão era 15 qps e 2,5 Mbps); 'detail' faz o codificador priorizar a
+      // nitidez do texto em vez do movimento
+      await this.main!.localParticipant.setScreenShareEnabled(
+        on,
+        { audio: true, contentHint: 'detail', resolution: ScreenSharePresets.h1080fps30.resolution },
+        { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding },
+      );
     } catch (e) {
       // cancelar a escolha da tela não é erro
       if (!/Permission|NotAllowed|cancel/i.test(errMsg(e))) toast(t('av.screenError', 'Não foi possível compartilhar a tela.'), 'error');
