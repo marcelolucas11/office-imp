@@ -3,6 +3,13 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.2.1 — 15/11/2026 — Clique só na janela aberta
+
+- **O clique não atravessa mais os painéis.** Clicar no editor de avatar, num modal ou em qualquer
+  painel por cima do mapa selecionava também o que estava por baixo (quadro, objeto, o personagem de
+  outra pessoa) ou marcava o destino da caminhada. Agora o clique vale só para a janela que está à
+  vista; o mapa só recebe o clique feito diretamente nele.
+
 ## 1.2.0 — 15/11/2026 — Paredes altas
 
 As paredes eram finas demais para o tamanho do boneco: o personagem ficava maior que a porta e os
