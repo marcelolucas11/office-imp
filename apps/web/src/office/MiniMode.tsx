@@ -19,8 +19,8 @@ import { av, useAv } from './av';
 import { MOD, STATUS_KEYS, TrackView } from './Hud';
 import { Emo } from '../lib/icons';
 
-const TILE_W = 240;
-const TILE_H = 135;
+const TILE_W = 272; // largura que cabe microfone, câmera, tela, status e voltar na barra
+const TILE_H = 153;
 const MAX_TILES = 4;
 const PIP_W = TILE_W + 32;
 
@@ -125,7 +125,7 @@ export function MiniMode() {
 }
 
 function MiniContent({ target }: { target: Target }) {
-  const { peers, localCam, mic, cam, meSpeaking } = useAv();
+  const { peers, localCam, mic, cam, screen, meSpeaking } = useAv();
   const players = useGame((s) => s.players);
   const meId = useGame((s) => s.meId);
   const me = players[meId];
@@ -237,7 +237,7 @@ function MiniContent({ target }: { target: Target }) {
         </div>
       ) : null}
 
-      {/* barra de controles: arrastar, microfone, câmera, status e voltar */}
+      {/* barra de controles: arrastar, microfone, câmera, tela, status e voltar */}
       <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-panel/90 p-1 shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur" style={desk ? drag : undefined}>
         {desk ? (
           <span className="grid h-8 w-5 cursor-grab place-items-center text-muted" title={t('mini.drag', 'Arraste para mover')} aria-hidden="true">
@@ -256,6 +256,9 @@ function MiniContent({ target }: { target: Target }) {
         </MiniBtn>
         <MiniBtn label={cam ? t('bar.camOff', 'Desligar a câmera') : t('bar.camOn', 'Ligar a câmera')} active={cam} disabled={dnd} onClick={() => void av.setCam(!cam)} testId="mini-cam">
           <CamIcon off={!cam} />
+        </MiniBtn>
+        <MiniBtn label={screen ? t('bar.screenOff', 'Parar de compartilhar a tela') : t('bar.screenOn', 'Compartilhar a tela')} active={screen} disabled={dnd} onClick={() => void av.setScreen(!screen)} testId="mini-screen">
+          <ScreenIcon />
         </MiniBtn>
         <button
           type="button"
@@ -309,5 +312,10 @@ const CamIcon = ({ off }: { off?: boolean }) => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M15 10l5-3v10l-5-3M3 7h12v10H3z" />
     {off ? <path d="M3 3l18 18" /> : null}
+  </svg>
+);
+const ScreenIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 4h18v12H3zM8 20h8M12 16v4" />
   </svg>
 );

@@ -3,6 +3,14 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.2.2 — 15/11/2026 — Compartilhar a tela no Modo Mini
+
+- **Botão de compartilhar a tela no Modo Mini.** A barrinha da janela flutuante ganhou o botão de
+  tela, ao lado do microfone e da câmera: dá para começar e parar de compartilhar sem voltar para o
+  escritório. A janela mini ficou um pouco mais larga para caber tudo com o status visível.
+- **Seletor de tela visível no Modo Mini (app desktop).** Com a janela principal escondida, o seletor
+  de tela/janela agora abre solto e por cima de tudo, em vez de ficar preso à janela invisível.
+
 ## 1.2.1 — 15/11/2026 — Clique só na janela aberta
 
 - **O clique não atravessa mais os painéis.** Clicar no editor de avatar, num modal ou em qualquer
