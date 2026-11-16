@@ -3,6 +3,21 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.6.1 — 16/11/2026 — Entrada na mesa do sócio e ponto do Dock no Modo Mini
+
+- **Entrar na própria mesa, também na Sala do Sócio.** Quem tem a mesa dentro de uma sala privada
+  (como as mesas da Sala do Sócio) agora aparece sentado nela ao entrar. Antes, a regra que evita
+  aparecer dentro de salas privadas mandava essas pessoas para a área de entrada. Quem não tem mesa
+  continua aparecendo na área de entrada; se a sala da mesa estiver cheia, também.
+- **Mac: o ponto do app continua no Dock no Modo Mini.** Ao abrir o Modo Mini, o macOS tirava o ponto
+  embaixo do ícone no Dock (o app parecia fechado, mas continuava aberto). Agora o app segue como app
+  normal, com o ponto aceso, e o Modo Mini continua por cima de apps em tela cheia.
+
+### Antes de atualizar
+
+- **Servidor e app do Mac.** Atualize o servidor pelo botão de sempre (entrada na mesa) e o app do Mac
+  pelo botão de atualização do app (ponto do Dock). O Windows não muda.
+
 ## 1.6.0 — 16/11/2026 — Ausente manual e app mais leve
 
 - **"Ausente" só manual.** O app não marca mais ninguém como ausente sozinho (antes, 10 minutos sem

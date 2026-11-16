@@ -86,6 +86,8 @@ export class Http {
 export class Rt {
   room!: Room;
   log: { type: string; data: any }[] = [];
+  /** Mensagem "init" recebida ao entrar. */
+  init: any = null;
   private waiters: { type: string; pred: (d: any) => boolean; resolve: (d: any) => void }[] = [];
 
   static async join(base: string, http: Http, slug: string): Promise<Rt> {
@@ -104,7 +106,7 @@ export class Rt {
         }
       }
     });
-    await rt.next('init');
+    rt.init = await rt.next('init');
     return rt;
   }
 

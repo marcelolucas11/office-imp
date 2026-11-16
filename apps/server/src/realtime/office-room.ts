@@ -206,7 +206,7 @@ export class OfficeRoom extends Room {
         if (free) dir = deskChairDir(desk);
       }
     }
-    const start = this.resolveSpawn(pos, subject.role);
+    const start = this.resolveSpawn(pos, subject.role, Boolean(pos));
     const area = privateAreaAt(this.map, this.areaIndex, start.x, start.y);
     const state: PlayerState = {
       id: subject.id,
@@ -297,17 +297,23 @@ export class OfficeRoom extends Room {
 
   // ---------- utilidades ----------
 
-  private resolveSpawn(pos: { x: number; y: number } | null, role: Role): { x: number; y: number } {
-    const ok = (p: { x: number; y: number }) => {
+  /**
+   * Onde a pessoa aparece ao entrar. `ownDesk`: `pos` é o assento da própria mesa, que vale mesmo
+   * dentro de uma sala privada (ex.: a mesa do sócio fica na Sala do Sócio), desde que a pessoa
+   * possa entrar nela e a sala não esteja cheia.
+   */
+  private resolveSpawn(pos: { x: number; y: number } | null, role: Role, ownDesk = false): { x: number; y: number } {
+    const ok = (p: { x: number; y: number }, allowPrivate: boolean) => {
       if (p.x < 0 || p.y < 0 || p.x >= this.map.width || p.y >= this.map.height) return false;
       if (this.grid[p.y * this.map.width + p.x] === 1) return false;
       const a = privateAreaAt(this.map, this.areaIndex, p.x, p.y);
-      if (a && (a.staffOnly ? !can(role, 'area.staffOnly') : false)) return false;
-      // não reaparece dentro de área privada (evita entrar em reunião sem querer), exceto na área da própria mesa
-      return !a || Boolean(a.desk);
+      if (!a || a.desk) return !(a?.staffOnly && !can(role, 'area.staffOnly'));
+      if (a.staffOnly && !can(role, 'area.staffOnly')) return false;
+      // nos pontos de entrada não aparece dentro de área privada (evita cair numa reunião sem querer)
+      return allowPrivate && this.areaCount(a.id) < a.capacity;
     };
-    if (pos && ok(pos)) return pos;
-    const spawns = this.map.spawns.filter(ok);
+    if (pos && ok(pos, ownDesk)) return pos;
+    const spawns = this.map.spawns.filter((p) => ok(p, false));
     if (spawns.length) return spawns[this.players.size % spawns.length];
     return nearestFree(this.grid, this.map.width, this.map.height, this.map.spawns[0] ?? { x: 1, y: 1 }, 30) ?? { x: 1, y: 1 };
   }
