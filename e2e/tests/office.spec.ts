@@ -504,6 +504,33 @@ test('painel do ADM mostra horas, status e calls de todos, inclusive do Dono', a
   expect(denied.status()).toBe(403);
 });
 
+test('Painel do ADM dentro do escritório: abre por cima do mapa sem desconectar', async () => {
+  await owner.goto(`/o/${slug}`);
+  await online(owner);
+  const id = await myId(owner);
+  // marca a página: se o painel recarregar ou trocar de página, a marca some
+  await owner.evaluate(() => ((window as any).__adminMark = 1));
+  await owner.getByRole('button', { name: 'Mais opções' }).click();
+  await owner.getByTestId('open-admin').click();
+  const panel = owner.getByTestId('admin-embedded');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByTestId('analytics-table')).toContainText('Ana Lima');
+  // continua no escritório: mesma página, mesmo endereço, conectado, com a barra de mídia à vista
+  await expect(owner).toHaveURL(new RegExp(`/o/${slug}$`));
+  await expect(owner.locator('[data-testid=office][data-phase=online]')).toBeVisible();
+  await expect(owner.getByTestId('btn-mic')).toBeVisible();
+  await panel.getByRole('button', { name: /Atualizações/ }).click();
+  await expect(panel.getByTestId('server-version')).toBeVisible();
+  expect(await game(owner, 'g.meId')).toBe(id);
+  expect(await owner.evaluate(() => (window as any).__adminMark)).toBe(1);
+  await expect.poll(() => game(emp, `Boolean(g.players['${id}'])`)).toBe(true);
+  // fechar volta ao mapa, sem reconectar
+  await panel.getByTestId('admin-close').click();
+  await expect(panel).toBeHidden();
+  expect(await game(owner, 'g.meId')).toBe(id);
+  expect(await owner.evaluate(() => (window as any).__adminMark)).toBe(1);
+});
+
 test('“Atualizar todos agora” avisa quem está conectado', async () => {
   const r = await api(owner, 'post', '/api/admin/update/clients');
   expect(r.online).toBeGreaterThanOrEqual(1);

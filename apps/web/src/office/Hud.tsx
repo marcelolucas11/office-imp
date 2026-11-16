@@ -493,10 +493,10 @@ export function BottomBar() {
               <>
                 <div className="my-1 border-t border-line" />
                 <MenuItem onClick={() => set({ modal: { kind: 'mapmaker' } })}><Emo e="🛠" /> {t('more.mapmaker', 'Mapmaker e Build Tool')}</MenuItem>
-                <MenuItem onClick={() => nav('/admin')}><Emo e="📊" /> {t('more.admin', 'Painel do ADM')}</MenuItem>
+                <MenuItem data-testid="open-admin" onClick={() => set({ admin: 'painel' })}><Emo e="📊" /> {t('more.admin', 'Painel do ADM')}</MenuItem>
               </>
             ) : isAdminRole(role) ? (
-              <MenuItem onClick={() => nav('/admin')}><Emo e="📊" /> {t('more.admin', 'Painel do ADM')}</MenuItem>
+              <MenuItem data-testid="open-admin" onClick={() => set({ admin: 'painel' })}><Emo e="📊" /> {t('more.admin', 'Painel do ADM')}</MenuItem>
             ) : null}
             <div className="my-1 border-t border-line" />
             <MenuItem onClick={() => nav('/')}><Emo e="🚪" /> {t('more.leave', 'Sair do escritório')}</MenuItem>
@@ -535,9 +535,9 @@ export function BottomBar() {
   );
 }
 
-function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function MenuItem({ onClick, children, 'data-testid': testid }: { onClick: () => void; children: React.ReactNode; 'data-testid'?: string }) {
   return (
-    <button type="button" onClick={onClick} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-stone-100 hover:bg-panel-3">
+    <button type="button" data-testid={testid} onClick={onClick} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-stone-100 hover:bg-panel-3">
       {children}
     </button>
   );

@@ -193,7 +193,7 @@ export class OfficeScene extends Phaser.Scene {
     const kb = this.input.keyboard!;
     this.keys = kb.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT', false) as Record<string, Phaser.Input.Keyboard.Key>;
     kb.on('keydown-X', () => {
-      if (!isTyping() && !useGame.getState().modal) this.interact();
+      if (!isTyping() && !useGame.getState().modal && !useGame.getState().admin) this.interact();
     });
     this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => this.zoom(dy > 0 ? -1 : 1));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onPointer(p));
@@ -937,7 +937,8 @@ export class OfficeScene extends Phaser.Scene {
     const g = useGame.getState();
     const me = this.avas.get(g.meId);
     if (!me || me.moving) return;
-    let dir: Dir | null = !isTyping() && !g.modal ? this.keyDir() : null;
+    // com o Painel do ADM aberto as setas rolam o painel, não andam com o avatar
+    let dir: Dir | null = !isTyping() && !g.modal && !g.admin ? this.keyDir() : null;
     let fromPath = false;
     if (dir) {
       this.path = null;

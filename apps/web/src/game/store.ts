@@ -69,6 +69,11 @@ export interface GameState {
   buildColor: string | null;
   following: string | null;
   modal: ModalState;
+  /**
+   * Painel do ADM aberto por cima do escritório (seção atual) ou null. Fica fora de `modal` para
+   * que os outros modais (configurações, perfil…) abram por cima dele sem fechá-lo.
+   */
+  admin: string | null;
   hint: { text: string; object?: MapObject } | null;
   set: (patch: Partial<GameState>) => void;
   me: () => PlayerState | null;
@@ -111,6 +116,7 @@ export const useGame = create<GameState>((set, get) => ({
   buildColor: null,
   following: null,
   modal: null,
+  admin: null,
   hint: null,
   set: (patch) => set(patch),
   me: () => get().players[get().meId] ?? null,
@@ -138,6 +144,7 @@ export function resetGame() {
     forceUpdateAt: null,
     panel: null,
     modal: null,
+    admin: null,
     hint: null,
     following: null,
     buildMode: null,

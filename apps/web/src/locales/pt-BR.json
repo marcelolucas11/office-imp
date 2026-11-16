@@ -1,5 +1,6 @@
 {
   "admin.back": "Voltar aos escritórios",
+  "admin.backOffice": "Voltar ao escritório",
   "admin.navAudit": "Auditoria",
   "admin.navInvites": "Links de convite",
   "admin.navNotes": "Notas de reunião",
@@ -9,6 +10,7 @@
   "admin.navSettings": "Configurações",
   "admin.navUpdates": "Atualizações",
   "admin.office": "Escritório",
+  "admin.stillConnected": "Você continua no escritório: dá para conversar, ouvir e compartilhar a tela com o painel aberto.",
   "admin.title": "Painel do ADM",
   "an.active": "Ativo",
   "an.away": "Ausente",

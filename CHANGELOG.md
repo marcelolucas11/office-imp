@@ -3,6 +3,24 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.5.2 — 16/11/2026 — Painel do ADM sem sair do escritório
+
+- **Painel do ADM dentro do escritório.** Em "⋯ Mais opções → Painel do ADM", o painel abre por cima
+  do mapa, sem sair do escritório: a pessoa continua conectada, conversando, ouvindo e compartilhando
+  a tela. A fileira de câmeras (em cima) e a barra de microfone, câmera e tela (embaixo) continuam à
+  vista, e o chat e a lista de pessoas abrem por cima do painel. Todas as seções funcionam ali
+  (painel em tempo real, escritórios, pessoas, convites, notas, configurações, atualizações e
+  auditoria). "← Voltar ao escritório" (ou Esc) fecha o painel e volta ao mapa, sem reconectar.
+- **Setas não andam com o boneco** enquanto o painel está aberto (servem para rolar o painel).
+- **Atalhos do painel continuam funcionando:** "Abrir no Mapmaker" fecha o painel e abre o Mapmaker
+  no escritório atual; "Entrar no escritório" em outro escritório troca de escritório normalmente.
+- O endereço `/admin` continua existindo para abrir o painel fora do escritório (pela tela inicial).
+
+### Antes de atualizar
+
+- **Nada manual.** Atualize o servidor pelo botão de sempre (a mudança é só da parte web; os apps de
+  Mac e Windows recebem tudo pelo servidor).
+
 ## 1.5.1 — 16/11/2026 — Modo Mini menor e entrada na própria mesa
 
 - **Câmeras desligadas, Modo Mini pequeno.** Em conversa, se ninguém estiver com a câmera ligada nem
