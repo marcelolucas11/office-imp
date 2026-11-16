@@ -39,6 +39,14 @@ let miniWin: BrowserWindow | null = null;
 let trayWin: BrowserWindow | null = null;
 let trayHiddenAt = 0;
 let autoMiniTimer: NodeJS.Timeout | undefined;
+/** Modo Mini ligado, mas escondido porque a pessoa está em "Não incomodar". */
+let miniSuspended = false;
+/** A janela mini está sendo fechada pelo "Fechar" (não traz a janela principal de volta). */
+let miniQuietClose = false;
+/** Depois do "Fechar", o Modo Mini automático espera a pessoa voltar para a janela principal. */
+let autoMiniPaused = false;
+let miniDragStart: { cursor: Electron.Point; bounds: Electron.Rectangle } | null = null;
+let miniSaveTimer: NodeJS.Timeout | undefined;
 const MINI_FRAME = 'oi-mini';
 const cfg: { serverUrl: string; autoMini: boolean; miniCorner: { right: number; bottom: number } | null } = { serverUrl: DEFAULT_URL, autoMini: true, miniCorner: null };
 
@@ -115,7 +123,12 @@ function createWindow() {
   });
   // Modo Mini automático: ao minimizar ou ir para outro app, só as câmeras ficam flutuando
   win.on('blur', scheduleAutoMini);
-  win.on('focus', () => clearTimeout(autoMiniTimer));
+  win.on('focus', () => {
+    clearTimeout(autoMiniTimer);
+    autoMiniPaused = false;
+    // voltou para o escritório com o Modo Mini escondido por "Não incomodar": ele acaba
+    if (mini && miniSuspended) setMini(false, true);
+  });
   win.on('minimize', () => {
     if (autoMiniReady()) setMini(true, true);
   });
@@ -334,20 +347,111 @@ function miniArea(): Electron.Rectangle {
 /** Canto inferior direito da janela mini (ela cresce para cima e para a esquerda). */
 function miniCorner(): { right: number; bottom: number } {
   const c = cfg.miniCorner;
-  if (c && screen.getAllDisplays().some((d) => c.right > d.workArea.x + 120 && c.right <= d.workArea.x + d.workArea.width + 1 && c.bottom > d.workArea.y + 120 && c.bottom <= d.workArea.y + d.workArea.height + 1)) return c;
+  if (c && screen.getAllDisplays().some((d) => c.right > d.workArea.x + 30 && c.right <= d.workArea.x + d.workArea.width + 1 && c.bottom > d.workArea.y + 30 && c.bottom <= d.workArea.y + d.workArea.height + 1)) return c;
   const a = miniArea();
   return { right: a.x + a.width - MINI_MARGIN, bottom: a.y + a.height - MINI_MARGIN };
 }
 
-function placeMini(width: number, height: number) {
+type Anchor = 'tl' | 'tr' | 'bl' | 'br';
+const ANCHORS = new Set<Anchor>(['tl', 'tr', 'bl', 'br']);
+
+/** Guarda onde a janela mini está (canto de baixo à direita), para abrir no mesmo lugar da próxima vez. */
+function rememberMiniCorner() {
   if (!miniWin || miniWin.isDestroyed()) return;
-  const { right, bottom } = miniCorner();
+  const b = miniWin.getBounds();
+  cfg.miniCorner = { right: b.x + b.width, bottom: b.y + b.height };
+  clearTimeout(miniSaveTimer);
+  miniSaveTimer = setTimeout(saveConfig, 400);
+}
+
+/**
+ * Ajusta a janela mini ao tamanho do conteúdo. Sem `anchor` ela cresce para cima e para a esquerda a partir
+ * do canto guardado; com `anchor` (redimensionar pelas bordas) o canto indicado fica parado.
+ */
+function placeMini(width: number, height: number, anchor?: Anchor) {
+  if (!miniWin || miniWin.isDestroyed()) return;
+  let right: number;
+  let bottom: number;
+  let left: number | null = null;
+  let top: number | null = null;
+  if (anchor) {
+    const b = miniWin.getBounds();
+    right = b.x + b.width;
+    bottom = b.y + b.height;
+    if (anchor[1] === 'l') left = b.x;
+    if (anchor[0] === 't') top = b.y;
+  } else ({ right, bottom } = miniCorner());
   const area = screen.getDisplayNearestPoint({ x: right - 1, y: bottom - 1 }).workArea;
-  const w = Math.max(120, Math.min(Math.round(width), 520));
-  const h = Math.max(60, Math.min(Math.round(height), area.height - 40));
-  const x = Math.max(area.x, right - w);
-  const y = Math.max(area.y, bottom - h);
+  const w = Math.max(40, Math.min(Math.round(width), 560));
+  const h = Math.max(40, Math.min(Math.round(height), area.height - 40));
+  const x = left ?? Math.max(area.x, right - w);
+  const y = top ?? Math.max(area.y, bottom - h);
+  const cur = miniWin.getBounds();
+  if (cur.x === x && cur.y === y && cur.width === w && cur.height === h) return;
   miniWin.setBounds({ x, y, width: w, height: h });
+  if (anchor) rememberMiniCorner();
+}
+
+/** Arrastar a janela mini pela alça: segue o cursor (a página só avisa início, movimento e fim). */
+function dragMini(phase: string) {
+  if (!miniWin || miniWin.isDestroyed()) return;
+  if (phase === 'start') {
+    miniDragStart = { cursor: screen.getCursorScreenPoint(), bounds: miniWin.getBounds() };
+  } else if (phase === 'move' && miniDragStart) {
+    const p = screen.getCursorScreenPoint();
+    const { bounds, cursor } = miniDragStart;
+    miniWin.setBounds({ x: bounds.x + p.x - cursor.x, y: bounds.y + p.y - cursor.y, width: bounds.width, height: bounds.height });
+  } else if (phase === 'end' && miniDragStart) {
+    miniDragStart = null;
+    // solta dentro da tela mais próxima (dá para levar a qualquer canto, mas não para fora da tela)
+    const b = miniWin.getBounds();
+    const a = screen.getDisplayNearestPoint({ x: b.x + Math.round(b.width / 2), y: b.y + Math.round(b.height / 2) }).workArea;
+    const x = Math.max(a.x, Math.min(b.x, a.x + a.width - b.width));
+    const y = Math.max(a.y, Math.min(b.y, a.y + a.height - b.height));
+    if (x !== b.x || y !== b.y) miniWin.setBounds({ x, y, width: b.width, height: b.height });
+    rememberMiniCorner();
+  }
+}
+
+/** A janela principal some da frente: minimizada no Windows/Linux, escondida no Mac (volta pelo Dock). */
+function parkMainWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (isMac) {
+    if (win.isVisible()) win.hide();
+  } else if (!win.isMinimized()) win.minimize();
+}
+
+/** "Fechar" do Modo Mini: some com ele sem trazer o escritório para a frente. */
+function closeMini() {
+  if (!mini) return;
+  autoMiniPaused = true; // não volta sozinho até a pessoa abrir a janela principal de novo
+  mini = false;
+  miniSuspended = false;
+  win?.webContents.send('mini-changed', false);
+  if (miniWin && !miniWin.isDestroyed()) {
+    miniQuietClose = true;
+    miniWin.close(); // o "closed" deixa a janela principal minimizada
+  } else parkMainWindow();
+  buildMenu();
+}
+
+/** "Não incomodar": o Modo Mini some (continua ligado e volta quando o status mudar). */
+function suspendMini() {
+  if (!mini || miniSuspended || !miniWin || miniWin.isDestroyed()) return;
+  miniSuspended = true;
+  miniWin.hide();
+  parkMainWindow();
+  buildMenu();
+}
+
+function resumeMini() {
+  if (!miniSuspended) return;
+  miniSuspended = false;
+  if (!mini || !miniWin || miniWin.isDestroyed()) return;
+  if (win && win.isVisible() && !win.isMinimized() && win.isFocused()) return setMini(false, true);
+  if (win?.isVisible()) win.hide();
+  miniWin.showInactive();
+  buildMenu();
 }
 
 function setupMiniWindow(child: BrowserWindow) {
@@ -357,23 +461,26 @@ function setupMiniWindow(child: BrowserWindow) {
   child.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   const [w, h] = child.getSize();
   placeMini(w, h);
-  child.showInactive();
+  // em "Não incomodar" o Modo Mini fica ligado, mas escondido
+  miniSuspended = status === 'DND';
+  if (!miniSuspended) child.showInactive();
   if (win) {
     if (win.isVisible() && !win.isMinimized()) normalBounds = win.getBounds();
     win.hide();
+    if (miniSuspended) parkMainWindow();
   }
-  let saveTimer: NodeJS.Timeout | undefined;
   child.on('moved', () => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      if (child.isDestroyed()) return;
-      const b = child.getBounds();
-      cfg.miniCorner = { right: b.x + b.width, bottom: b.y + b.height };
-      saveConfig();
-    }, 300);
+    if (!child.isDestroyed() && miniWin === child && !miniDragStart) rememberMiniCorner();
   });
   child.on('closed', () => {
     if (miniWin === child) miniWin = null;
+    miniDragStart = null;
+    miniSuspended = false;
+    if (miniQuietClose) {
+      miniQuietClose = false;
+      parkMainWindow();
+      return;
+    }
     if (mini) {
       mini = false;
       win?.webContents.send('mini-changed', false);
@@ -389,6 +496,7 @@ function setMini(on: boolean, notifyPage: boolean) {
   if (!win || mini === on) return;
   if (on && !inOffice && pageMiniWindow) return;
   mini = on;
+  if (!on) miniSuspended = false;
   if (pageMiniWindow) {
     if (on) {
       if (win.isFullScreen()) win.setFullScreen(false);
@@ -424,7 +532,7 @@ function setAutoMini(on: boolean) {
 
 /** Dá para entrar no Modo Mini automático agora? */
 function autoMiniReady() {
-  return Boolean(win && !mini && cfg.autoMini && inOffice && pageMiniWindow && !win.isFullScreen());
+  return Boolean(win && !mini && cfg.autoMini && inOffice && pageMiniWindow && !win.isFullScreen() && status !== 'DND' && !autoMiniPaused);
 }
 
 function scheduleAutoMini() {
@@ -715,6 +823,8 @@ function setupIpc() {
   ipcMain.on('set-status', (e, s: Status) => {
     if (!fromApp(e) || !(s in STATUS_LABEL)) return;
     status = s;
+    if (s === 'DND') suspendMini();
+    else resumeMini();
     buildMenu();
   });
   ipcMain.on('set-mini', (e, on: boolean) => fromApp(e) && setMini(Boolean(on), false));
@@ -726,10 +836,12 @@ function setupIpc() {
     if (!inOffice && mini) setMini(false, true);
     buildMenu();
   });
-  ipcMain.on('mini-size', (e, w: number, h: number) => {
+  ipcMain.on('mini-size', (e, w: number, h: number, anchor?: unknown) => {
     if (!fromApp(e) || e.sender !== win?.webContents || !Number.isFinite(w) || !Number.isFinite(h)) return;
-    placeMini(w, h);
+    placeMini(w, h, ANCHORS.has(anchor as Anchor) ? (anchor as Anchor) : undefined);
   });
+  ipcMain.on('mini-close', (e) => fromApp(e) && e.sender === win?.webContents && closeMini());
+  ipcMain.on('mini-drag', (e, phase: unknown) => fromApp(e) && e.sender === win?.webContents && dragMini(String(phase)));
   ipcMain.on('check-updates', (e, auto: boolean) => fromApp(e) && void checkUpdates(Boolean(auto)));
   ipcMain.on('install-update-now', (e) => fromApp(e) && installUpdateNow());
   ipcMain.on('notify', (e, title: string, body: string) => {

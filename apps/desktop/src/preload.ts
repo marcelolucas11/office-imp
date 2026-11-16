@@ -20,7 +20,12 @@ contextBridge.exposeInMainWorld('officeImp', {
   /** O Modo Mini abre como janela flutuante transparente (só as câmeras). */
   miniWindow: true,
   setOffice: (name: string | null) => ipcRenderer.send('set-office', name),
-  setMiniSize: (width: number, height: number) => ipcRenderer.send('mini-size', width, height),
+  /** `anchor`: canto que fica parado durante o redimensionamento pelas bordas ('tl', 'tr', 'bl' ou 'br'). */
+  setMiniSize: (width: number, height: number, anchor?: string) => ipcRenderer.send('mini-size', width, height, anchor),
+  /** Fecha o Modo Mini sem trazer a janela principal para a frente (ela fica minimizada). */
+  closeMini: () => ipcRenderer.send('mini-close'),
+  /** Arrastar a janela mini: o app move a janela seguindo o cursor. */
+  miniDrag: (phase: 'start' | 'move' | 'end') => ipcRenderer.send('mini-drag', phase),
   onLeaveOffice: (cb: () => void) => on('leave-office', cb),
   onOpenSettings: (cb: () => void) => on('open-settings', cb),
   onStatusShortcut: (cb: (status: string) => void) => on('status-shortcut', cb),

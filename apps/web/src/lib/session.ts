@@ -82,6 +82,9 @@ export const useToasts = create<ToastState>((set, get) => ({
 }));
 export const toast = (text: string, kind: Toast['kind'] = 'info', action?: Toast['action'], ms?: number) => useToasts.getState().push(text, kind, action, ms);
 
+/** Canto da janela mini que fica parado quando ela muda de tamanho (t/b = cima/baixo, l/r = esquerda/direita). */
+export type MiniAnchor = 'tl' | 'tr' | 'bl' | 'br';
+
 /** Ponte com o app desktop (Electron). Ausente no navegador. */
 export interface DesktopBridge {
   isDesktop: true;
@@ -92,7 +95,11 @@ export interface DesktopBridge {
   /** Versões novas do app: o Modo Mini abre numa janela flutuante transparente. */
   miniWindow?: boolean;
   setOffice?: (name: string | null) => void;
-  setMiniSize?: (width: number, height: number) => void;
+  setMiniSize?: (width: number, height: number, anchor?: MiniAnchor) => void;
+  /** Versões novas do app: fecha o Modo Mini sem trazer a janela principal para a frente. */
+  closeMini?: () => void;
+  /** Versões novas do app: move a janela mini seguindo o cursor (início, movimento e fim do arrasto). */
+  miniDrag?: (phase: 'start' | 'move' | 'end') => void;
   onLeaveOffice?: (cb: () => void) => () => void;
   onOpenSettings?: (cb: () => void) => () => void;
   onStatusShortcut: (cb: (status: string) => void) => () => void;
