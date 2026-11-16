@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DESK_SETUPS, areaCenter, buildCollision, mapDesks, objColor, objSetup, objectColors, type AvView, type MapArea, type OfficeMap } from '@office-imp/shared';
+import { DESK_SETUPS, areaCenter, deskSeat, buildCollision, mapDesks, objColor, objSetup, objectColors, type AvView, type MapArea, type OfficeMap } from '@office-imp/shared';
 import { config } from '../src/config';
 import { totpCode } from '../src/lib/crypto';
 import { setMailTestMode, testOutbox } from '../src/lib/mailer';
@@ -520,6 +520,45 @@ describe('tempo real', () => {
     expect(got).toBeGreaterThan(0);
     expect(got).toBeLessThanOrEqual(11);
     b.log.splice(0, b.log.length);
+  });
+
+  it('ao entrar, quem tem mesa aparece sentado nela (também a do sócio, dentro da Sala do Sócio)', async () => {
+    const meOf = (rt: Rt) => rt.init.players.find((p: any) => p.id === rt.init.me);
+    const rejoinAt = async (deskId: string) => {
+      const o = await Rt.join(srv.url, owner.http, slug);
+      o.send('desk:claim', { deskId });
+      await o.next('desks', (d) => d.some((x: any) => x.id === deskId && x.userId === o.init.me));
+      await o.room.leave();
+      await sleep(150);
+      return Rt.join(srv.url, owner.http, slug);
+    };
+    // mesa comum
+    const taken = new Set(((await owner.http.get(`/api/offices/${officeId}/desks`)).json as any[]).filter((d) => d.userId).map((d) => d.id));
+    const desk = mapDesks(map).find((d) => !d.props?.partner && !taken.has(d.id))!;
+    let o = await rejoinAt(desk.id);
+    expect(meOf(o)).toMatchObject({ ...deskSeat(desk), deskId: desk.id });
+    await o.room.leave();
+    await sleep(150);
+    // mesa do sócio, que fica dentro de uma área privada "Somente equipe"
+    const partnerDesk = mapDesks(map).find((d) => d.props?.partner && !taken.has(d.id));
+    if (partnerDesk) {
+      o = await rejoinAt(partnerDesk.id);
+      const me = meOf(o);
+      expect(me).toMatchObject({ ...deskSeat(partnerDesk), deskId: partnerDesk.id });
+      expect(me.areaId).toBeTruthy();
+    }
+    // sem mesa: volta para a área de entrada
+    o.send('desk:release', {});
+    await o.next('desks', (d) => !d.some((x: any) => x.userId === o.init.me));
+    await o.room.leave();
+    await sleep(150);
+    o = await Rt.join(srv.url, owner.http, slug);
+    const me = meOf(o);
+    expect(me.deskId).toBeNull();
+    expect(me.areaId).toBeNull();
+    await o.room.leave();
+    await sleep(150);
+    for (const rt of [a, b]) rt.log.splice(0, rt.log.length);
   });
 
   it('rádio: abrir, entrar, fila, controles e troca de DJ', async () => {

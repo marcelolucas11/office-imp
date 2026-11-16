@@ -319,6 +319,17 @@ function buildMenu() {
 // Cliente web antigo: a própria janela encolhe e fica sempre no topo (comportamento da 1.0).
 const MINI_MARGIN = 20;
 
+/**
+ * Janela visível em todas as mesas (Spaces) e por cima de apps em tela cheia. No Mac, o Electron
+ * por padrão transforma o app em "app de fundo" para isso, e o macOS tira o ponto do Dock (o app
+ * parece fechado com o Modo Mini aberto). `skipTransformProcessType` mantém o app como app normal,
+ * com o ponto no Dock; as janelas do tipo "panel" (Modo Mini, bandeja) continuam por cima da tela cheia.
+ */
+function showOnAllSpaces(w: BrowserWindow, on: boolean) {
+  w.setVisibleOnAllWorkspaces(on, on ? { visibleOnFullScreen: true, skipTransformProcessType: true } : { skipTransformProcessType: true });
+  if (isMac) void app.dock?.show().catch(() => {});
+}
+
 function miniWindowOptions(): Electron.BrowserWindowConstructorOptions {
   return {
     width: 260,
@@ -459,7 +470,7 @@ function setupMiniWindow(child: BrowserWindow) {
   if (miniWin && !miniWin.isDestroyed() && miniWin !== child) miniWin.close();
   miniWin = child;
   child.setAlwaysOnTop(true, 'floating');
-  child.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  showOnAllSpaces(child, true);
   const [w, h] = child.getSize();
   placeMini(w, h);
   // em "Não incomodar" o Modo Mini fica ligado, mas escondido
@@ -514,10 +525,10 @@ function setMini(on: boolean, notifyPage: boolean) {
     win.setMinimumSize(320, 300);
     win.setBounds({ width: 380, height: 460, x: area.x + area.width - 400, y: area.y + area.height - 480 });
     win.setAlwaysOnTop(true, 'floating');
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    showOnAllSpaces(win, true);
   } else {
     win.setAlwaysOnTop(false);
-    win.setVisibleOnAllWorkspaces(false);
+    showOnAllSpaces(win, false);
     win.setMinimumSize(...NORMAL_MIN);
     if (normalBounds) win.setBounds(normalBounds);
   }
@@ -580,7 +591,7 @@ function createTrayWindow() {
     ...(isMac ? { type: 'panel' as const } : {}),
     webPreferences: { preload: path.join(__dirname, 'tray-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  trayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  showOnAllSpaces(trayWin, true);
   trayWin.on('blur', hideTrayWindow);
   trayWin.on('closed', () => {
     trayWin = null;
