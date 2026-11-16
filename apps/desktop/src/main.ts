@@ -148,6 +148,16 @@ function createWindow() {
   win.on('closed', () => {
     win = null;
   });
+  // janela escondida ou minimizada (Modo Mini, bandeja): a página para de desenhar o mapa. Com
+  // backgroundThrottling desligado (para a call continuar), o Chromium não faz isso sozinho e o mapa
+  // seguiria sendo redesenhado 60 vezes por segundo sem ninguém ver.
+  const sendVisible = () => {
+    if (win && !win.isDestroyed()) win.webContents.send('window-visible', win.isVisible() && !win.isMinimized());
+  };
+  win.on('show', sendVisible);
+  win.on('hide', sendVisible);
+  win.on('minimize', sendVisible);
+  win.on('restore', sendVisible);
   loadServer();
 }
 

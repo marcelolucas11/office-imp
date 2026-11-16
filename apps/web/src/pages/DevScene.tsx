@@ -9,7 +9,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { generateOffice } from '@office-imp/map-engine';
-import { DAY_PERIODS, DEFAULT_AVATAR, DEFAULT_TIMEZONE, Wall, buildCollision, dayPeriod, deskSeat, mapDesks, type DayPeriod, type DeskInfo, type MapObject, type OfficeMap, type PlayerState, type Point } from '@office-imp/shared';
+import { DAY_PERIODS, DEFAULT_AVATAR, DEFAULT_TIMEZONE, Wall, applyDeskLooks, buildCollision, dayPeriod, deskSeat, mapDesks, type DayPeriod, type DeskInfo, type MapObject, type OfficeMap, type PlayerState, type Point } from '@office-imp/shared';
 import { bus } from '../game/bus';
 import { setReduceMotion, useMotion } from '../game/motion';
 import { useGame } from '../game/store';
@@ -84,6 +84,8 @@ export default function DevScene() {
   const asked = params.get('periodo') as DayPeriod | null;
   const open = params.get('abrir');
   const showcase = params.get('animados') === '1';
+  // ?look={"type":"desk_gamer","rug":"graphite"}: personalização da sua mesa (com abrir=mesa)
+  const lookParam = params.get('look');
   const modal = useGame((s) => s.modal);
   const [forced, setForced] = useState<DayPeriod | null>(asked && DAY_PERIODS.includes(asked) ? asked : null);
   const ref = useRef<HTMLDivElement>(null);
@@ -92,7 +94,11 @@ export default function DevScene() {
     const map = generateOffice({ name: 'Impera', size: 'custom', customCount: people, partners: 2, partnersShareRoom: true });
     // Build Tool: a primeira mesa é sua, com uma caneca dourada e um vaso
     const mine = open === 'mesa' ? (mapDesks(map).find((d) => !d.props?.partner) ?? null) : null;
-    const desks: DeskInfo[] = mine ? [{ id: mine.id, userId: 'dev', userName: t('devScene.me', 'Você'), online: true }] : [];
+    let look = null;
+    try {
+      look = lookParam ? JSON.parse(lookParam) : null;
+    } catch {}
+    const desks: DeskInfo[] = mine ? [{ id: mine.id, userId: 'dev', userName: t('devScene.me', 'Você'), online: true, ...(look ? { look } : {}) }] : [];
     if (mine) {
       map.objects.push({ id: 'decor_dev_mug', type: 'mug', x: mine.x + 1, y: mine.y, color: 'gold', ownerDeskId: mine.id });
       map.objects.push({ id: 'decor_dev_plant', type: 'plant_small', x: mine.x + 2, y: mine.y, color: 'blue', ownerDeskId: mine.id });
@@ -125,7 +131,7 @@ export default function DevScene() {
     useGame.setState({
       phase: 'online',
       office: { id: 'dev', slug: 'dev', name: 'Impera', timezone, settings: { awayMinutes: 10, notesRestrictedToAdmins: false, monitoringNotice: '' } },
-      map,
+      map: applyDeskLooks(map, desks),
       baseMap: map,
       mapRev: useGame.getState().mapRev + 1,
       meId: me.id,
@@ -143,7 +149,7 @@ export default function DevScene() {
       forcePeriod(null);
       useGame.setState({ phase: 'idle', office: null, map: null, baseMap: null, players: {}, meId: '', doors: {}, desks: [], modal: null });
     };
-  }, [people, timezone, open, showcase]);
+  }, [people, timezone, open, showcase, lookParam]);
 
   useEffect(() => forcePeriod(forced), [forced]);
 

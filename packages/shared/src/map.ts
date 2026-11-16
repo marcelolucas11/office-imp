@@ -746,52 +746,203 @@ export function normalizeObjectVariants(map: OfficeMap): OfficeMap {
 }
 
 /**
- * Personalização de uma mesa de trabalho pelo ocupante (Build Tool, visual v2 Fase E): a cor e o
- * setup que ele escolheu. Não entra no mapa publicado: fica no registro da mesa (tabela `desks`) e
- * é aplicada por cima do mapa (`applyDeskLooks`). Campo ausente = o do mapa publicado.
+ * Personalização de uma mesa de trabalho pelo ocupante (Build Tool): o modelo da mesa, a cor e o
+ * setup, a cadeira e o tapete. Não entra no mapa publicado: fica no registro da mesa (tabela
+ * `desks`) e é aplicada por cima do mapa (`applyDeskLooks`). Campo ausente = o do mapa publicado.
+ * Nada aqui muda a colisão: o modelo só troca por outro com o mesmo footprint, e cadeira e tapete
+ * não bloqueiam a passagem.
  */
 export interface DeskLook {
+  /** Modelo da mesa (tipo com o mesmo footprint e assento do publicado, `deskModels`). */
+  type?: string;
   color?: string;
   setup?: string;
+  /** Tipo da cadeira do assento (`DESK_CHAIR_TYPES`). */
+  chair?: string;
+  /** Cor da cadeira (variante do tipo em uso). */
+  chairColor?: string;
+  /** Cor do tapete debaixo da mesa e da cadeira. Ausente = sem tapete. */
+  rug?: string;
 }
 
+/** Cadeiras que o ocupante pode escolher para a própria mesa (todas de 1 bloco, sem colisão). */
+export const DESK_CHAIR_TYPES = ['chair', 'chair_gamer', 'chair_exec', 'stool'];
+/** Tipo do tapete da mesa (o tamanho sai da mesa e do assento). */
+export const DESK_RUG_TYPE = 'rug';
+/** Prefixos dos objetos que só existem no mapa visto (vêm do look, nunca são gravados). */
+export const DESK_CHAIR_PREFIX = 'deskchair:';
+export const DESK_RUG_PREFIX = 'deskrug:';
+
 /**
- * Look válido para a mesa: só os campos que existem no tipo dela e que mudam alguma coisa em
- * relação ao mapa publicado (cor ou setup igual ao da planta sai). `null` se não sobrar nada.
- * Aceita qualquer entrada (o que veio do banco ou de um mapa que mudou de tipo de mesa).
+ * Modelos de mesa que podem substituir o tipo publicado sem mexer na colisão nem no assento: os de
+ * mesmo tamanho, mesmo desenho de blocos (`cells`) e mesmo `seat`. A mesa reta de 2 blocos troca com
+ * a de pé, a de vidro, a executiva, a gamer e a bancada; a grande e a em L só com elas mesmas.
  */
-export function sanitizeDeskLook(desk: Pick<MapObject, 'type' | 'color' | 'setup'>, look: unknown): DeskLook | null {
+export function deskModels(type: string): string[] {
+  const base = OBJECT_DEFS[type];
+  if (!base?.desk) return [];
+  const sig = (d: ObjectDef) => JSON.stringify([d.w, d.h, d.cells ?? null, d.seat ?? null]);
+  const want = sig(base);
+  return DESK_TYPES.filter((t) => sig(OBJECT_DEFS[t]) === want);
+}
+
+/** Cadeira posta no assento da mesa (qualquer objeto de assento de 1 bloco naquele tile), ou `null`. */
+export function deskChair(map: Pick<OfficeMap, 'objects'>, desk: MapObject): MapObject | null {
+  const seat = deskSeat(desk);
+  return map.objects.find((o) => o.x === seat.x && o.y === seat.y && !o.ownerDeskId && objectGroup(o.type) === 'seating' && objSize(o).w === 1 && objSize(o).h === 1) ?? null;
+}
+
+/** Para onde a cadeira do assento olha: para a mesa. */
+export function deskChairDir(desk: MapObject): Dir {
+  const seat = deskSeat(desk);
+  const { w, h } = objSize(desk);
+  if (seat.y >= desk.y + h) return 'up';
+  if (seat.y < desk.y) return 'down';
+  if (seat.x < desk.x) return 'right';
+  if (seat.x >= desk.x + w) return 'left';
+  return 'up';
+}
+
+/** Retângulo do tapete da mesa: o tampo e o assento, juntos. */
+export function deskRugRect(desk: MapObject): Rect {
+  const seat = deskSeat(desk);
+  const { w, h } = objSize(desk);
+  const x0 = Math.min(desk.x, seat.x);
+  const y0 = Math.min(desk.y, seat.y);
+  const x1 = Math.max(desk.x + w - 1, seat.x);
+  const y1 = Math.max(desk.y + h - 1, seat.y);
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+const validColor = (type: string, color: unknown): color is string => typeof color === 'string' && !objColorError({ type, color });
+
+/**
+ * Look válido para a mesa: só os campos que existem e que mudam alguma coisa em relação ao mapa
+ * publicado (o que é igual ao da planta sai). `chair` é a cadeira do assento no mapa publicado
+ * (`deskChair`), se houver. `null` se não sobrar nada. Aceita qualquer entrada (o que veio do
+ * banco, do cliente ou de um mapa que mudou de tipo de mesa).
+ */
+export function sanitizeDeskLook(desk: Pick<MapObject, 'type' | 'color' | 'setup'>, look: unknown, chair?: Pick<MapObject, 'type' | 'color'> | null): DeskLook | null {
   if (!look || typeof look !== 'object' || !isDeskType(desk.type)) return null;
   const raw = look as Record<string, unknown>;
   const out: DeskLook = {};
-  if (typeof raw.color === 'string' && !objColorError({ type: desk.type, color: raw.color }) && raw.color !== objColor(desk)?.id) out.color = raw.color;
-  if (typeof raw.setup === 'string' && !objSetupError({ type: desk.type, setup: raw.setup }) && raw.setup !== objSetup(desk)?.id) out.setup = raw.setup;
-  return out.color || out.setup ? out : null;
+  // modelo: só os de mesmo footprint
+  const type = typeof raw.type === 'string' && raw.type !== desk.type && deskModels(desk.type).includes(raw.type) ? raw.type : desk.type;
+  if (type !== desk.type) out.type = type;
+  // a cor publicada pode não existir no modelo novo: aí vale a padrão dele
+  const baseColor = validColor(type, desk.color) ? objColor({ type, color: desk.color })?.id : objColor({ type })?.id;
+  if (validColor(type, raw.color) && raw.color !== baseColor) out.color = raw.color;
+  if (typeof raw.setup === 'string' && !objSetupError({ type, setup: raw.setup }) && raw.setup !== objSetup(desk)?.id) out.setup = raw.setup;
+  // cadeira: tipo e cor
+  const chairType = typeof raw.chair === 'string' && DESK_CHAIR_TYPES.includes(raw.chair) ? raw.chair : null;
+  const effChair = chairType ?? chair?.type ?? null;
+  if (chairType && (!chair || chairType !== chair.type)) out.chair = chairType;
+  if (effChair && validColor(effChair, raw.chairColor)) {
+    const baseChairColor = chair && effChair === chair.type ? objColor(chair)?.id : objColor({ type: effChair })?.id;
+    // sem cadeira no mapa, a cor só faz sentido com a cadeira escolhida
+    if (raw.chairColor !== baseChairColor || (!chair && out.chair)) out.chairColor = raw.chairColor;
+  }
+  if (out.chairColor && !chair && !out.chair) delete out.chairColor;
+  if (validColor(DESK_RUG_TYPE, raw.rug)) out.rug = raw.rug;
+  return Object.keys(out).length ? out : null;
+}
+
+/** Campos do look, na ordem em que se validam (o modelo vem antes da cor; a cadeira antes da cor dela). */
+export const DESK_LOOK_KEYS = ['type', 'color', 'setup', 'chair', 'chairColor', 'rug'] as const;
+export type DeskLookKey = (typeof DESK_LOOK_KEYS)[number];
+
+/**
+ * Erro de um campo pedido para o look (o resto do look dá o contexto: o modelo para a cor, a
+ * cadeira para a cor dela), ou `null`. Ausente é sempre válido.
+ */
+export function deskLookFieldError(desk: Pick<MapObject, 'type'>, chair: Pick<MapObject, 'type'> | null, look: DeskLook, key: DeskLookKey): string | null {
+  const v = look[key];
+  if (v === undefined) return null;
+  if (typeof v !== 'string') return 'valor inválido';
+  const type = look.type ?? desk.type;
+  switch (key) {
+    case 'type':
+      return deskModels(desk.type).includes(v) ? null : 'modelo de mesa não disponível para esta mesa';
+    case 'color':
+      return objColorError({ type, color: v });
+    case 'setup':
+      return objSetupError({ type, setup: v });
+    case 'chair':
+      return DESK_CHAIR_TYPES.includes(v) ? null : 'cadeira não disponível';
+    case 'chairColor': {
+      const ct = look.chair ?? chair?.type;
+      return ct ? objColorError({ type: ct, color: v }) : 'a mesa não tem cadeira';
+    }
+    case 'rug':
+      return objColorError({ type: DESK_RUG_TYPE, color: v });
+  }
 }
 
 /**
- * Mapa como o escritório vê: o publicado, com a cor e o setup que cada ocupante escolheu para a
- * mesa dele. Não altera o mapa recebido; devolve o mesmo objeto se nenhuma mesa tiver look.
+ * Mapa como o escritório vê: o publicado, com o que cada ocupante escolheu para a mesa dele
+ * (modelo, cor, setup, cadeira e tapete). Não altera o mapa recebido; devolve o mesmo objeto se
+ * nenhuma mesa tiver look. Cadeira nova (onde o mapa não tinha) e tapete entram como objetos
+ * só de exibição, com ids `deskchair:`/`deskrug:`.
  */
 export function applyDeskLooks(map: OfficeMap, desks: readonly { id: string; look?: DeskLook | null }[]): OfficeMap {
   const looks = new Map<string, DeskLook>();
   for (const d of desks) if (d.look) looks.set(d.id, d.look);
   if (!looks.size) return map;
-  let changed = false;
-  const objects = map.objects.map((o) => {
-    const look = looks.get(o.id) && sanitizeDeskLook(o, looks.get(o.id));
-    if (!look) return o;
-    changed = true;
-    return { ...o, ...look };
+  // assento → cadeira (para achar a cadeira de cada mesa sem varrer o mapa a cada mesa)
+  const seats = new Map<string, number>();
+  map.objects.forEach((o, i) => {
+    if (!o.ownerDeskId && objectGroup(o.type) === 'seating' && objSize(o).w === 1 && objSize(o).h === 1) {
+      const k = `${o.x},${o.y}`;
+      if (!seats.has(k)) seats.set(k, i);
+    }
   });
-  return changed ? { ...map, objects } : map;
+  const objects = map.objects.slice();
+  const extra: MapObject[] = [];
+  let changed = false;
+  for (const [i, o] of map.objects.entries()) {
+    const raw = looks.get(o.id);
+    if (!raw || !isDesk(o)) continue;
+    const seat = deskSeat(o);
+    const ci = seats.get(`${seat.x},${seat.y}`);
+    const chair = ci === undefined ? null : map.objects[ci];
+    const look = sanitizeDeskLook(o, raw, chair);
+    if (!look) continue;
+    changed = true;
+    const type = look.type ?? o.type;
+    const { color: _c, setup: _s, ...rest } = o;
+    const color = look.color ?? (validColor(type, o.color) ? o.color : undefined);
+    const setup = look.setup ?? o.setup;
+    objects[i] = { ...rest, type, ...(color ? { color } : {}), ...(setup ? { setup } : {}) };
+    if (look.chair || look.chairColor) {
+      const ctype = look.chair ?? chair!.type;
+      const ccolor = look.chairColor ?? (chair && validColor(ctype, chair.color) ? chair.color : undefined);
+      if (chair && ci !== undefined) {
+        const { color: _cc, ...crest } = chair;
+        objects[ci] = { ...crest, type: ctype, ...(ccolor ? { color: ccolor } : {}) };
+      } else {
+        extra.push({ id: `${DESK_CHAIR_PREFIX}${o.id}`, type: ctype, x: seat.x, y: seat.y, dir: deskChairDir(o), ...(ccolor ? { color: ccolor } : {}) });
+      }
+    }
+    if (look.rug) {
+      const r = deskRugRect(o);
+      // o tapete vai antes de tudo: é chão
+      extra.unshift({ id: `${DESK_RUG_PREFIX}${o.id}`, type: DESK_RUG_TYPE, x: r.x, y: r.y, w: r.w, h: r.h, color: look.rug });
+    }
+  }
+  if (!changed) return map;
+  const rugs = extra.filter((e) => e.id.startsWith(DESK_RUG_PREFIX));
+  const chairs = extra.filter((e) => !e.id.startsWith(DESK_RUG_PREFIX));
+  return { ...map, objects: [...rugs, ...objects, ...chairs] };
 }
 
 /** Assinatura dos looks das mesas (para saber se o mapa visto precisa ser refeito). */
 export function deskLooksKey(desks: readonly { id: string; look?: DeskLook | null }[]): string {
   return desks
     .filter((d) => d.look)
-    .map((d) => `${d.id}:${d.look!.color ?? ''}:${d.look!.setup ?? ''}`)
+    .map((d) => {
+      const l = d.look!;
+      return `${d.id}:${l.type ?? ''}:${l.color ?? ''}:${l.setup ?? ''}:${l.chair ?? ''}:${l.chairColor ?? ''}:${l.rug ?? ''}`;
+    })
     .sort()
     .join('|');
 }
@@ -1084,29 +1235,89 @@ export function stripDerivedAreas(map: OfficeMap): OfficeMap {
   return { ...map, areas: map.areas.filter((a) => !isDerivedArea(a)) };
 }
 
+/** Limite de retângulos de uma área de mesa personalizada. */
+const MAX_DESK_AREA_RECTS = 64;
+
+function cleanRect(r: unknown, map: Pick<OfficeMap, 'width' | 'height'>): Rect | null {
+  if (!r || typeof r !== 'object') return null;
+  const { x, y, w, h } = r as Record<string, unknown>;
+  if (![x, y, w, h].every((v) => Number.isInteger(v))) return null;
+  const x0 = Math.max(0, x as number);
+  const y0 = Math.max(0, y as number);
+  const x1 = Math.min(map.width, (x as number) + (w as number));
+  const y1 = Math.min(map.height, (y as number) + (h as number));
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
 /**
- * Área de conversa de cada mesa: um quadrado de 2×2 tiles (4 lugares) que inclui a cadeira.
- * Quem chega na mesa entra numa conversa privada com quem estiver nesses 4 tiles.
- * Mesas dentro de salas privadas (sócios) não ganham área própria: a sala já cumpre esse papel.
+ * Forma da área de uma mesa desenhada no Mapmaker (`props.areaRects`, ou o `props.area` antigo, de
+ * um retângulo só), já recortada pelo mapa. `null` = área automática (2×2 com a cadeira).
+ */
+export function deskAreaCustomRects(desk: MapObject, map: Pick<OfficeMap, 'width' | 'height'>): Rect[] | null {
+  const p = desk.props ?? {};
+  const raw: unknown[] | null = Array.isArray(p.areaRects) ? p.areaRects : p.area ? [p.area] : null;
+  if (!raw) return null;
+  const rects = raw.slice(0, MAX_DESK_AREA_RECTS).map((r) => cleanRect(r, map)).filter((r): r is Rect => r !== null);
+  return rects.length ? rects : null;
+}
+
+/** Personalização da área de uma mesa (Mapmaker): fica nas props da mesa, nunca numa área gravada. */
+export interface DeskAreaSettings {
+  name?: string;
+  capacity?: number;
+  staffOnly?: boolean;
+  meeting?: boolean;
+  /** Mesa sem área de conversa. */
+  off?: boolean;
+}
+
+export function deskAreaSettings(desk: MapObject): DeskAreaSettings {
+  const p = desk.props ?? {};
+  const out: DeskAreaSettings = {};
+  if (typeof p.areaName === 'string' && p.areaName.trim()) out.name = p.areaName.trim().slice(0, 60);
+  if (Number.isInteger(p.areaCapacity) && p.areaCapacity >= 1) out.capacity = Math.min(200, p.areaCapacity);
+  if (p.areaStaffOnly === true) out.staffOnly = true;
+  if (p.areaMeeting === true) out.meeting = true;
+  if (p.noArea === true) out.off = true;
+  return out;
+}
+
+/** Chaves das props da mesa que guardam a área personalizada (para "voltar à automática"). */
+export const DESK_AREA_PROPS = ['area', 'areaRects', 'areaName', 'areaCapacity', 'areaStaffOnly', 'areaMeeting', 'noArea'] as const;
+
+/**
+ * Área de conversa de cada mesa: por padrão, um quadrado de 2×2 tiles (4 lugares) que inclui a
+ * cadeira. Quem chega na mesa entra numa conversa privada com quem estiver nesses tiles. No
+ * Mapmaker a administração pode renomear, mudar a capacidade, desenhar outra forma (maior ou menor)
+ * ou tirar a área de uma mesa; isso fica nas props da mesa e a área continua derivada a cada carga.
+ * Mesas dentro de salas privadas (sócios) não ganham área automática: a sala já cumpre esse papel.
+ * As áreas desenhadas reservam o lugar primeiro; as automáticas desviam delas.
  */
 export function deskAreas(map: OfficeMap): MapArea[] {
   const base = map.areas.filter((a) => !isDerivedArea(a) && a.kind === 'private');
-  const grid = buildCollision(map);
   const taken: Rect[] = base.flatMap((a) => a.rects);
-  const out: MapArea[] = [];
-  let n = 0;
-  for (const desk of mapDesks(map)) {
-    n++;
+  const desks = mapDesks(map);
+  const found = new Map<string, Rect[]>();
+  // 1) áreas desenhadas no Mapmaker
+  for (const desk of desks) {
+    if (deskAreaSettings(desk).off) continue;
+    const custom = deskAreaCustomRects(desk, map);
+    if (!custom) continue;
+    found.set(desk.id, custom);
+    taken.push(...custom);
+  }
+  // 2) automáticas, onde couber
+  let grid: Uint8Array | null = null;
+  for (const desk of desks) {
+    if (found.has(desk.id) || deskAreaSettings(desk).off) continue;
+    grid ??= buildCollision(map);
     const seat = deskSeat(desk);
-    const custom = desk.props?.area as Rect | undefined;
-    const candidates: Rect[] = custom
-      ? [custom]
-      : [
-          { x: seat.x, y: seat.y, w: 2, h: 2 },
-          { x: seat.x - 1, y: seat.y, w: 2, h: 2 },
-          { x: seat.x, y: seat.y - 1, w: 2, h: 2 },
-          { x: seat.x - 1, y: seat.y - 1, w: 2, h: 2 },
-        ];
+    const candidates: Rect[] = [
+      { x: seat.x, y: seat.y, w: 2, h: 2 },
+      { x: seat.x - 1, y: seat.y, w: 2, h: 2 },
+      { x: seat.x, y: seat.y - 1, w: 2, h: 2 },
+      { x: seat.x - 1, y: seat.y - 1, w: 2, h: 2 },
+    ];
     let best: Rect | null = null;
     let bestScore = 1;
     for (const r of candidates) {
@@ -1122,8 +1333,25 @@ export function deskAreas(map: OfficeMap): MapArea[] {
     }
     if (!best) continue;
     taken.push(best);
-    out.push({ id: `${DESK_AREA_PREFIX}${desk.id}`, name: `Mesa ${n}`, kind: 'private', staffOnly: false, desk: true, deskId: desk.id, capacity: DESK_AREA_CAPACITY, rects: [best] });
+    found.set(desk.id, [best]);
   }
+  const out: MapArea[] = [];
+  desks.forEach((desk, i) => {
+    const rects = found.get(desk.id);
+    if (!rects) return;
+    const s = deskAreaSettings(desk);
+    out.push({
+      id: `${DESK_AREA_PREFIX}${desk.id}`,
+      name: s.name ?? `Mesa ${i + 1}`,
+      kind: 'private',
+      staffOnly: Boolean(s.staffOnly),
+      ...(s.meeting ? { meeting: true } : {}),
+      desk: true,
+      deskId: desk.id,
+      capacity: s.capacity ?? DESK_AREA_CAPACITY,
+      rects,
+    });
+  });
   return out;
 }
 

@@ -85,3 +85,21 @@ Registro das decisões tomadas durante a construção: o que foi escolhido, o qu
 - **Imagens do quadro branco.** O Excalidraw guarda as imagens fora do desenho; agora elas são
   enviadas para `/api/offices/:id/whiteboards/:obj/files` e baixadas por quem está com o quadro aberto.
 
+
+## 1.3.0 (16/11/2026)
+
+- **Área da mesa gravada na mesa, não no mapa.** O que o Mapmaker muda numa área de mesa (nome,
+  forma, capacidade, "somente equipe", "sala de reunião", sem área) vai para as props da mesa
+  (`areaName`, `areaRects`, `areaCapacity`…). A área continua derivada a cada carga: mesas novas e
+  mapas antigos seguem funcionando, e a área anda junto quando a mesa muda de lugar. As desenhadas
+  reservam o lugar antes das automáticas.
+- **Personalização do funcionário sem mexer na colisão.** Modelo só entre mesas do mesmo tamanho,
+  desenho de blocos e assento; cadeiras só de 1 bloco e sem colisão; tapete no chão. Por isso o look
+  pode ficar só no registro da mesa e ser aplicado por cima do mapa, sem o servidor mudar a planta.
+- **Limite de mensagens por pessoa no tempo real** (balde de fichas por tipo, valores bem acima do
+  uso normal): protege banco e participantes de um cliente em loop. O excesso é descartado em
+  silêncio.
+- **Proxy confiável só na rede privada por padrão** (`TRUST_PROXY`): o IP real vem do
+  `X-Forwarded-For` apenas quando quem conecta é a própria máquina ou a rede do Docker.
+- **Compressão no build, não no proxy.** Cada VPS tem um proxy diferente (o Traefik do Easypanel
+  não comprime por padrão); com `.br`/`.gz` prontos, o app sai comprimido em qualquer instalação.

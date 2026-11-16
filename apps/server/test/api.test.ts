@@ -479,6 +479,49 @@ describe('tempo real', () => {
     await b.next('map:patch', (d) => d.remove[0] === added.id && !d.add.length);
   });
 
+  it('Build Tool: modelo da mesa, cadeira e tapete só na própria mesa, sem mexer no mapa publicado', async () => {
+    const desk = mapDesks(map).find((d) => !d.props?.partner)!;
+    const room = hub.room(officeId)!;
+    const lookOf = (desks: any[]) => desks.find((x: any) => x.id === desk.id)?.look ?? null;
+    const before = JSON.stringify(room.map.objects);
+    a.send('desk:look', { type: 'desk_gamer', color: 'pink', chair: 'chair_gamer', chairColor: 'pink', rug: 'graphite' });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d)?.rug === 'graphite'))).toEqual({ type: 'desk_gamer', color: 'pink', chair: 'chair_gamer', chairColor: 'pink', rug: 'graphite' });
+    // o que não existe é recusado: modelo de outro tamanho, cadeira fora da lista, cor que o tipo não tem
+    for (const bad of [{ type: 'desk_wide' }, { chair: 'sofa' }, { rug: 'arco-iris' }, { chairColor: 'arco-iris' }, { color: 'walnut' }]) {
+      a.send('desk:look', bad);
+      expect((await a.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
+    }
+    // outra funcionária não mexe na mesa dela
+    b.send('desk:look', { deskId: desk.id, rug: 'sand' });
+    expect((await b.next('notice', (d) => d.code === 'desk_look_invalid')).code).toBe('desk_look_invalid');
+    // nada disso entra no mapa da sala (nem tapete, nem cadeira trocada, nem modelo)
+    expect(JSON.stringify(room.map.objects)).toBe(before);
+    // trocar o modelo de novo tira a cor que o novo não tem
+    a.send('desk:look', { type: 'desk_glass' });
+    const glass = lookOf(await b.next('desks', (d) => lookOf(d)?.type === 'desk_glass'));
+    expect(glass).toEqual({ type: 'desk_glass', chair: 'chair_gamer', chairColor: 'pink', rug: 'graphite' });
+    a.send('desk:look', { rug: null });
+    expect(lookOf(await b.next('desks', (d) => lookOf(d) && !lookOf(d).rug))).toEqual({ type: 'desk_glass', chair: 'chair_gamer', chairColor: 'pink' });
+    a.send('desk:look', { reset: true });
+    expect(lookOf(await b.next('desks', (d) => !lookOf(d)))).toBeNull();
+  });
+
+  it('mesa dos sócios: funcionária não pega; e mensagem em excesso é descartada (limite por pessoa)', async () => {
+    const partnerDesk = mapDesks(map).find((d) => d.props?.partner);
+    if (partnerDesk) {
+      b.send('desk:claim', { deskId: partnerDesk.id });
+      expect((await b.next('notice', (d) => d.code === 'desk_reserved')).code).toBe('desk_reserved');
+    }
+    // 40 recados de uma vez: passam só os da rajada (10); o resto é descartado sem derrubar ninguém
+    const before = b.log.length;
+    for (let i = 0; i < 40; i++) a.send('chat', { scope: 'all', text: `flood ${i}` });
+    await sleep(400);
+    const got = b.log.slice(before).filter((m) => m.type === 'chat' && String(m.data.text).startsWith('flood')).length;
+    expect(got).toBeGreaterThan(0);
+    expect(got).toBeLessThanOrEqual(11);
+    b.log.splice(0, b.log.length);
+  });
+
   it('rádio: abrir, entrar, fila, controles e troca de DJ', async () => {
     a.send('music:open', { url: 'https://music.youtube.com/watch?v=dQw4w9WgXcQ', name: 'Lo-fi' });
     let chs = await b.next('music', (d) => d.length === 1);

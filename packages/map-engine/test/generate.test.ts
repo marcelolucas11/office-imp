@@ -391,3 +391,21 @@ describe('setups e cadeiras do visual v2 no gerador (Fase E)', () => {
     expect(new Set(added.map(setupOf)).size).toBeGreaterThan(2);
   });
 });
+
+describe('validação das áreas de mesa desenhadas no Mapmaker', () => {
+  it('aceita aumentar a área da mesa; recusa invadir uma sala privada ou outra mesa', () => {
+    const map = generateOffice(base);
+    const [d1, d2] = mapDesks(map).filter((d) => !d.props?.partner);
+    const seat = deskSeat(d1);
+    d1.props = { ...d1.props, areaName: 'Mesa grande', areaRects: [{ x: seat.x, y: seat.y, w: 3, h: 2 }] };
+    expect(validateOffice(map).errors).toEqual([]);
+    // por cima da sala privada de outra área
+    const room = map.areas.find((a) => a.kind === 'private')!;
+    d1.props.areaRects = [room.rects[0]];
+    expect(validateOffice(map).errors.some((e) => e.includes('invade'))).toBe(true);
+    // duas mesas com a mesma área desenhada
+    d1.props.areaRects = [{ x: seat.x, y: seat.y, w: 2, h: 2 }];
+    d2.props = { ...d2.props, areaRects: [{ x: seat.x, y: seat.y, w: 2, h: 2 }] };
+    expect(validateOffice(map).errors.some((e) => e.includes('se sobrepõem'))).toBe(true);
+  });
+});

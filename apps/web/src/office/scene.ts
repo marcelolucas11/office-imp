@@ -48,6 +48,7 @@ import { cameraBounds, exteriorMarginFor, grassStrips } from '../game/camera';
 import { useMotion } from '../game/motion';
 import { net } from '../game/net';
 import { serverNow, useGame } from '../game/store';
+import { desktop } from '../lib/session';
 import { t } from '../lib/i18n';
 import { emojiCanvas, hasIcon } from '../lib/icons';
 
@@ -1190,9 +1191,16 @@ export function createGame(parent: HTMLElement): { destroy: () => void } {
     game.scale.resize(n.w, n.h);
   });
   ro.observe(parent);
+  // app desktop: com a janela escondida (Modo Mini, bandeja) ou minimizada, o mapa não é desenhado.
+  // No navegador o próprio Phaser já pausa quando a aba fica em segundo plano.
+  const offVisible = desktop?.onWindowVisible?.((visible) => {
+    if (visible) game.loop.wake();
+    else game.loop.sleep();
+  });
   activeGame = game;
   return {
     destroy: () => {
+      offVisible?.();
       ro.disconnect();
       if (activeGame === game) activeGame = null;
       game.destroy(true);

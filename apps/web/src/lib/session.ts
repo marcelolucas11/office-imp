@@ -97,6 +97,8 @@ export interface DesktopBridge {
   onOpenSettings?: (cb: () => void) => () => void;
   onStatusShortcut: (cb: (status: string) => void) => () => void;
   onMiniChanged: (cb: (on: boolean) => void) => () => void;
+  /** Versões novas do app: a janela principal ficou visível ou foi escondida/minimizada. */
+  onWindowVisible?: (cb: (visible: boolean) => void) => () => void;
   checkUpdates: (auto: boolean) => void;
   installUpdateNow: () => void;
   onUpdateState: (cb: (state: { status: string; version?: string; message?: string }) => void) => () => void;

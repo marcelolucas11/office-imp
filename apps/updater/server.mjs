@@ -5,6 +5,7 @@
 //   4. confere a saúde;      5. se falhar, volta para a versão anterior.
 // Só mexe nos serviços listados em SERVICES, dentro do projeto Compose do office-imp.
 import { spawn } from 'node:child_process';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -114,6 +115,13 @@ async function backup(previous) {
   log(`backup salvo em ${file}`);
 }
 
+/** Confere o token em tempo constante (o tempo da comparação não revela quantos caracteres batem). */
+function authorized(header) {
+  if (!TOKEN || typeof header !== 'string') return false;
+  const digest = (v) => createHash('sha256').update(v).digest();
+  return timingSafeEqual(digest(header), digest(`Bearer ${TOKEN}`));
+}
+
 function send(res, code, body) {
   res.writeHead(code, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -122,7 +130,7 @@ function send(res, code, body) {
 export function createServer() {
   return http.createServer((req, res) => {
     if (req.url === '/health') return send(res, 200, { ok: true });
-    if (!TOKEN || req.headers.authorization !== `Bearer ${TOKEN}`) return send(res, 401, { message: 'Não autorizado.' });
+    if (!authorized(req.headers.authorization)) return send(res, 401, { message: 'Não autorizado.' });
     if (req.method === 'GET' && req.url === '/status') return send(res, 200, state);
     if (req.method === 'POST' && req.url === '/update') {
       let raw = '';

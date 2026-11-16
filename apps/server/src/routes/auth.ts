@@ -117,11 +117,14 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/api/auth/login', { config: { rateLimit: { max: 20, timeWindow: '15 minutes' } } }, async (req, reply) => {
     const body = parse(z.object({ username: z.string().trim().toLowerCase().max(64), password: z.string().max(200), code: z.string().max(20).optional() }), req.body);
     const key = `${body.username}|${req.ip}`;
-    if (tooManyAttempts(key)) throw new (await import('../lib/errors')).HttpError(429, 'too_many_attempts', 'Muitas tentativas. Aguarde 15 minutos e tente de novo.');
+    // além do limite por usuário+IP, um teto por usuário (de qualquer IP) contra força bruta distribuída
+    const userKey = `*|${body.username}`;
+    if (tooManyAttempts(key) || tooManyAttempts(userKey, USER_MAX_FAILURES)) throw new (await import('../lib/errors')).HttpError(429, 'too_many_attempts', 'Muitas tentativas. Aguarde 15 minutos e tente de novo.');
     const [user] = await db().select().from(schema.users).where(eq(schema.users.username, body.username));
     const ok = user ? await verifyPassword(body.password, user.passwordHash) : (await verifyPassword(body.password, DUMMY_HASH), false);
     if (!user || !ok) {
       registerFailure(key);
+      registerFailure(userKey);
       throw unauthorized('Usuário ou senha incorretos.');
     }
     if (user.totpEnabled && user.totpSecretEnc) {
@@ -135,6 +138,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
       if (!valid) {
         registerFailure(key);
+        registerFailure(userKey);
         throw unauthorized('Código de verificação incorreto.');
       }
     }
@@ -203,14 +207,16 @@ export async function authRoutes(app: FastifyInstance) {
 // ---- limite de tentativas de login: 5 falhas a cada 15 min por usuário+IP ----
 const failures = new Map<string, { n: number; first: number }>();
 const WINDOW = 15 * 60_000;
-function tooManyAttempts(key: string): boolean {
+/** Falhas por usuário, somando todos os IPs, antes de bloquear por 15 min. */
+const USER_MAX_FAILURES = 25;
+function tooManyAttempts(key: string, max = 5): boolean {
   const f = failures.get(key);
   if (!f) return false;
   if (Date.now() - f.first > WINDOW) {
     failures.delete(key);
     return false;
   }
-  return f.n >= 5;
+  return f.n >= max;
 }
 function registerFailure(key: string) {
   const f = failures.get(key);

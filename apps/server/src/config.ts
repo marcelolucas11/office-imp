@@ -22,6 +22,19 @@ export const config = {
   port: Number(env.PORT ?? 3000),
   host: env.HOST ?? '0.0.0.0',
   publicUrl: (env.PUBLIC_URL ?? 'http://localhost:5173').replace(/\/$/, ''),
+  /**
+   * De quem aceitar o X-Forwarded-For (o IP real de quem acessa, usado nos limites de tentativas).
+   * Padrão: só proxies na própria máquina ou em rede privada (Traefik/Caddy em Docker, nginx no
+   * host). Assim ninguém de fora forja o próprio IP mandando o cabeçalho direto para a porta do app.
+   * `TRUST_PROXY=true` volta a confiar em qualquer um; ou uma lista de IPs/CIDRs separados por vírgula.
+   */
+  trustProxy: ((): boolean | string[] => {
+    const v = (env.TRUST_PROXY ?? '').trim();
+    if (!v) return ['loopback', 'linklocal', 'uniquelocal'];
+    if (['1', 'true', 'yes', 'on'].includes(v.toLowerCase())) return true;
+    if (['0', 'false', 'no', 'off'].includes(v.toLowerCase())) return false;
+    return v.split(',').map((x) => x.trim()).filter(Boolean);
+  })(),
   databaseUrl: env.DATABASE_URL ?? '',
   redisUrl: env.REDIS_URL ?? '',
   appSecret: secret('APP_SECRET'),
