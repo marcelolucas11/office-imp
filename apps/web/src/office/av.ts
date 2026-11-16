@@ -21,7 +21,33 @@ export interface PeerMedia {
   spotlight: boolean;
   /** Conectado ao servidor de mídia. */
   live: boolean;
+  /** Câmera ligada (mesmo que oculta para você). */
+  camOn: boolean;
+  /** Compartilhando a tela (mesmo que oculta para você). */
+  screenOn: boolean;
+  /** A tela compartilhada tem áudio. */
+  screenAudio: boolean;
+  /** Ajustes só seus para esta pessoa. */
+  pref: PeerPref;
 }
+
+/** O que cada pessoa ajusta só para si sobre outra pessoa da conversa. */
+export interface PeerPref {
+  /** Volume da voz, de 0 a 1. */
+  vol: number;
+  /** Voz silenciada só para você. */
+  mute: boolean;
+  /** Volume do áudio da tela compartilhada, de 0 a 1. */
+  svol: number;
+  /** Áudio da tela silenciado só para você. */
+  smute: boolean;
+  /** Vídeo da câmera oculto só para você (deixa de baixar o vídeo). */
+  hideCam: boolean;
+  /** Tela compartilhada oculta só para você. */
+  hideScreen: boolean;
+}
+
+export const DEFAULT_PEER: PeerPref = { vol: 1, mute: false, svol: 1, smute: false, hideCam: false, hideScreen: false };
 
 interface Prefs {
   hearNearby: boolean;
@@ -49,6 +75,8 @@ interface AvState extends Prefs {
   focus: string | null;
   /** Você está falando agora (medido no seu próprio microfone). */
   meSpeaking: boolean;
+  /** Ajustes só seus por pessoa (volume, silenciar, ocultar vídeo). */
+  peerPrefs: Record<string, PeerPref>;
 }
 
 /** Restrições do microfone. Com o filtro forte: sem ganho automático e mono. */
@@ -73,7 +101,34 @@ function loadPrefs(): Prefs {
   }
 }
 
-export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room: 'none', mic: false, cam: false, screen: false, localCam: null, localScreen: null, peers: [], blocked: false, focus: null, meSpeaking: false }));
+// volume e silenciar ficam guardados por pessoa (como em outros apps de chamada); ocultar vídeo vale só nesta sessão
+const PEER_KEY = 'oi-av-peers';
+function loadPeerPrefs(): Record<string, PeerPref> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PEER_KEY) ?? '{}') as Record<string, Partial<PeerPref>>;
+    const out: Record<string, PeerPref> = {};
+    for (const [id, p] of Object.entries(raw)) {
+      out[id] = { ...DEFAULT_PEER, vol: clamp01(p.vol), mute: Boolean(p.mute), svol: clamp01(p.svol), smute: Boolean(p.smute) };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+function clamp01(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+}
+function savePeerPrefs() {
+  const out: Record<string, Partial<PeerPref>> = {};
+  for (const [id, p] of Object.entries(useAv.getState().peerPrefs)) {
+    if (p.vol !== 1 || p.mute || p.svol !== 1 || p.smute) out[id] = { vol: p.vol, mute: p.mute, svol: p.svol, smute: p.smute };
+  }
+  try {
+    localStorage.setItem(PEER_KEY, JSON.stringify(out));
+  } catch {}
+}
+
+export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room: 'none', mic: false, cam: false, screen: false, localCam: null, localScreen: null, peers: [], blocked: false, focus: null, meSpeaking: false, peerPrefs: loadPeerPrefs() }));
 
 function savePrefs() {
   const s = useAv.getState();
@@ -122,6 +177,7 @@ class AvManager {
         this.view = NO_VIEW;
         this.queue();
       }),
+      bus.on('av:muted', (d: { kind: 'mic' | 'cam' | 'screen'; name: string }) => void this.onRemoteMute(d)),
       useGame.subscribe((s, prev) => {
         const me = s.players[s.meId];
         const before = prev.players[prev.meId];
@@ -340,12 +396,25 @@ class AvManager {
       })
       .on(RoomEvent.TrackPublished, again)
       .on(RoomEvent.TrackUnpublished, again)
-      .on(RoomEvent.TrackMuted, (_pub, p) => {
-        if (p.isLocal) this.pushLocal();
+      .on(RoomEvent.TrackMuted, (pub, p) => {
+        if (p.isLocal) {
+          // desligado por outra pessoa (pelo servidor de mídia): não religar sozinho na próxima troca de sala
+          if (pub.source === Track.Source.Microphone) this.want.mic = false;
+          if (pub.source === Track.Source.Camera) {
+            this.want.cam = false;
+            this.autoCam = false;
+          }
+          this.pushLocal();
+        }
         this.refresh();
       })
-      .on(RoomEvent.TrackUnmuted, (_pub, p) => {
-        if (p.isLocal) this.pushLocal();
+      .on(RoomEvent.TrackUnmuted, (pub, p) => {
+        if (p.isLocal) {
+          // o que se quer acompanha o estado real (ex.: o sistema devolveu a câmera depois de uma interrupção)
+          if (pub.source === Track.Source.Microphone) this.want.mic = true;
+          if (pub.source === Track.Source.Camera) this.want.cam = true;
+          this.pushLocal();
+        }
         this.refresh();
       })
       .on(RoomEvent.ParticipantConnected, again)
@@ -379,12 +448,25 @@ class AvManager {
       this.wanted.set(pub, ok);
       pub.setSubscribed(ok);
     };
-    if (this.main && this.current === 'open') {
+    // vídeo oculto só para você: deixa de baixar a faixa (economiza a rede), o áudio segue normal
+    const hidden = (id: string, pub: RemoteTrackPublication) => {
+      const pref = useAv.getState().peerPrefs[id];
+      if (!pref) return false;
+      return (pub.source === Track.Source.Camera && pref.hideCam) || (pub.source === Track.Source.ScreenShare && pref.hideScreen);
+    };
+    if (this.main) {
+      const open = this.current === 'open';
       const allow = new Set([...v.peers.map((p) => p.id), ...v.spotlight]);
-      for (const p of this.main.remoteParticipants.values()) for (const pub of p.trackPublications.values()) set(pub, allow.has(p.identity));
+      for (const p of this.main.remoteParticipants.values()) {
+        for (const pub of p.trackPublications.values()) {
+          if (open) set(pub, allow.has(p.identity) && !hidden(p.identity, pub));
+          // área privada: tudo assinado automaticamente; só mexe no que você ocultou ou voltou a mostrar
+          else if (hidden(p.identity, pub) || this.wanted.get(pub) === false) set(pub, !hidden(p.identity, pub));
+        }
+      }
     }
     if (this.aux) {
-      for (const p of this.aux.remoteParticipants.values()) for (const pub of p.trackPublications.values()) set(pub, v.spotlight.includes(p.identity));
+      for (const p of this.aux.remoteParticipants.values()) for (const pub of p.trackPublications.values()) set(pub, v.spotlight.includes(p.identity) && !hidden(p.identity, pub));
     }
     this.applyVolumes();
   }
@@ -394,9 +476,12 @@ class AvManager {
     const radius = g.players[g.meId]?.distance ?? DEFAULT_INTERACTION_DISTANCE;
     const hear = useAv.getState().hearNearby;
     const v = this.view;
+    const prefs = useAv.getState().peerPrefs;
+    // volume da proximidade × o volume que você escolheu para a pessoa (voz e tela separados)
     const vol = (p: RemoteParticipant, value: number) => {
-      p.setVolume(value, Track.Source.Microphone);
-      p.setVolume(value, Track.Source.ScreenShareAudio);
+      const pref = prefs[p.identity] ?? DEFAULT_PEER;
+      p.setVolume(pref.mute ? 0 : value * pref.vol, Track.Source.Microphone);
+      p.setVolume(pref.smute ? 0 : value * pref.svol, Track.Source.ScreenShareAudio);
     };
     if (this.main) {
       for (const p of this.main.remoteParticipants.values()) {
@@ -415,6 +500,7 @@ class AvManager {
   private refresh() {
     const g = useGame.getState();
     const v = this.view;
+    const st0 = useAv.getState();
     const out: PeerMedia[] = [];
     const ids = [...v.peers.map((p) => ({ id: p.id, spot: false })), ...v.spotlight.map((id) => ({ id, spot: true }))];
     for (const { id, spot } of ids) {
@@ -422,11 +508,17 @@ class AvManager {
       const cam = p?.getTrackPublication(Track.Source.Camera);
       const scr = p?.getTrackPublication(Track.Source.ScreenShare);
       const mic = p?.getTrackPublication(Track.Source.Microphone);
+      const sAudio = p?.getTrackPublication(Track.Source.ScreenShareAudio);
+      const pref = st0.peerPrefs[id] ?? DEFAULT_PEER;
       out.push({
         id,
         name: g.players[id]?.name ?? p?.name ?? id,
-        cam: cam?.track && !cam.isMuted ? cam.track : null,
-        screen: scr?.track ?? null,
+        cam: cam?.track && !cam.isMuted && !pref.hideCam ? cam.track : null,
+        screen: scr?.track && !scr.isMuted && !pref.hideScreen ? scr.track : null,
+        camOn: Boolean(cam && !cam.isMuted),
+        screenOn: Boolean(scr && !scr.isMuted),
+        screenAudio: Boolean(sAudio && !sAudio.isMuted),
+        pref,
         mic: Boolean(mic && !mic.isMuted),
         speaking: Boolean(p?.isSpeaking),
         spotlight: spot,
@@ -502,6 +594,43 @@ class AvManager {
       if (!/Permission|NotAllowed|cancel/i.test(errMsg(e))) toast(t('av.screenError', 'Não foi possível compartilhar a tela.'), 'error');
     }
     this.pushLocal();
+  }
+
+  /** Ajuste só seu para uma pessoa da conversa: volume, silenciar, ocultar vídeo ou tela. */
+  setPeer(id: string, patch: Partial<PeerPref>) {
+    const cur = useAv.getState().peerPrefs[id] ?? DEFAULT_PEER;
+    const next = { ...cur, ...patch };
+    if (patch.vol !== undefined) next.vol = clamp01(patch.vol);
+    if (patch.svol !== undefined) next.svol = clamp01(patch.svol);
+    // subir o volume tira o "silenciado"
+    if (patch.vol !== undefined && patch.vol > 0 && patch.mute === undefined) next.mute = false;
+    if (patch.svol !== undefined && patch.svol > 0 && patch.smute === undefined) next.smute = false;
+    const focus = useAv.getState().focus;
+    const unfocus = (patch.hideCam && focus === `${id}:cam`) || (patch.hideScreen && focus === `${id}:screen`);
+    useAv.setState((s) => ({ peerPrefs: { ...s.peerPrefs, [id]: next }, ...(unfocus ? { focus: null } : {}) }));
+    savePeerPrefs();
+    this.applySubs();
+    this.refresh();
+  }
+
+  /** Desliga para todos o microfone, a câmera ou a tela de alguém (só a pessoa religa). */
+  muteForAll(id: string, kind: 'mic' | 'cam' | 'screen') {
+    net.send('av:mute', { to: id, kind });
+  }
+
+  /** Alguém desligou seu microfone, câmera ou tela para todos (o servidor de mídia já silenciou a faixa). */
+  private async onRemoteMute(d: { kind: 'mic' | 'cam' | 'screen'; name: string }) {
+    if (!this.main) return;
+    if (d.kind === 'mic') {
+      await this.setMic(false);
+      toast(t('av.mutedBy', '{{name}} desligou o seu microfone. Clique no microfone para religar.', { name: d.name }), 'info', undefined, 8000);
+    } else if (d.kind === 'cam') {
+      await this.setCam(false);
+      toast(t('av.camOffBy', '{{name}} desligou a sua câmera. Clique na câmera para religar.', { name: d.name }), 'info', undefined, 8000);
+    } else {
+      await this.setScreen(false);
+      toast(t('av.screenOffBy', '{{name}} parou o seu compartilhamento de tela.', { name: d.name }), 'info', undefined, 8000);
+    }
   }
 
   async unblock() {

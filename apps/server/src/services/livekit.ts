@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { AccessToken, EgressClient, RoomServiceClient } from 'livekit-server-sdk';
+import { AccessToken, EgressClient, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 import { config } from '../config';
 
 export function lkRoomName(officeId: string, room: string): string {
@@ -30,4 +30,27 @@ export async function removeFromLkRoom(room: string, identity: string): Promise<
   try {
     await roomService().removeParticipant(room, identity);
   } catch {}
+}
+
+export type RemoteMuteKind = 'mic' | 'cam' | 'screen';
+const MUTE_SOURCES: Record<RemoteMuteKind, TrackSource[]> = {
+  mic: [TrackSource.MICROPHONE],
+  cam: [TrackSource.CAMERA],
+  screen: [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO],
+};
+
+/**
+ * Desliga para todos o microfone, a câmera ou a tela de alguém, direto no servidor de mídia: a faixa fica
+ * muda para a sala inteira mesmo que o app da pessoa não obedeça ao aviso. Para religar, só a própria pessoa.
+ * Devolve quantas faixas foram silenciadas (0 = nada publicado ou falha).
+ */
+export async function muteInLkRoom(room: string, identity: string, kind: RemoteMuteKind): Promise<number> {
+  try {
+    const p = await roomService().getParticipant(room, identity);
+    const tracks = p.tracks.filter((t) => MUTE_SOURCES[kind].includes(t.source) && !t.muted);
+    for (const t of tracks) await roomService().mutePublishedTrack(room, identity, t.sid, true);
+    return tracks.length;
+  } catch {
+    return 0;
+  }
 }

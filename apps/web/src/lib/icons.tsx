@@ -19,6 +19,7 @@ import {
   DoorOpen,
   Eraser,
   Eye,
+  EyeOff,
   Flag,
   Flame,
   Flower2,
@@ -39,6 +40,7 @@ import {
   MessageCircleQuestion,
   MicOff,
   Monitor,
+  MonitorOff,
   MousePointer2,
   Music,
   NotebookPen,
@@ -66,6 +68,8 @@ import {
   UtensilsCrossed,
   Volume1,
   Volume2,
+  VolumeX,
+  VideoOff,
   Wrench,
   type IconNode,
 } from 'lucide';
@@ -137,6 +141,10 @@ const BY_EMOJI: Record<string, IconNode> = {
   '🔴': CircleDot,
   '⬆': CircleArrowUp,
   '⋯': Ellipsis,
+  '🔕': VolumeX,
+  '🙈': EyeOff,
+  '📷': VideoOff,
+  '🛑': MonitorOff,
 };
 
 /** O aceno é a mão inclinada (o "✋" de levantar a mão fica reta). */

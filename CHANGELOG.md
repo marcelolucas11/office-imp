@@ -3,6 +3,28 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.4.0 — 16/11/2026 — Controles de áudio e vídeo por pessoa
+
+- **Botão "⋯" em cada vídeo e em cada tela compartilhada.** Passe o mouse no quadro de outra pessoa
+  (ou clique com o botão direito) para abrir os controles dela. Na tela ampliada, o botão "Áudio e
+  vídeo" fica ao lado de "Tela cheia".
+- **Só para você:** barra de volume da voz de cada pessoa (0 a 100%, por cima da queda de volume pela
+  distância), silenciar a pessoa só para você, e ocultar o vídeo dela só para você (o vídeo deixa de
+  ser baixado, o áudio continua). Na tela compartilhada: volume e silenciar o áudio da tela, e ocultar
+  a tela. Volume e silenciar ficam guardados por pessoa no seu computador; ocultar vale até sair do
+  escritório. Quadro oculto mostra "Vídeo oculto para você" — um clique mostra de novo.
+- **Para todos na conversa:** qualquer pessoa desliga o microfone, a câmera ou o compartilhamento de
+  tela de quem está conversando com ela (mesma área privada, mesma mesa ou dentro do raio). O corte é
+  feito no servidor de áudio e vídeo, então vale para a sala inteira. Só a própria pessoa religa, e ela
+  recebe um aviso com o nome de quem desligou. Quem só está ouvindo o palco (Spotlight) não desliga o
+  palco.
+- **Auditoria.** Cada "desligar para todos" fica registrado em Administração → Auditoria (quem, de
+  quem e o quê).
+
+### Antes de atualizar
+
+- **Nada manual.** Atualize o servidor e os apps pelos botões de sempre.
+
 ## 1.3.0 — 16/11/2026 — Áreas das mesas no Mapmaker, mesa do funcionário e auditoria
 
 - **Áreas das mesas no Mapmaker.** A aba "Áreas" agora lista, em "Áreas das mesas", a área de
