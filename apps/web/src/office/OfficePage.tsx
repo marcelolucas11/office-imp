@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { areaCenter, isAdminRole, type Status } from '@office-imp/shared';
 import { Button, Spinner } from '@office-imp/ui';
 import { bus } from '../game/bus';
@@ -21,6 +21,32 @@ import { playSound } from './sounds';
 import { Emo, EmoText } from '../lib/icons';
 
 const Mapmaker = lazy(() => import('./Mapmaker'));
+const AdminPanel = lazy(() => import('../admin/AdminPage').then((m) => ({ default: m.AdminPanel })));
+
+/**
+ * Painel do ADM dentro do escritório: cobre o mapa, mas deixa a fileira de vídeos (em cima) e a
+ * barra de microfone/câmera/tela (embaixo) à vista. A conexão e as chamadas seguem normalmente.
+ */
+function AdminOverlay() {
+  const section = useGame((s) => s.admin);
+  const hidden = useGame((s) => s.mini && !s.miniExt);
+  const canOpen = useSession((s) => isAdminRole(s.me?.role));
+  if (!section || hidden || !canOpen) return null;
+  const close = () => useGame.setState({ admin: null });
+  return (
+    <div className="absolute inset-x-3 bottom-24 top-32 z-[25]" onKeyDown={(e) => e.key === 'Escape' && !useGame.getState().modal && close()}>
+      <Suspense
+        fallback={
+          <div className="grid h-full place-items-center rounded-2xl border border-line bg-ink">
+            <Spinner />
+          </div>
+        }
+      >
+        <AdminPanel section={section as any} onSection={(s) => useGame.setState({ admin: s })} onClose={close} />
+      </Suspense>
+    </div>
+  );
+}
 
 function GameCanvas() {
   const ref = useRef<HTMLDivElement>(null);
@@ -246,6 +272,7 @@ function Modals() {
 export default function OfficePage() {
   const { slug = '', areaId } = useParams();
   const nav = useNavigate();
+  const loc = useLocation();
   const phase = useGame((s) => s.phase);
   const map = useGame((s) => s.map);
   const error = useGame((s) => s.error);
@@ -293,6 +320,17 @@ export default function OfficePage() {
     if (new URLSearchParams(location.search).get('mapmaker') === '1' && canAdmin) useGame.setState({ modal: { kind: 'mapmaker' } });
   }, [phase, areaId, canAdmin]);
 
+  // o Painel do ADM (aberto aqui dentro) pode mandar para este ou outro escritório, com ou sem o Mapmaker
+  useEffect(() => {
+    useGame.setState({ admin: null });
+  }, [slug, loc.key]);
+  useEffect(() => {
+    if (phase !== 'online' || !deepLinked.current) return;
+    if (new URLSearchParams(loc.search).get('mapmaker') !== '1') return;
+    if (canAdmin) useGame.setState({ admin: null, modal: { kind: 'mapmaker' } });
+    nav({ pathname: loc.pathname, search: '' }, { replace: true });
+  }, [phase, loc.search, loc.key, canAdmin]);
+
   if (phase === 'error' || phase === 'kicked') {
     return (
       <div className="grid h-full place-items-center p-6">
@@ -323,6 +361,7 @@ export default function OfficePage() {
           <Hint />
           <RadioDock />
           <BottomBar />
+          <AdminOverlay />
           <Modals />
           <MiniMode />
         </>
