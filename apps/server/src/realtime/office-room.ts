@@ -23,6 +23,7 @@ import {
   computeAv,
   deskChair,
   deskLookFieldError,
+  deskChairDir,
   deskSeat,
   deskTopAt,
   deskZone,
@@ -192,13 +193,18 @@ export class OfficeRoom extends Room {
     // o raio é do escritório (definido pela administração), igual para todos
     const distance = this.officeDistance();
     let deskId: string | null = null;
+    let dir: PlayerState['dir'] = 'down';
     if (subject.kind === 'user') {
-      const [m] = await db()
-        .select()
-        .from(schema.officeMembers)
-        .where(and(eq(schema.officeMembers.officeId, this.officeId), eq(schema.officeMembers.userId, subject.id)));
-      if (m?.lastX != null && m?.lastY != null) pos = { x: m.lastX, y: m.lastY };
       deskId = this.desks.find((d) => d.userId === subject.id)?.id ?? null;
+      // quem tem mesa aparece sentado nela; sem mesa, na área de entrada do mapa
+      const desk = deskId ? mapDesks(this.map).find((o) => o.id === deskId) : undefined;
+      if (desk) {
+        const seat = deskSeat(desk);
+        const inMap = seat.x >= 0 && seat.y >= 0 && seat.x < this.map.width && seat.y < this.map.height;
+        const free = inMap && this.grid[seat.y * this.map.width + seat.x] !== 1;
+        pos = free ? seat : nearestFree(this.grid, this.map.width, this.map.height, seat, 3);
+        if (free) dir = deskChairDir(desk);
+      }
     }
     const start = this.resolveSpawn(pos, subject.role);
     const area = privateAreaAt(this.map, this.areaIndex, start.x, start.y);
@@ -208,7 +214,7 @@ export class OfficeRoom extends Room {
       role: subject.role,
       x: start.x,
       y: start.y,
-      dir: 'down',
+      dir: pos && start.x === pos.x && start.y === pos.y ? dir : 'down',
       status: 'AVAILABLE',
       away: false,
       customStatus: null,
