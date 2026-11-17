@@ -33,17 +33,33 @@ const CAM = 'M15 10l5-3v10l-5-3M3 7h12v10H3z';
 const SCREEN = 'M3 4h18v12H3zM8 20h8M12 16v4';
 
 // ---------- vídeo ----------
-export function TrackView({ track, mirror, contain }: { track: Track; mirror?: boolean; contain?: boolean }) {
+export function TrackView({ track, mirror, contain, bare, onAspect }: { track: Track; mirror?: boolean; contain?: boolean; bare?: boolean; onAspect?: (ratio: number) => void }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const aspectCb = useRef(onAspect);
+  aspectCb.current = onAspect;
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     track.attach(el);
+    // proporção real do vídeo (a tela de um Mac é 16:10, não 16:9): o quadro se ajusta a ela, sem faixas pretas
+    const report = () => {
+      if (el.videoWidth && el.videoHeight) aspectCb.current?.(el.videoWidth / el.videoHeight);
+    };
+    el.addEventListener('loadedmetadata', report);
+    el.addEventListener('resize', report);
+    report();
     return () => {
+      el.removeEventListener('loadedmetadata', report);
+      el.removeEventListener('resize', report);
       track.detach(el);
     };
   }, [track]);
-  return <video ref={ref} autoPlay playsInline muted className={cx('h-full w-full bg-black', contain ? 'object-contain' : 'object-cover', mirror && '-scale-x-100')} />;
+  return <video ref={ref} autoPlay playsInline muted className={cx('h-full w-full', !bare && 'bg-black', contain ? 'object-contain' : 'object-cover', mirror && '-scale-x-100')} />;
+}
+
+/** Maior retângulo com a proporção `ratio` que cabe em w×h. */
+function containIn(w: number, h: number, ratio: number) {
+  return w / h > ratio ? { w: Math.floor(h * ratio), h } : { w, h: Math.floor(w / ratio) };
 }
 
 interface TileProps {
@@ -68,6 +84,7 @@ interface TileProps {
 function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar, peer, size, onPick, hint }: TileProps) {
   const focus = useAv((s) => s.focus);
   const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
+  const [ratio, setRatio] = useState(16 / 9);
   const key = `${id}:${kind}`;
   // oculto só para você: o clique no quadro volta a mostrar
   const hidden = peer ? (kind === 'cam' ? peer.pref.hideCam && peer.camOn : peer.pref.hideScreen && peer.screenOn) : false;
@@ -77,7 +94,9 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
     else if (onPick) onPick();
     else useAv.setState({ focus: focus === key ? null : key });
   };
-  return (
+  // no palco, a tela compartilhada fica com a proporção real dela (sem faixas pretas); a câmera ocupa o quadro todo
+  const box = size && kind === 'screen' && track ? containIn(size.w, size.h, ratio) : size;
+  const tile = (
     <div
       data-testid={`tile-${key}`}
       onContextMenu={(e) => {
@@ -85,12 +104,17 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
         e.preventDefault();
         setMenuAt(new DOMRect(e.clientX, e.clientY, 0, 0));
       }}
-      className={cx('group relative shrink-0 overflow-hidden rounded-xl border-2 bg-panel-2 transition-all', speaking ? 'border-ok' : 'border-line', size ? '' : big ? 'aspect-video w-full' : 'h-[104px] w-[184px]')}
-      style={size ? { width: size.w, height: size.h } : undefined}
+      className={cx(
+        'group relative shrink-0 overflow-hidden rounded-xl border-2 transition-all',
+        // no palco os vídeos flutuam sobre o mapa: sem moldura escura, só a sombra (e o verde de quem fala)
+        size ? cx('pointer-events-auto shadow-[0_10px_30px_rgba(0,0,0,0.45)]', speaking ? 'border-ok' : 'border-transparent', track ? 'bg-transparent' : 'bg-panel-2') : cx('bg-panel-2', speaking ? 'border-ok' : 'border-line'),
+        size ? '' : big ? 'aspect-video w-full' : 'h-[104px] w-[184px]',
+      )}
+      style={box ? { width: box.w, height: box.h } : undefined}
     >
       <button type="button" onClick={onClick} className={cx('block h-full w-full', hint === '' && 'cursor-default')} title={hidden ? t('video.showAgain', 'Clique para mostrar de novo') : (hint ?? t('video.expand', 'Clique para ampliar')) || undefined}>
         {track ? (
-          <TrackView track={track} mirror={mirror} contain={kind === 'screen'} />
+          <TrackView track={track} mirror={mirror} contain={kind === 'screen'} bare={Boolean(size)} onAspect={kind === 'screen' ? setRatio : undefined} />
         ) : hidden ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 pb-6 text-center text-[11px] leading-tight text-muted">
             <Emo e="🙈" size={20} />
@@ -107,6 +131,13 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
         {badge ? <span className="text-gold">{badge}</span> : null}
       </span>
       {peer ? <PeerMenu peer={peer} kind={kind} at={menuAt} setAt={setMenuAt} /> : null}
+    </div>
+  );
+  if (!size) return tile;
+  // a célula do palco guarda o lugar (para o mosaico alinhar); o vídeo fica centralizado nela
+  return (
+    <div className="pointer-events-none flex shrink-0 items-center justify-center" style={{ width: size.w, height: size.h }}>
+      {tile}
     </div>
   );
 }
@@ -367,21 +398,25 @@ function Stage({ mode, simplified, topStrip, strip, count, render, empty }: { mo
       data-testid="video-stage"
       data-layout={mode}
       className={cx(
-        'absolute z-30 flex flex-col gap-2 bg-ink',
-        simplified ? 'inset-0 p-4 pb-24' : cx('inset-x-6 bottom-24 rounded-2xl border border-line p-3 shadow-2xl', topStrip ? 'top-32' : 'top-3'),
+        // fora da Visualização Simplificada o palco é transparente: os vídeos flutuam sobre o mapa e o
+        // espaço vazio entre eles continua sendo o mapa (dá para clicar e andar)
+        'absolute z-30 flex flex-col gap-2',
+        simplified ? 'inset-0 bg-ink p-4 pb-24' : cx('pointer-events-none inset-x-6 bottom-24', topStrip ? 'top-32' : 'top-3'),
       )}
     >
       <div className="flex shrink-0 items-center gap-2">
-        {strip.length ? <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">{strip}</div> : <div className="flex-1" />}
-        <LayoutPicker simplified={simplified} compact />
-        <Button small variant="subtle" onClick={() => void root.current?.requestFullscreen?.()}>
-          {t('video.fullscreen', 'Tela cheia')}
-        </Button>
-        {simplified ? null : (
-          <Button small variant="subtle" data-testid="stage-close" onClick={() => setVideoLayout('bar')}>
-            {t('app.close', 'Fechar')}
+        {strip.length ? <div className="pointer-events-auto flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">{strip}</div> : <div className="flex-1" />}
+        <div className="pointer-events-auto flex shrink-0 items-center gap-2 rounded-2xl border border-line bg-panel/95 p-1 shadow-lg">
+          <LayoutPicker simplified={simplified} compact />
+          <Button small variant="subtle" onClick={() => void root.current?.requestFullscreen?.()}>
+            {t('video.fullscreen', 'Tela cheia')}
           </Button>
-        )}
+          {simplified ? null : (
+            <Button small variant="subtle" data-testid="stage-close" onClick={() => setVideoLayout('bar')}>
+              {t('app.close', 'Fechar')}
+            </Button>
+          )}
+        </div>
       </div>
       <div ref={area} className="min-h-0 flex-1">
         {empty ?? (

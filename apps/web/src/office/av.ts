@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Room, RoomEvent, ScreenSharePresets, Track, VideoPresets, type LocalTrack, type RemoteParticipant, type RemoteTrackPublication } from 'livekit-client';
+import { Room, RoomEvent, Track, VideoPresets, type LocalTrack, type RemoteParticipant, type RemoteTrackPublication } from 'livekit-client';
 import { create } from 'zustand';
 import { DEFAULT_INTERACTION_DISTANCE, volumeForDistance, type AvView } from '@office-imp/shared';
 import { bus } from '../game/bus';
@@ -57,6 +57,39 @@ interface Prefs {
   outId: string;
   /** Quanto o portão de voz corta o que não está perto do microfone. */
   micFilter: MicFilter;
+  /** Resolução máxima do compartilhamento de tela: Full HD (1080p) ou 2K (1440p). */
+  screenRes: ScreenRes;
+  /** O que o compartilhamento prioriza: nitidez (texto, planilhas, código) ou movimento (vídeos). */
+  screenFor: ScreenFor;
+}
+
+export type ScreenRes = '1080' | '1440';
+export type ScreenFor = 'text' | 'motion';
+
+/**
+ * Como a tela é enviada, para ela chegar sempre nítida:
+ *  - VP9 com camadas só de tempo (L1T3) e sem simulcast: existe uma única resolução, a cheia. Antes ia
+ *    junto uma cópia com metade da resolução (540p), e quem estava com a internet apertada (ou via a tela
+ *    pequena) recebia essa cópia — era isso que deixava a tela pixelada. Agora, quando falta internet, o
+ *    servidor manda menos quadros por segundo da mesma imagem, sem baixar a resolução;
+ *  - 'maintain-resolution' no modo nitidez: o navegador também nunca reduz a resolução para economizar,
+ *    só os quadros por segundo; o VP9 tem modo próprio para conteúdo de tela (texto e bordas finas);
+ *  - prioridade alta: na disputa pela internet de quem compartilha, a tela vem antes da câmera;
+ *  - captura limitada por largura e altura máximas: mantém a proporção da tela (sem esticar).
+ */
+export function screenProfile(res: ScreenRes, mode: ScreenFor) {
+  const [width, height] = res === '1440' ? [2560, 1440] : [1920, 1080];
+  const fps = 30;
+  // teto, não consumo: com a tela parada o VP9 usa uma fração disso
+  const maxBitrate = res === '1440' ? (mode === 'text' ? 10_000_000 : 14_000_000) : mode === 'text' ? 6_000_000 : 8_000_000;
+  return {
+    width,
+    height,
+    fps,
+    contentHint: (mode === 'text' ? 'text' : 'motion') as 'text' | 'motion',
+    degradation: (mode === 'text' ? 'maintain-resolution' : 'balanced') as RTCDegradationPreference,
+    encoding: { maxBitrate, maxFramerate: fps, priority: 'high' as RTCPriorityType },
+  };
 }
 
 interface AvState extends Prefs {
@@ -112,11 +145,17 @@ let echoMode: EchoMode = 'all';
 
 const PREF_KEY = 'oi-av';
 function loadPrefs(): Prefs {
-  const base: Prefs = { hearNearby: true, hd: false, micId: '', camId: '', outId: '', micFilter: 'normal' };
+  const base: Prefs = { hearNearby: true, hd: false, micId: '', camId: '', outId: '', micFilter: 'normal', screenRes: '1080', screenFor: 'text' };
   try {
     // "noiseReduce" (o antigo botão de desligar o filtro) é ignorado: o filtro agora é sempre ligado
     const { noiseReduce: _old, ...saved } = JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') as Partial<Prefs> & { noiseReduce?: boolean };
-    return { ...base, ...saved, micFilter: saved.micFilter === 'light' || saved.micFilter === 'strong' ? saved.micFilter : 'normal' };
+    return {
+      ...base,
+      ...saved,
+      micFilter: saved.micFilter === 'light' || saved.micFilter === 'strong' ? saved.micFilter : 'normal',
+      screenRes: saved.screenRes === '1440' ? '1440' : '1080',
+      screenFor: saved.screenFor === 'motion' ? 'motion' : 'text',
+    };
   } catch {
     return base;
   }
@@ -187,7 +226,7 @@ export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room:
 function savePrefs() {
   const s = useAv.getState();
   try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ hearNearby: s.hearNearby, hd: s.hd, micId: s.micId, camId: s.camId, outId: s.outId, micFilter: s.micFilter }));
+    localStorage.setItem(PREF_KEY, JSON.stringify({ hearNearby: s.hearNearby, hd: s.hd, micId: s.micId, camId: s.camId, outId: s.outId, micFilter: s.micFilter, screenRes: s.screenRes, screenFor: s.screenFor }));
   } catch {}
 }
 
@@ -660,18 +699,49 @@ class AvManager {
   async setScreen(on: boolean) {
     if (this.notConnected()) return;
     try {
-      // 1080p a 30 qps e até 5 Mbps (o padrão era 15 qps e 2,5 Mbps); 'detail' faz o codificador priorizar a
-      // nitidez do texto em vez do movimento
+      // qualidade escolhida nas configurações (Full HD ou 2K; nitidez ou movimento); veja screenProfile
+      const st = useAv.getState();
+      const sp = screenProfile(st.screenRes, st.screenFor);
       await this.main!.localParticipant.setScreenShareEnabled(
         on,
-        { audio: true, contentHint: 'detail', resolution: ScreenSharePresets.h1080fps30.resolution },
-        { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding },
+        // limites "max" (e não "ideal"): o navegador reduz mantendo a proporção da tela, sem esticar
+        { audio: true, contentHint: sp.contentHint, video: { width: { max: sp.width }, height: { max: sp.height }, frameRate: { max: sp.fps } } as MediaTrackConstraints as { displaySurface?: 'monitor' } },
+        { videoCodec: 'vp9', scalabilityMode: 'L1T3', simulcast: false, screenShareEncoding: sp.encoding, degradationPreference: sp.degradation },
       );
     } catch (e) {
       // cancelar a escolha da tela não é erro
       if (!/Permission|NotAllowed|cancel/i.test(errMsg(e))) toast(t('av.screenError', 'Não foi possível compartilhar a tela.'), 'error');
     }
     this.pushLocal();
+  }
+
+  /** Troca a qualidade do compartilhamento de tela. Se você já está compartilhando, vale na hora (sem escolher a tela de novo). */
+  async setScreenPrefs(p: Partial<Pick<Prefs, 'screenRes' | 'screenFor'>>) {
+    useAv.setState(p);
+    savePrefs();
+    const track = this.main?.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.videoTrack;
+    if (!track) return;
+    const st = useAv.getState();
+    const sp = screenProfile(st.screenRes, st.screenFor);
+    try {
+      track.mediaStreamTrack.contentHint = sp.contentHint;
+      await track.mediaStreamTrack.applyConstraints({ width: { max: sp.width }, height: { max: sp.height }, frameRate: { max: sp.fps } });
+      const sender = track.sender;
+      if (sender) {
+        const params = sender.getParameters();
+        for (const enc of params.encodings ?? []) {
+          enc.maxBitrate = sp.encoding.maxBitrate;
+          enc.maxFramerate = sp.encoding.maxFramerate;
+          enc.priority = sp.encoding.priority;
+          enc.networkPriority = sp.encoding.priority;
+        }
+        await sender.setParameters(params);
+      }
+      if ('setDegradationPreference' in track) await (track as { setDegradationPreference: (d: RTCDegradationPreference) => Promise<void> }).setDegradationPreference(sp.degradation);
+    } catch {
+      // alguns navegadores não aceitam a troca com a tela já aberta: vale no próximo compartilhamento
+      toast(t('av.screenPrefsNext', 'A nova qualidade vale a partir do próximo compartilhamento de tela.'), 'info');
+    }
   }
 
   /** Ajuste só seu para uma pessoa da conversa: volume, silenciar, ocultar vídeo ou tela. */

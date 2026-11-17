@@ -3,6 +3,29 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.9.0 — 17/11/2026 — Vídeos flutuando sobre o mapa e tela compartilhada sempre nítida
+
+- **Sem fundo preto atrás dos vídeos.** No Destaque, no Lado a lado e no Mosaico, as câmeras e as
+  telas compartilhadas agora flutuam direto sobre o mapa, sem o painel escuro em volta. O espaço entre
+  os vídeos continua sendo o mapa (dá para clicar e andar). Os botões de layout, Tela cheia e Fechar
+  ficam numa pequena barra no canto.
+- **Tela compartilhada sem faixas pretas.** O quadro da tela segue a proporção real dela (a tela de um
+  Mac é 16:10, não 16:9), então a imagem ocupa o quadro inteiro.
+- **Tela compartilhada sempre nítida.** Antes, junto com a tela ia uma cópia com metade da resolução
+  (540p), e quem estava com a internet apertada ou via a tela pequena recebia essa cópia — por isso ela
+  pixelava. Agora a tela vai numa resolução só, a cheia (codificador VP9 com modo próprio para tela): se
+  a internet de alguém apertar, a tela fica com menos quadros por segundo, mas não perde nitidez. A tela
+  também tem prioridade sobre a câmera na internet de quem compartilha.
+- **Qualidade da tela: Full HD (1080p) ou 2K (1440p).** Em Configurações → Áudio, vídeo e preferências.
+  Dá para escolher também o que priorizar: **Nitidez** (texto, planilhas, código — o padrão) ou
+  **Movimento** (vídeos). Trocar durante o compartilhamento já vale na hora, sem escolher a tela de novo.
+
+### Antes de atualizar
+
+- **Só o app.** Nada muda no servidor. Atualize o app do Mac e do Windows pelo botão de atualização (no
+  navegador, recarregar a página). Quem compartilha e quem assiste precisam estar na 1.9.0 para a tela
+  sair nítida; o 2K pede uma internet de envio mais forte de quem compartilha.
+
 ## 1.8.0 — 17/11/2026 — Layout dos vídeos como no Google Meet
 
 - **Escolha como os vídeos aparecem.** Novo botão **Layout dos vídeos** (ícone de quatro quadrados) na
