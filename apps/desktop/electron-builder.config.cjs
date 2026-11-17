@@ -33,6 +33,8 @@ module.exports = {
       NSCameraUsageDescription: 'O Office Impera usa a câmera nas conversas por vídeo do escritório virtual.',
       NSMicrophoneUsageDescription: 'O Office Impera usa o microfone nas conversas do escritório virtual.',
       NSScreenCaptureUsageDescription: 'O Office Impera precisa desta permissão para você compartilhar a tela.',
+      // cancelamento do som do computador no microfone (música, vídeos e outros apps não vazam na call)
+      NSAudioCaptureUsageDescription: 'O Office Impera usa o som que o Mac toca só para tirá-lo do seu microfone: música, vídeos e outros apps não vazam na conversa.',
     },
   },
   dmg: { sign: false },

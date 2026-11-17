@@ -3,6 +3,29 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.7.0 — 16/11/2026 — Filtro de voz sempre ligado: só a sua voz vai para a call
+
+- **O som do computador não vaza mais no microfone.** O microfone agora cancela tudo o que o
+  computador toca — a própria call, música no Spotify, vídeo do YouTube ou do Instagram em outra aba
+  ou em outro app —, usando como referência o som que sai do sistema (cancelamento de eco "all").
+  Antes só era cancelado o som tocado pelo próprio app. Vale no app desktop (Mac e Windows) e no Chrome
+  ou Edge atualizados. No Mac, na primeira vez, o sistema pede a permissão **"Gravação de áudio do
+  sistema"**: ela é usada só para tirar esse som do seu microfone (nada é gravado nem enviado).
+- **Filtro de voz sempre ligado.** O botão para desligar o filtro saiu das configurações: o corte de
+  graves, a rede neural (tira música e vídeo do celular, TV, rua, teclado, latido) e o portão de voz
+  (só passa quem está perto do microfone) ficam sempre ativos, para todos. Continua dando para escolher
+  a intensidade (Leve, Normal ou Forte). Quem tinha desligado o filtro passa a ter ele ligado.
+- **Microfone sem ganho automático para todos.** O ganho automático aumentava o microfone quando a
+  pessoa se afastava e trazia o barulho de fundo junto; agora fica sempre desligado.
+- **App desktop no Electron 41** (Chromium 146), necessário para o cancelamento do som do computador.
+
+### Antes de atualizar
+
+- **Servidor e apps.** Atualize o servidor pelo botão de sempre e os apps do Mac e do Windows pelo botão
+  de atualização do app. No Mac, aceite o pedido de "Gravação de áudio do sistema" quando aparecer (se
+  negar, o filtro de voz continua, mas o som de outros apps pode vazar; dá para liberar depois em
+  Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema).
+
 ## 1.6.1 — 16/11/2026 — Entrada na mesa do sócio e ponto do Dock no Modo Mini
 
 - **Entrar na própria mesa, também na Sala do Sócio.** Quem tem a mesa dentro de uma sala privada
