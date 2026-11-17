@@ -700,19 +700,19 @@ export function SettingsModal() {
     <Modal title={t('settings.title', 'Áudio, vídeo e preferências')} onClose={close}>
       <div className="space-y-4">
         {dev(t('settings.mic', 'Microfone'), mics, s.micId, 'audioinput')}
-        <Toggle checked={s.noiseReduce} onChange={(v) => void av.setNoiseReduce(v)} label={t('settings.noise', 'Filtro de voz (só passa a sua voz: tira carros, rua, teclado, música e barulho de fundo)')} />
-        {s.noiseReduce ? (
-          <Field
-            label={t('settings.micFilter', 'Intensidade do filtro')}
-            hint={t('settings.micFilterHint', 'Forte: só passa quem está bem perto do microfone. Leve: use se a sua voz estiver cortando.')}
-          >
-            <Select value={s.micFilter} onChange={(e) => av.setMicFilter(e.target.value as 'light' | 'normal' | 'strong')}>
-              <option value="strong">{t('settings.micFilterStrong', 'Forte')}</option>
-              <option value="normal">{t('settings.micFilterNormal', 'Normal (recomendado)')}</option>
-              <option value="light">{t('settings.micFilterLight', 'Leve')}</option>
-            </Select>
-          </Field>
-        ) : null}
+        <p className="text-xs text-muted" data-testid="voice-filter-note">
+          {t('settings.noiseAlways', 'Filtro de voz sempre ligado: só a sua voz vai para a conversa. O som do computador (música, vídeos, outras abas e apps) e o barulho em volta — celular tocando música ou vídeo, TV, rua, teclado — ficam de fora.')}
+        </p>
+        <Field
+          label={t('settings.micFilter', 'Intensidade do filtro')}
+          hint={t('settings.micFilterHint', 'Forte: só passa quem está bem perto do microfone. Leve: use se a sua voz estiver cortando.')}
+        >
+          <Select value={s.micFilter} onChange={(e) => av.setMicFilter(e.target.value as 'light' | 'normal' | 'strong')}>
+            <option value="strong">{t('settings.micFilterStrong', 'Forte')}</option>
+            <option value="normal">{t('settings.micFilterNormal', 'Normal (recomendado)')}</option>
+            <option value="light">{t('settings.micFilterLight', 'Leve')}</option>
+          </Select>
+        </Field>
         {dev(t('settings.cam', 'Câmera'), cams, s.camId, 'videoinput')}
         {dev(t('settings.out', 'Saída de som'), outs, s.outId, 'audiooutput')}
         <Toggle checked={s.hd} onChange={(v) => void av.setPrefs({ hd: v })} label={t('settings.hd', 'Vídeo em HD (usa mais internet)')} />

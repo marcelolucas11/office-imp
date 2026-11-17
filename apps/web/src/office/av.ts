@@ -55,8 +55,6 @@ interface Prefs {
   micId: string;
   camId: string;
   outId: string;
-  /** Filtro de voz forte no microfone (corte de graves + rede neural + portão de voz). */
-  noiseReduce: boolean;
   /** Quanto o portão de voz corta o que não está perto do microfone. */
   micFilter: MicFilter;
 }
@@ -79,28 +77,42 @@ interface AvState extends Prefs {
   peerPrefs: Record<string, PeerPref>;
 }
 
-/** Restrições do microfone. Com o filtro forte: sem ganho automático e mono. */
 /** Câmera a 24 quadros por segundo (o padrão era 30): o vídeo segue fluido e o custo cai 20%. */
 function camResolution(hd: boolean) {
   return { ...(hd ? VideoPresets.h720 : VideoPresets.h360).resolution, frameRate: 24 };
 }
 
-function micConstraints(st: Pick<Prefs, 'micId' | 'noiseReduce'>) {
+/**
+ * Restrições do microfone. O filtro de voz fica sempre ligado (não tem como desligar):
+ *  - echoCancellation 'all': tira do microfone TUDO o que o computador toca — a call, música, vídeo
+ *    do YouTube/Instagram em outro app ou aba —, usando o som que sai do sistema como referência
+ *    (Chrome/Edge 141+ e o app desktop; no Mac pede a permissão "Gravação de áudio do sistema").
+ *    Navegadores antigos leem 'all' como true e cancelam só o som do próprio navegador;
+ *  - sem ganho automático: ele aumentava o microfone quando a pessoa se afastava e trazia o fundo;
+ *  - isolamento de voz do sistema, onde o navegador suporta; mono.
+ */
+function micConstraints(st: Pick<Prefs, 'micId'>, ec: EchoMode = echoMode) {
   return {
     deviceId: st.micId || undefined,
-    echoCancellation: true, // tira o som que sai das suas caixas (as vozes da call e o que o app toca)
+    echoCancellation: (ec === 'all' ? { ideal: 'all' } : true) as unknown as boolean,
     noiseSuppression: true,
-    autoGainControl: !st.noiseReduce,
-    voiceIsolation: st.noiseReduce, // isolamento de voz do sistema, onde o navegador suporta
+    autoGainControl: false,
+    voiceIsolation: true,
     channelCount: 1,
   };
 }
 
+/** 'all' até o navegador recusar (ex.: permissão de áudio do sistema negada); aí volta ao padrão. */
+type EchoMode = 'all' | 'browser';
+let echoMode: EchoMode = 'all';
+
 const PREF_KEY = 'oi-av';
 function loadPrefs(): Prefs {
-  const base: Prefs = { hearNearby: true, hd: false, micId: '', camId: '', outId: '', noiseReduce: true, micFilter: 'normal' };
+  const base: Prefs = { hearNearby: true, hd: false, micId: '', camId: '', outId: '', micFilter: 'normal' };
   try {
-    return { ...base, ...JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') };
+    // "noiseReduce" (o antigo botão de desligar o filtro) é ignorado: o filtro agora é sempre ligado
+    const { noiseReduce: _old, ...saved } = JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') as Partial<Prefs> & { noiseReduce?: boolean };
+    return { ...base, ...saved, micFilter: saved.micFilter === 'light' || saved.micFilter === 'strong' ? saved.micFilter : 'normal' };
   } catch {
     return base;
   }
@@ -138,7 +150,7 @@ export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room:
 function savePrefs() {
   const s = useAv.getState();
   try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ hearNearby: s.hearNearby, hd: s.hd, micId: s.micId, camId: s.camId, outId: s.outId, noiseReduce: s.noiseReduce, micFilter: s.micFilter }));
+    localStorage.setItem(PREF_KEY, JSON.stringify({ hearNearby: s.hearNearby, hd: s.hd, micId: s.micId, camId: s.camId, outId: s.outId, micFilter: s.micFilter }));
   } catch {}
 }
 
@@ -322,9 +334,9 @@ class AvManager {
     if (this.want.mic) {
       if (mic) await lp.publishTrack(mic, { source: Track.Source.Microphone }).catch(async () => {
         mic.stop();
-        await lp.setMicrophoneEnabled(true).catch((e) => this.deviceError(e, 'mic'));
+        await this.enableMic(room);
       });
-      else await lp.setMicrophoneEnabled(true).catch((e) => this.deviceError(e, 'mic'));
+      else await this.enableMic(room);
     } else mic?.stop();
     if (this.want.cam) {
       if (cam) await lp.publishTrack(cam, { source: Track.Source.Camera }).catch(async () => {
@@ -576,8 +588,24 @@ class AvManager {
       if (on) this.notConnected();
       return;
     }
-    await this.main.localParticipant.setMicrophoneEnabled(on).catch((e) => this.deviceError(e, 'mic'));
+    if (on) await this.enableMic(this.main);
+    else await this.main.localParticipant.setMicrophoneEnabled(false).catch((e) => this.deviceError(e, 'mic'));
     this.pushLocal();
+  }
+
+  /**
+   * Liga o microfone. Se o navegador recusar o cancelamento de todo o som do computador
+   * (echoCancellation 'all'), tenta de novo com o cancelamento padrão em vez de ficar sem microfone.
+   */
+  private async enableMic(room: Room) {
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true);
+    } catch (e) {
+      if (echoMode !== 'all') return this.deviceError(e, 'mic');
+      console.warn('[av] cancelamento do som do computador indisponível, usando o padrão', e);
+      echoMode = 'browser';
+      await room.localParticipant.setMicrophoneEnabled(true, micConstraints(useAv.getState(), 'browser')).catch((e2) => this.deviceError(e2, 'mic'));
+    }
   }
 
   async setCam(on: boolean) {
@@ -658,41 +686,25 @@ class AvManager {
     this.pushLocal();
   }
 
-  /** Liga ou desliga o filtro de voz forte na faixa do microfone já publicada. */
+  /** Põe o filtro de voz (sempre ligado) na faixa do microfone já publicada. */
   private async applyNoise() {
     if (this.nrBusy) return;
     const track = this.main?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
     if (!track) return;
+    if (track.getProcessor()?.name === 'oi-rnnoise') return;
     const st = useAv.getState();
-    const want = st.noiseReduce;
-    const has = track.getProcessor()?.name === 'oi-rnnoise';
-    if (want === has) return;
     this.nrBusy = true;
-    let failed = false;
     try {
-      // com o filtro forte, o ganho automático do navegador fica desligado: ele aumentava
-      // o microfone quando a pessoa se afastava e trazia o barulho distante junto
-      await track.restartTrack(micConstraints(st)).catch((e) => console.warn('[av] restartTrack', e));
-      if (want) await track.setProcessor(new NoiseReducer(st.micFilter));
-      else await track.stopProcessor();
+      await track.setProcessor(new NoiseReducer(st.micFilter));
     } catch (e) {
-      console.warn('[av] redução de ruído', e);
-      failed = true;
+      console.warn('[av] filtro de voz', e);
       await track.stopProcessor().catch(() => {});
-      if (want && e instanceof AudioNotStarted) this.retryNoiseOnGesture();
-      else if (want) toast(t('av.noiseError', 'Não foi possível ligar a redução de ruído neste navegador. O microfone segue com o filtro padrão.'), 'info');
+      if (e instanceof AudioNotStarted) this.retryNoiseOnGesture();
+      else toast(t('av.noiseError', 'Não foi possível ligar o filtro de voz neste navegador. Use o Chrome, o Edge ou o app desktop.'), 'info');
     } finally {
       this.nrBusy = false;
     }
     this.pushLocal();
-    // a preferência pode ter mudado enquanto aplicava
-    if (!failed && useAv.getState().noiseReduce !== (track.getProcessor()?.name === 'oi-rnnoise')) void this.applyNoise();
-  }
-
-  async setNoiseReduce(on: boolean) {
-    useAv.setState({ noiseReduce: on });
-    savePrefs();
-    await this.applyNoise();
   }
 
   /** Intensidade do filtro: muda na hora, sem reiniciar o microfone. */

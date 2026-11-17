@@ -876,10 +876,11 @@ function setupIpc() {
 }
 
 // ---------- ciclo de vida ----------
-// Áudio da call: o filtro de voz do microfone (rede neural) pode iniciar sem esperar um clique,
-// e o cancelamento de eco cobre tudo o que o app toca (não só a aba), para não vazar na call.
+// Áudio da call: o filtro de voz do microfone (rede neural) pode iniciar sem esperar um clique.
+// O cancelamento do som do computador vem do próprio microfone (echoCancellation 'all', Chromium 141+):
+// usa como referência tudo o que o sistema toca — este app, música, vídeos e outros apps —, então nada
+// disso vaza na call. No Mac (14.2+) o sistema pede a permissão "Gravação de áudio do sistema".
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-app.commandLine.appendSwitch('enable-features', 'ChromeWideEchoCancellation');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
