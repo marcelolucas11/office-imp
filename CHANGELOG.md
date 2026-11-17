@@ -3,6 +3,31 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.8.0 — 17/11/2026 — Layout dos vídeos como no Google Meet
+
+- **Escolha como os vídeos aparecem.** Novo botão **Layout dos vídeos** (ícone de quatro quadrados) na
+  barra de baixo, com quatro opções:
+  - **Só a faixa:** os vídeos pequenos em cima do mapa, como antes (clicar num vídeo amplia ele);
+  - **Destaque:** um vídeo grande e os outros pequenos na faixa — fica grande quem você clicar, ou,
+    sem escolha, quem está compartilhando a tela ou falando;
+  - **Lado a lado:** dois vídeos grandes, do mesmo tamanho, e os outros pequenos. Clicar num vídeo da
+    faixa coloca ele no lugar do que está há mais tempo em destaque;
+  - **Mosaico:** todos os vídeos do mesmo tamanho, no maior tamanho que cabe na tela.
+- **Troca rápida no próprio palco.** Com o Destaque, o Lado a lado ou o Mosaico abertos, os três
+  ícones no canto do palco trocam o layout na hora; **Tela cheia** e **Fechar** (volta para o mapa)
+  continuam lá. No Mosaico ou no Lado a lado, clicar num vídeo abre ele em Destaque.
+- **A escolha fica salva** neste computador e vale nas próximas conversas. Quando ninguém está
+  conectado com você, o palco some sozinho e o mapa fica livre; ele volta quando alguém chega perto.
+- **Também na Visualização Simplificada** (só as pessoas): Mosaico continua o padrão, e dá para usar
+  Destaque ou Lado a lado.
+- Os vídeos grandes recebem automaticamente a qualidade maior (o app já ajusta a resolução ao tamanho
+  do quadro), e os pequenos continuam leves.
+
+### Antes de atualizar
+
+- **Só o app.** Nada muda no servidor: basta atualizar o app do Mac e do Windows pelo botão de
+  atualização (no navegador, recarregar a página).
+
 ## 1.7.0 — 16/11/2026 — Filtro de voz sempre ligado: só a sua voz vai para a call
 
 - **O som do computador não vaza mais no microfone.** O microfone agora cancela tudo o que o
