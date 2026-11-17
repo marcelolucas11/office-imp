@@ -71,6 +71,10 @@ interface AvState extends Prefs {
   /** O navegador bloqueou o áudio até a pessoa clicar na página. */
   blocked: boolean;
   focus: string | null;
+  /** Segundo vídeo em destaque no layout "Lado a lado". */
+  focus2: string | null;
+  /** Como os vídeos aparecem: só a faixa, destaque, lado a lado ou mosaico (fica salvo neste computador). */
+  layout: VideoLayout;
   /** Você está falando agora (medido no seu próprio microfone). */
   meSpeaking: boolean;
   /** Ajustes só seus por pessoa (volume, silenciar, ocultar vídeo). */
@@ -145,7 +149,40 @@ function savePeerPrefs() {
   } catch {}
 }
 
-export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room: 'none', mic: false, cam: false, screen: false, localCam: null, localScreen: null, peers: [], blocked: false, focus: null, meSpeaking: false, peerPrefs: loadPeerPrefs() }));
+/**
+ * Layout dos vídeos, como no Google Meet:
+ *  - bar: só a faixa pequena em cima do mapa (clicar num vídeo amplia ele);
+ *  - spotlight: um vídeo grande (o que você escolher ou quem compartilha a tela) e os outros pequenos;
+ *  - side: dois vídeos grandes lado a lado e os outros pequenos;
+ *  - grid: mosaico, todos do mesmo tamanho.
+ */
+export type VideoLayout = 'bar' | 'spotlight' | 'side' | 'grid';
+export const VIDEO_LAYOUTS: VideoLayout[] = ['bar', 'spotlight', 'side', 'grid'];
+const LAYOUT_KEY = 'oi-video-layout';
+function loadLayout(): VideoLayout {
+  try {
+    const v = localStorage.getItem(LAYOUT_KEY);
+    return VIDEO_LAYOUTS.includes(v as VideoLayout) ? (v as VideoLayout) : 'bar';
+  } catch {
+    return 'bar';
+  }
+}
+/** Troca o layout dos vídeos. `save` guarda a escolha para as próximas calls (o menu de layout salva; um clique num vídeo não). */
+export function setVideoLayout(layout: VideoLayout, save = true) {
+  useAv.setState(layout === 'bar' ? { layout, focus: null, focus2: null } : { layout });
+  if (!save) return;
+  try {
+    localStorage.setItem(LAYOUT_KEY, layout);
+  } catch {}
+}
+
+/** Tira do destaque quem saiu da conversa (ou teve o vídeo ocultado). */
+export function pruneFocus(focus: string | null, alive: (key: string) => boolean): string | null {
+  if (!focus || focus.startsWith('me:')) return focus;
+  return alive(focus) ? focus : null;
+}
+
+export const useAv = create<AvState>(() => ({ ...loadPrefs(), conn: 'off', room: 'none', mic: false, cam: false, screen: false, localCam: null, localScreen: null, peers: [], blocked: false, focus: null, focus2: null, layout: loadLayout(), meSpeaking: false, peerPrefs: loadPeerPrefs() }));
 
 function savePrefs() {
   const s = useAv.getState();
@@ -377,7 +414,7 @@ class AvManager {
     this.meter.watch(null);
     for (const el of this.audioEls) el.remove();
     this.audioEls.clear();
-    useAv.setState({ focus: null });
+    useAv.setState({ focus: null, focus2: null });
   }
 
   private dropCarried() {
@@ -546,7 +583,8 @@ class AvManager {
       });
     }
     const st = useAv.getState();
-    useAv.setState({ peers: out, ...(st.focus && !out.some((p) => st.focus === `${p.id}:screen` || st.focus === `${p.id}:cam`) && !st.focus.startsWith('me:') ? { focus: null } : {}) });
+    const alive = (key: string) => out.some((p) => key === `${p.id}:screen` || key === `${p.id}:cam`);
+    useAv.setState({ peers: out, focus: pruneFocus(st.focus, alive), focus2: pruneFocus(st.focus2, alive) });
   }
 
   private pushLocal() {
@@ -645,9 +683,8 @@ class AvManager {
     // subir o volume tira o "silenciado"
     if (patch.vol !== undefined && patch.vol > 0 && patch.mute === undefined) next.mute = false;
     if (patch.svol !== undefined && patch.svol > 0 && patch.smute === undefined) next.smute = false;
-    const focus = useAv.getState().focus;
-    const unfocus = (patch.hideCam && focus === `${id}:cam`) || (patch.hideScreen && focus === `${id}:screen`);
-    useAv.setState((s) => ({ peerPrefs: { ...s.peerPrefs, [id]: next }, ...(unfocus ? { focus: null } : {}) }));
+    const hidden = (key: string | null) => (patch.hideCam && key === `${id}:cam`) || (patch.hideScreen && key === `${id}:screen`);
+    useAv.setState((s) => ({ peerPrefs: { ...s.peerPrefs, [id]: next }, ...(hidden(s.focus) ? { focus: null } : {}), ...(hidden(s.focus2) ? { focus2: null } : {}) }));
     savePeerPrefs();
     this.applySubs();
     this.refresh();

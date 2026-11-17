@@ -13,7 +13,8 @@ import { useGame } from '../game/store';
 import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { desktop, toast, useSession } from '../lib/session';
-import { av, useAv, type PeerMedia } from './av';
+import { av, setVideoLayout, useAv, type PeerMedia, type VideoLayout } from './av';
+import { fitTiles, pickTile, planStage } from './videoLayout';
 import { Emo, EmoText } from '../lib/icons';
 
 export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -45,7 +46,26 @@ export function TrackView({ track, mirror, contain }: { track: Track; mirror?: b
   return <video ref={ref} autoPlay playsInline muted className={cx('h-full w-full bg-black', contain ? 'object-contain' : 'object-cover', mirror && '-scale-x-100')} />;
 }
 
-function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar, peer }: { id: string; name: string; track: Track | null; kind: 'cam' | 'screen'; mic?: boolean; speaking?: boolean; mirror?: boolean; big?: boolean; badge?: string; avatar?: string; peer?: PeerMedia }) {
+interface TileProps {
+  id: string;
+  name: string;
+  track: Track | null;
+  kind: 'cam' | 'screen';
+  mic?: boolean;
+  speaking?: boolean;
+  mirror?: boolean;
+  big?: boolean;
+  badge?: string;
+  avatar?: string;
+  peer?: PeerMedia;
+  /** Tamanho exato (palco do Destaque, Lado a lado e Mosaico). */
+  size?: { w: number; h: number };
+  /** O que o clique faz; sem isto, amplia/fecha o vídeo. */
+  onPick?: () => void;
+  hint?: string;
+}
+
+function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar, peer, size, onPick, hint }: TileProps) {
   const focus = useAv((s) => s.focus);
   const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
   const key = `${id}:${kind}`;
@@ -54,6 +74,7 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
   const silenced = peer ? (kind === 'cam' ? peer.pref.mute : peer.pref.smute && peer.screenAudio) : false;
   const onClick = () => {
     if (peer && hidden) av.setPeer(peer.id, kind === 'cam' ? { hideCam: false } : { hideScreen: false });
+    else if (onPick) onPick();
     else useAv.setState({ focus: focus === key ? null : key });
   };
   return (
@@ -64,9 +85,10 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
         e.preventDefault();
         setMenuAt(new DOMRect(e.clientX, e.clientY, 0, 0));
       }}
-      className={cx('group relative shrink-0 overflow-hidden rounded-xl border-2 bg-panel-2 transition-all', speaking ? 'border-ok' : 'border-line', big ? 'aspect-video w-full' : 'h-[104px] w-[184px]')}
+      className={cx('group relative shrink-0 overflow-hidden rounded-xl border-2 bg-panel-2 transition-all', speaking ? 'border-ok' : 'border-line', size ? '' : big ? 'aspect-video w-full' : 'h-[104px] w-[184px]')}
+      style={size ? { width: size.w, height: size.h } : undefined}
     >
-      <button type="button" onClick={onClick} className="block h-full w-full" title={hidden ? t('video.showAgain', 'Clique para mostrar de novo') : t('video.expand', 'Clique para ampliar')}>
+      <button type="button" onClick={onClick} className={cx('block h-full w-full', hint === '' && 'cursor-default')} title={hidden ? t('video.showAgain', 'Clique para mostrar de novo') : (hint ?? t('video.expand', 'Clique para ampliar')) || undefined}>
         {track ? (
           <TrackView track={track} mirror={mirror} contain={kind === 'screen'} />
         ) : hidden ? (
@@ -75,7 +97,7 @@ function Tile({ id, name, track, kind, mic, speaking, mirror, big, badge, avatar
             <span>{kind === 'cam' ? t('video.camHidden', 'Vídeo oculto para você') : t('video.screenHidden', 'Tela oculta para você')}</span>
           </div>
         ) : (
-          <div className="grid h-full w-full place-items-center">{avatar ? <img src={avatar} alt="" className="pixel h-16" /> : <span className="text-2xl text-muted">{name.slice(0, 1).toUpperCase()}</span>}</div>
+          <div className="grid h-full w-full place-items-center">{avatar ? <img src={avatar} alt="" className={cx('pixel', size && size.h >= 240 ? 'h-32' : 'h-16')} /> : <span className="text-2xl text-muted">{name.slice(0, 1).toUpperCase()}</span>}</div>
         )}
       </button>
       <span className="pointer-events-none absolute bottom-1 left-1 flex max-w-[92%] items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px]">
@@ -231,9 +253,15 @@ function PeerPopover({ id, kind, at, trigger, onClose }: { id: string; kind: 'ca
   );
 }
 
-/** Vídeos de quem está conectado com você. No modo simplificado ocupa a tela inteira. */
+type TileEntry = Omit<TileProps, 'size' | 'onPick' | 'hint' | 'big'> & { key: string };
+
+/**
+ * Vídeos de quem está conectado com você, no layout escolhido (como no Google Meet):
+ * só a faixa em cima do mapa, Destaque (um grande), Lado a lado (dois grandes) ou Mosaico (todos iguais).
+ * Na Visualização Simplificada o palco ocupa a tela inteira.
+ */
 export function VideoBar() {
-  const { peers, localCam, localScreen, focus, cam, mic, conn, meSpeaking } = useAv();
+  const { peers, localCam, localScreen, focus, focus2, layout, cam, mic, conn, meSpeaking } = useAv();
   const simplified = useGame((s) => s.simplified || (s.mini && !s.miniExt));
   const mini = useGame((s) => s.mini && !s.miniExt);
   const players = useGame((s) => s.players);
@@ -249,70 +277,174 @@ export function VideoBar() {
   }, [players]);
   if (winHidden) return null;
 
-  const tiles: React.ReactNode[] = [];
-  for (const p of peers) {
-    if (p.screenOn) tiles.push(<Tile key={`${p.id}:screen`} id={p.id} name={p.name} track={p.screen} kind="screen" big={simplified} peer={p} />);
-    tiles.push(<Tile key={`${p.id}:cam`} id={p.id} name={p.name} track={p.cam} kind="cam" mic={p.mic} speaking={p.speaking} big={simplified} badge={p.spotlight ? '★' : undefined} avatar={portraits[p.id]} peer={p} />);
-  }
+  const entries: TileEntry[] = [];
   const showSelf = cam || simplified || peers.length > 0;
-  if (localScreen) tiles.unshift(<Tile key="me:screen" id="me" name={t('video.yourScreen', 'Sua tela')} track={localScreen} kind="screen" big={simplified} />);
-  if (showSelf && me) tiles.unshift(<Tile key="me:cam" id="me" name={t('video.you', 'Você')} track={localCam} kind="cam" mic={mic} speaking={mic && meSpeaking} mirror big={simplified} avatar={portraits[meId]} />);
+  if (showSelf && me) entries.push({ key: 'me:cam', id: 'me', name: t('video.you', 'Você'), track: localCam, kind: 'cam', mic, speaking: mic && meSpeaking, mirror: true, avatar: portraits[meId] });
+  if (localScreen) entries.push({ key: 'me:screen', id: 'me', name: t('video.yourScreen', 'Sua tela'), track: localScreen, kind: 'screen' });
+  for (const p of peers) {
+    if (p.screenOn) entries.push({ key: `${p.id}:screen`, id: p.id, name: p.name, track: p.screen, kind: 'screen', peer: p });
+    entries.push({ key: `${p.id}:cam`, id: p.id, name: p.name, track: p.cam, kind: 'cam', mic: p.mic, speaking: p.speaking, badge: p.spotlight ? '★' : undefined, avatar: portraits[p.id], peer: p });
+  }
+  const byKey = new Map(entries.map((e) => [e.key, e]));
+  const tile = (key: string, extra: Partial<TileProps> = {}) => {
+    const { key: k, ...e } = byKey.get(key)!;
+    return <Tile key={k} {...e} {...extra} />;
+  };
 
-  const focused = focus ? findFocus(focus, peers, localCam, localScreen) : null;
-
-  if (simplified) {
-    const n = Math.max(1, tiles.length);
-    const cols = mini ? 1 : n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
+  // Modo Mini do navegador: uma coluna, como sempre foi
+  if (mini) {
     return (
       <div className="absolute inset-0 z-20 overflow-auto bg-ink p-4 pb-24" data-testid="simplified">
-        {tiles.length ? (
-          <div className="mx-auto grid max-w-6xl gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-            {tiles}
-          </div>
-        ) : (
-          <div className="grid h-full place-items-center text-sm text-muted">{conn === 'off' ? t('video.dndEmpty', 'Você está em “Não incomodar”.') : t('video.alone', 'Ninguém por perto. Chegue perto de alguém para conversar.')}</div>
-        )}
-        {focused ? <FocusOverlay {...focused} /> : null}
+        {entries.length ? <div className="mx-auto grid max-w-6xl gap-3">{entries.map((e) => tile(e.key, { big: true }))}</div> : <Empty conn={conn} />}
       </div>
     );
   }
+
+  const plan = planStage(entries, layout, focus, focus2, simplified);
+  const pick = (key: string) => () => useAv.setState(pickTile(plan.mode, key, focus, plan.main));
+  const strip = plan.strip.map((k) => tile(k, plan.mode === 'bar' ? {} : { onPick: pick(k), hint: t('video.toStage', 'Clique para colocar em destaque') }));
+
+  if (plan.mode === 'bar') {
+    return (
+      <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex max-w-[calc(100vw-520px)] -translate-x-1/2 gap-2 overflow-x-auto pb-1" data-testid="videobar">
+        <div className="pointer-events-auto flex gap-2">{strip}</div>
+      </div>
+    );
+  }
+
   return (
     <>
-      <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex max-w-[calc(100vw-520px)] -translate-x-1/2 gap-2 overflow-x-auto pb-1" data-testid="videobar">
-        <div className="pointer-events-auto flex gap-2">{tiles}</div>
-      </div>
-      {focused ? <FocusOverlay {...focused} /> : null}
+      {!simplified && strip.length ? (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex max-w-[calc(100vw-520px)] -translate-x-1/2 gap-2 overflow-x-auto pb-1" data-testid="videobar">
+          <div className="pointer-events-auto flex gap-2">{strip}</div>
+        </div>
+      ) : null}
+      <Stage
+        mode={plan.mode}
+        simplified={simplified}
+        topStrip={!simplified && strip.length > 0}
+        strip={simplified ? strip : []}
+        count={plan.main.length}
+        render={(size) =>
+          plan.main.map((k) =>
+            tile(k, {
+              size,
+              // no Mosaico e no Lado a lado, clicar num vídeo abre ele em Destaque; no Destaque, não faz nada
+              ...(plan.mode === 'spotlight' ? { onPick: () => {}, hint: '' } : { onPick: () => useAv.setState({ layout: 'spotlight', focus: k, focus2: null }), hint: t('video.toSpotlight', 'Clique para ver em destaque') }),
+            }),
+          )
+        }
+        empty={entries.length ? null : <Empty conn={conn} />}
+      />
     </>
   );
 }
 
-function findFocus(focus: string, peers: PeerMedia[], localCam: Track | null, localScreen: Track | null): { track: Track; name: string; contain: boolean; mirror: boolean; peer?: PeerMedia; kind?: 'cam' | 'screen' } | null {
-  const [id, kind] = focus.split(':');
-  if (id === 'me') {
-    const track = kind === 'screen' ? localScreen : localCam;
-    return track ? { track, name: t('video.you', 'Você'), contain: kind === 'screen', mirror: kind !== 'screen' } : null;
-  }
-  const p = peers.find((x) => x.id === id);
-  const track = kind === 'screen' ? p?.screen : p?.cam;
-  return p && track ? { track, name: p.name, contain: kind === 'screen', mirror: false, peer: p, kind: kind === 'screen' ? 'screen' : 'cam' } : null;
+function Empty({ conn }: { conn: string }) {
+  return <div className="grid h-full place-items-center text-sm text-muted">{conn === 'off' ? t('video.dndEmpty', 'Você está em “Não incomodar”.') : t('video.alone', 'Ninguém por perto. Chegue perto de alguém para conversar.')}</div>;
 }
 
-function FocusOverlay({ track, name, contain, mirror, peer, kind }: { track: Track; name: string; contain: boolean; mirror: boolean; peer?: PeerMedia; kind?: 'cam' | 'screen' }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
+const GAP = 12;
+
+/** Palco dos vídeos grandes: calcula o maior tamanho 16:9 em que todos cabem. */
+function Stage({ mode, simplified, topStrip, strip, count, render, empty }: { mode: VideoLayout; simplified: boolean; topStrip: boolean; strip: React.ReactNode[]; count: number; render: (size: { w: number; h: number }) => React.ReactNode; empty: React.ReactNode }) {
+  const root = useRef<HTMLDivElement>(null);
+  const area = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    const measure = () => setBox((b) => (b.w === el.clientWidth && b.h === el.clientHeight ? b : { w: el.clientWidth, h: el.clientHeight }));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const fit = fitTiles(box.w, box.h, count, GAP, mode === 'side' ? 2 : undefined);
   return (
-    <div ref={ref} className="absolute inset-x-6 bottom-24 top-32 z-30 overflow-hidden rounded-2xl border border-line bg-black shadow-2xl">
-      <TrackView track={track} contain={contain} mirror={mirror} />
-      <div className="absolute left-3 top-3 rounded-md bg-black/70 px-2 py-1 text-xs">{name}</div>
-      <div className="absolute right-3 top-3 flex gap-2">
-        {peer && kind ? <PeerMenu peer={peer} kind={kind} at={menuAt} setAt={setMenuAt} inline /> : null}
-        <Button small variant="subtle" onClick={() => void ref.current?.requestFullscreen?.()}>
+    <div
+      ref={root}
+      data-testid="video-stage"
+      data-layout={mode}
+      className={cx(
+        'absolute z-30 flex flex-col gap-2 bg-ink',
+        simplified ? 'inset-0 p-4 pb-24' : cx('inset-x-6 bottom-24 rounded-2xl border border-line p-3 shadow-2xl', topStrip ? 'top-32' : 'top-3'),
+      )}
+    >
+      <div className="flex shrink-0 items-center gap-2">
+        {strip.length ? <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">{strip}</div> : <div className="flex-1" />}
+        <LayoutPicker simplified={simplified} compact />
+        <Button small variant="subtle" onClick={() => void root.current?.requestFullscreen?.()}>
           {t('video.fullscreen', 'Tela cheia')}
         </Button>
-        <Button small variant="subtle" onClick={() => useAv.setState({ focus: null })}>
-          {t('app.close', 'Fechar')}
-        </Button>
+        {simplified ? null : (
+          <Button small variant="subtle" data-testid="stage-close" onClick={() => setVideoLayout('bar')}>
+            {t('app.close', 'Fechar')}
+          </Button>
+        )}
       </div>
+      <div ref={area} className="min-h-0 flex-1">
+        {empty ?? (
+          <div className="flex h-full flex-wrap content-center items-center justify-center" style={{ gap: GAP }}>
+            {fit.w > 0 ? render({ w: fit.w, h: fit.h }) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const LAYOUT_ICON: Record<VideoLayout, string> = {
+  bar: 'M3 4h18v4H3zM3 11h18v9H3z',
+  spotlight: 'M3 4h18v11H3zM3 18h5v2H3zM10 18h4v2h-4zM16 18h5v2h-5z',
+  side: 'M3 5h8v14H3zM13 5h8v14h-8z',
+  grid: 'M3 4h8v7H3zM13 4h8v7h-8zM3 13h8v7H3zM13 13h8v7h-8z',
+};
+const layoutLabel = (l: VideoLayout) =>
+  ({
+    bar: t('layout.bar', 'Só a faixa (o mapa fica livre)'),
+    spotlight: t('layout.spotlight', 'Destaque'),
+    side: t('layout.side', 'Lado a lado'),
+    grid: t('layout.grid', 'Mosaico (todos do mesmo tamanho)'),
+  })[l];
+
+/** Escolha do layout dos vídeos. `compact`: botões só com ícone (no palco); senão, lista com nomes. */
+export function LayoutPicker({ simplified, compact, onDone }: { simplified: boolean; compact?: boolean; onDone?: () => void }) {
+  const layout = useAv((s) => s.layout);
+  const focus = useAv((s) => s.focus);
+  const current: VideoLayout = layout === 'bar' ? (focus ? 'spotlight' : simplified ? 'grid' : 'bar') : layout;
+  const options: VideoLayout[] = simplified ? ['spotlight', 'side', 'grid'] : ['bar', 'spotlight', 'side', 'grid'];
+  const choose = (l: VideoLayout) => {
+    setVideoLayout(l);
+    onDone?.();
+  };
+  if (compact) {
+    return (
+      <div className="flex shrink-0 gap-1 rounded-xl bg-panel-2 p-1" role="radiogroup" aria-label={t('layout.title', 'Layout dos vídeos')} data-testid="layout-picker">
+        {options
+          .filter((l) => l !== 'bar')
+          .map((l) => (
+            <button key={l} type="button" role="radio" aria-checked={current === l} title={layoutLabel(l)} aria-label={layoutLabel(l)} data-testid={`layout-${l}`} onClick={() => choose(l)} className={cx('grid h-7 w-8 place-items-center rounded-lg transition-colors', current === l ? 'bg-gold text-ink' : 'text-stone-200 hover:bg-panel-3')}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+                <path d={LAYOUT_ICON[l]} />
+              </svg>
+            </button>
+          ))}
+      </div>
+    );
+  }
+  return (
+    <div className="oi-pop absolute bottom-14 left-1/2 z-40 w-80 -translate-x-1/2 rounded-2xl border border-line bg-panel p-2 shadow-2xl" role="radiogroup" aria-label={t('layout.title', 'Layout dos vídeos')} data-testid="layout-menu">
+      <div className="px-3 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{t('layout.title', 'Layout dos vídeos')}</div>
+      {options.map((l) => (
+        <button key={l} type="button" role="radio" aria-checked={current === l} data-testid={`layout-${l}`} onClick={() => choose(l)} className={cx('flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-panel-3', current === l && 'bg-panel-3')}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true" className={current === l ? 'text-gold' : 'text-muted'}>
+            <path d={LAYOUT_ICON[l]} />
+          </svg>
+          <span className="flex-1">{layoutLabel(l)}</span>
+          {current === l ? <span className="text-gold">✓</span> : null}
+        </button>
+      ))}
     </div>
   );
 }
@@ -381,7 +513,7 @@ export function BottomBar() {
   const following = useGame((s) => s.following);
   const players = useGame((s) => s.players);
   const role = useSession((s) => s.me?.role);
-  const [menu, setMenu] = useState<'status' | 'emotes' | 'more' | null>(null);
+  const [menu, setMenu] = useState<'status' | 'emotes' | 'layout' | 'more' | null>(null);
   const set = useGame.setState;
   if (!me) return null;
   const status = me.away ? 'AWAY' : me.status;
@@ -474,6 +606,12 @@ export function BottomBar() {
         <IconButton label={t('bar.simplified', 'Visualização Simplificada (só as pessoas)')} active={simplified} onClick={() => set({ simplified: !simplified })}>
           <Emo e="👁" size={20} />
         </IconButton>
+        <IconButton data-testid="btn-layout" label={t('layout.title', 'Layout dos vídeos')} active={menu === 'layout'} onClick={() => setMenu(menu === 'layout' ? null : 'layout')}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+            <path d={LAYOUT_ICON.grid} />
+          </svg>
+        </IconButton>
+        {menu === 'layout' ? <LayoutPicker simplified={simplified} onDone={() => setMenu(null)} /> : null}
         <IconButton label={t('bar.more', 'Mais opções')} active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? null : 'more')}>
           <Emo e="⋯" size={20} />
         </IconButton>
