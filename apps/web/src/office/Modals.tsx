@@ -716,6 +716,23 @@ export function SettingsModal() {
         {dev(t('settings.cam', 'Câmera'), cams, s.camId, 'videoinput')}
         {dev(t('settings.out', 'Saída de som'), outs, s.outId, 'audiooutput')}
         <Toggle checked={s.hd} onChange={(v) => void av.setPrefs({ hd: v })} label={t('settings.hd', 'Vídeo em HD (usa mais internet)')} />
+        <div className="grid grid-cols-2 gap-3" data-testid="screen-quality">
+          <Field label={t('settings.screenRes', 'Qualidade da tela compartilhada')}>
+            <Select value={s.screenRes} onChange={(e) => void av.setScreenPrefs({ screenRes: e.target.value === '1440' ? '1440' : '1080' })} data-testid="screen-res">
+              <option value="1080">{t('settings.screen1080', 'Full HD (1080p)')}</option>
+              <option value="1440">{t('settings.screen1440', '2K (1440p)')}</option>
+            </Select>
+          </Field>
+          <Field label={t('settings.screenFor', 'Priorizar')}>
+            <Select value={s.screenFor} onChange={(e) => void av.setScreenPrefs({ screenFor: e.target.value === 'motion' ? 'motion' : 'text' })} data-testid="screen-for">
+              <option value="text">{t('settings.screenText', 'Nitidez (texto, planilhas, código)')}</option>
+              <option value="motion">{t('settings.screenMotion', 'Movimento (vídeos)')}</option>
+            </Select>
+          </Field>
+        </div>
+        <p className="-mt-2 text-xs text-muted">
+          {t('settings.screenHint', 'A tela sempre chega na resolução escolhida: se a internet de alguém apertar, ela fica com menos quadros por segundo, mas não pixela. 2K precisa de uma internet mais forte de quem compartilha.')}
+        </p>
         <Toggle checked={s.hearNearby} onChange={(v) => void av.setPrefs({ hearNearby: v })} label={t('settings.hear', 'Ouvir quem está por perto na área aberta')} />
         <div className="space-y-1" data-testid="reduce-motion">
           <Toggle checked={motion.reduce} onChange={setReduceMotion} label={t('settings.reduceMotion', 'Reduzir animações do cenário (telas, luzes, vapor, peixes, árvores e nuvens ficam paradas)')} />
