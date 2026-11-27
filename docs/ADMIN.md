@@ -29,16 +29,41 @@ O Dono enxerga todos os escritórios. Admins e Funcionários, só aqueles aos qu
 
 Uma linha por pessoa (Donos e Admins incluídos), atualizada ao vivo:
 
-- **Online** — tempo dentro do escritório. **Ativo** — online menos o tempo ausente.
-- **Status** — barra com o tempo em Disponível (verde), Ocupado (amarelo), Não incomodar (vermelho)
-  e Ausente (cinza). "Ausente" é só manual: a própria pessoa escolhe no menu de status e ele fica até
-  ela escolher outro status (o app nunca marca ninguém como ausente sozinho).
+- **Online** — tempo dentro do escritório. **Trabalhado** — online menos o tempo inativo e ausente.
+- **Como o tempo foi usado** — barra com Disponível (verde), Em call (azul), Ocupado (amarelo),
+  Inativo (roxo), Não incomodar (vermelho) e Ausente (cinza). Cada minuto entra em uma só categoria,
+  nesta prioridade: em call → ausente → inativo → status. "Ausente" é só manual.
+- **Inativo** — 5 minutos ou mais sem mexer no mouse nem no teclado, fora de call (só no app do Mac
+  e do Windows; o navegador não informa isso).
+- **Tampa/susp.** — quantas vezes a pessoa saiu porque fechou a tampa, o computador entrou em
+  suspensão ou foi desligado. Nesses casos o avatar sai do escritório na hora e o tempo para de
+  contar; ao acordar, ela entra de novo sozinha.
 - **Em call** — tempo conectada em áudio e vídeo com pelo menos uma pessoa, por proximidade ou na
   mesma sala privada. **Com quem** — as cinco pessoas com mais tempo, e em quais salas.
-- **Agora** — status e local atuais.
+- **Agora** — status, local, e se está em call ou inativa.
 
-Troque o período (hoje ao vivo, um dia, 7 ou 30 dias), clique em uma pessoa para ver a **linha do
-tempo do dia** e use **Exportar CSV**. O "dia" segue o fuso horário do escritório.
+Troque o período (hoje ao vivo, um dia, 7 ou 30 dias) e use **Exportar CSV**. O "dia" segue o fuso
+horário do escritório.
+
+### Estatísticas de uma pessoa
+
+Clique em uma pessoa:
+
+- **Dia (hora a hora)** — barras com os minutos de cada hora por categoria, a linha do tempo do dia
+  com cada entrada (▶) e saída (💻 tampa, 💤 suspensão, 🌙 suspenso pelo menu, 🚪 saiu, 📶 caiu a
+  internet) e a lista de **entradas e saídas** com horário, motivo, de onde (app do Mac, do Windows
+  ou navegador) e quanto tempo ficou fora. As saídas causadas pelo computador ficam destacadas.
+- **Semana (segunda a domingo)** — horas por dia empilhadas por categoria, média trabalhada, tabela
+  com entrada, saída e cada categoria por dia. Clique num dia para abri-lo hora a hora.
+- **Filtro** — ligue e desligue categorias, ou use **Só trabalho** e **Só parado**. As setas ‹ ›
+  andam um dia ou uma semana.
+
+Motivos de saída registrados: botão Sair, fechou o app ou a aba, fechou a tampa do notebook,
+suspensão por inatividade, suspensão pelo menu ou botão de energia, suspensão percebida ao voltar
+(navegador), computador desligado ou reiniciado, perdeu a conexão, entrou em outro aparelho, removido
+pela administração e servidor reiniciou. No Mac a tampa vem do sensor do próprio Mac; no Windows, num
+notebook, dormir logo depois de usado conta como tampa fechada (o Windows não informa a tampa aos
+apps).
 
 Todos os horários são registrados pelo servidor. No primeiro acesso, cada pessoa lê e aceita o
 **aviso de transparência** dizendo o que é registrado; o texto é editável pelo Dono em

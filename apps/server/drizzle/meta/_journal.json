@@ -15,6 +15,13 @@
       "when": 1794691739779,
       "tag": "0001_desk_look",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795756486528,
+      "tag": "0002_presence_reasons",
+      "breakpoints": true
     }
   ]
 }

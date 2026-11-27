@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('officeImp', {
   onMiniChanged: (cb: (on_: boolean) => void) => on('mini-changed', cb),
   /** A janela principal ficou visível (true) ou foi escondida/minimizada (false). */
   onWindowVisible: (cb: (visible: boolean) => void) => on('window-visible', cb),
+  /** O computador vai dormir (tampa fechada, suspensão, desligar) ou acordou. */
+  onPower: (cb: (ev: { type: 'suspend'; reason: string; idleSec: number } | { type: 'resume' }) => void) => on('power', cb),
+  /** A cada 15 s: a pessoa está sem mexer no mouse/teclado há 5 min ou mais? */
+  onIdle: (cb: (s: { idle: boolean; idleSec: number }) => void) => on('idle-state', cb),
   checkUpdates: (auto: boolean) => ipcRenderer.send('check-updates', auto),
   installUpdateNow: () => ipcRenderer.send('install-update-now'),
   onUpdateState: (cb: (state: { status: string; version?: string; message?: string }) => void) => on('update-state', cb),

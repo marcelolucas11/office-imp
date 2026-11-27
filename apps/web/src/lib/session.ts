@@ -106,6 +106,10 @@ export interface DesktopBridge {
   onMiniChanged: (cb: (on: boolean) => void) => () => void;
   /** Versões novas do app: a janela principal ficou visível ou foi escondida/minimizada. */
   onWindowVisible?: (cb: (visible: boolean) => void) => () => void;
+  /** Versões novas do app: o computador vai dormir (tampa, suspensão, desligar) ou acordou. */
+  onPower?: (cb: (ev: { type: 'suspend'; reason: string; idleSec: number } | { type: 'resume' }) => void) => () => void;
+  /** Versões novas do app: a cada 15 s, se a pessoa está sem usar o computador há 5 min ou mais. */
+  onIdle?: (cb: (s: { idle: boolean; idleSec: number }) => void) => () => void;
   checkUpdates: (auto: boolean) => void;
   installUpdateNow: () => void;
   onUpdateState: (cb: (state: { status: string; version?: string; message?: string }) => void) => () => void;

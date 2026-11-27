@@ -169,8 +169,27 @@ export const presenceSessions = pgTable(
     role: text('role').notNull(),
     start: ts('start').notNull(),
     end: ts('end'),
+    /** Como entrou: 'open' (abriu), 'resume' (o computador acordou), 'reconnect' (a internet voltou). */
+    startReason: text('start_reason'),
+    /** Por que saiu: tampa fechada, suspensão, botão Sair, queda… (`EndReason` em @office-imp/shared). */
+    endReason: text('end_reason'),
+    /** De onde: 'mac', 'win', 'linux' (app desktop) ou 'web' (navegador). */
+    client: text('client'),
   },
   (t) => [index('presence_office_idx').on(t.officeId, t.start)],
+);
+
+/** Períodos sem mexer no mouse nem no teclado (app desktop), para o tempo "Inativo" do painel. */
+export const idleIntervals = pgTable(
+  'idle_intervals',
+  {
+    id: text('id').primaryKey(),
+    officeId: text('office_id').notNull(),
+    subjectId: text('subject_id').notNull(),
+    start: ts('start').notNull(),
+    end: ts('end'),
+  },
+  (t) => [index('idle_office_idx').on(t.officeId, t.start)],
 );
 
 export const statusIntervals = pgTable(

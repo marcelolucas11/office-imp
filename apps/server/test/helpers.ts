@@ -90,12 +90,12 @@ export class Rt {
   init: any = null;
   private waiters: { type: string; pred: (d: any) => boolean; resolve: (d: any) => void }[] = [];
 
-  static async join(base: string, http: Http, slug: string): Promise<Rt> {
+  static async join(base: string, http: Http, slug: string, opts: Record<string, unknown> = {}): Promise<Rt> {
     const enter = await http.post(`/api/offices/${slug}/enter`);
     if (enter.status !== 200) throw new Error(`enter falhou: ${enter.text}`);
     const rt = new Rt();
     const client = new Client(`${base}/rt`);
-    rt.room = await client.joinOrCreate('office', { officeId: enter.json.office.id, ticket: enter.json.ticket });
+    rt.room = await client.joinOrCreate('office', { officeId: enter.json.office.id, ticket: enter.json.ticket, ...opts });
     rt.room.onMessage('*', (type, data) => {
       const t = String(type);
       rt.log.push({ type: t, data });

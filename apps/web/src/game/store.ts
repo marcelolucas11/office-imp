@@ -2,7 +2,8 @@
 import { create } from 'zustand';
 import type { AvView, ChatMessage, DeskInfo, DeskItem, MapObject, MusicChannel, OfficeMap, PlayerState } from '@office-imp/shared';
 
-export type Phase = 'idle' | 'connecting' | 'online' | 'reconnecting' | 'kicked' | 'error';
+/** `paused`: saiu do escritório porque o computador foi dormir (tampa, suspensão); volta ao acordar. */
+export type Phase = 'idle' | 'connecting' | 'online' | 'reconnecting' | 'paused' | 'kicked' | 'error';
 
 export interface OfficeInfo {
   id: string;

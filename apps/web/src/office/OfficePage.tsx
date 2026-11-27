@@ -266,6 +266,9 @@ export default function OfficePage() {
   }, [officeName]);
   useEffect(() => {
     const offLeave = desktop?.onLeaveOffice?.(() => nav('/'));
+    // tampa fechada / suspensão: o avatar sai do escritório na hora e volta quando o computador acordar
+    const offPower = desktop?.onPower?.((ev) => (ev.type === 'suspend' ? net.suspend(ev.reason) : net.resume()));
+    const offIdle = desktop?.onIdle?.((st) => net.setIdle(st.idle, st.idleSec));
     const offSettings = desktop?.onOpenSettings?.(() => {
       if (useGame.getState().phase === 'online') useGame.setState({ mini: false, modal: { kind: 'settings' } });
     });
@@ -273,6 +276,8 @@ export default function OfficePage() {
       desktop?.setOffice?.(null);
       useGame.setState({ mini: false, miniExt: false });
       offLeave?.();
+      offPower?.();
+      offIdle?.();
       offSettings?.();
     };
   }, [nav]);
@@ -343,11 +348,20 @@ export default function OfficePage() {
           <MiniMode />
         </>
       ) : null}
-      {phase === 'connecting' || phase === 'reconnecting' || phase === 'idle' ? (
+      {phase === 'connecting' || phase === 'reconnecting' || phase === 'idle' || phase === 'paused' ? (
         <div className="absolute inset-0 z-50 grid place-items-center bg-ink/80">
-          <div className="flex flex-col items-center gap-3 text-sm text-muted">
-            <Spinner className="h-6 w-6" />
-            {phase === 'reconnecting' ? t('office.reconnecting', 'Reconectando…') : t('office.connecting', 'Entrando no escritório…')}
+          <div className="flex max-w-sm flex-col items-center gap-3 text-center text-sm text-muted">
+            {phase === 'paused' ? <Emo e="💤" size={40} /> : <Spinner className="h-6 w-6" />}
+            {phase === 'paused'
+              ? t('office.paused', 'Você saiu do escritório porque o computador entrou em suspensão. Ao acordar, você entra de novo sozinho.')
+              : phase === 'reconnecting'
+                ? t('office.reconnecting', 'Reconectando…')
+                : t('office.connecting', 'Entrando no escritório…')}
+            {phase === 'paused' ? (
+              <Button small onClick={() => net.resume()}>
+                {t('office.rejoin', 'Entrar de novo')}
+              </Button>
+            ) : null}
             <Button small variant="ghost" onClick={() => nav('/')}>
               {t('app.cancel', 'Cancelar')}
             </Button>
