@@ -661,8 +661,17 @@ describe('tempo real', () => {
     expect(csv.text).toContain('Pessoa;Papel;Online');
     expect(csv.text).toContain('Ana;EMPLOYEE');
     const tl = (await admin.http.get(`/api/offices/${officeId}/analytics/person/${ana.id}`)).json;
-    expect(tl.statuses.map((s: any) => s.status)).toEqual(expect.arrayContaining(['AVAILABLE', 'DND', 'BUSY']));
+    expect(tl.span).toBe('day');
+    expect(tl.totals.DND).toBeGreaterThan(0);
+    expect(tl.totals.BUSY).toBeGreaterThan(0);
+    expect(tl.totals.CALL).toBeGreaterThan(0);
+    expect(tl.buckets.length).toBeGreaterThanOrEqual(23);
+    expect(tl.sessions[0]).toMatchObject({ startReason: 'open', end: null });
     expect(tl.calls[0].with).toBe('Bia');
+    const wk = (await admin.http.get(`/api/offices/${officeId}/analytics/person/${ana.id}?span=week`)).json;
+    expect(wk.buckets).toHaveLength(7);
+    expect(wk.days).toHaveLength(7);
+    expect(wk.days.some((d: any) => d.onlineMs > 0)).toBe(true);
     // ausência conta como inativo
     a.send('away', { away: true });
     await sleep(200);
@@ -676,6 +685,57 @@ describe('tempo real', () => {
     a.send('status', { status: 'AVAILABLE' });
     await sleep(100);
     await adm.leave();
+  });
+
+  it('tampa fechada / suspensão: o avatar sai, o painel registra o motivo e para de contar', async () => {
+    const stats = async () => (await admin.http.get(`/api/offices/${officeId}/analytics/person/${admin.id}`)).json;
+    // fechou a tampa: o app avisa o motivo e sai na hora
+    let adm = await Rt.join(srv.url, admin.http, slug, { client: 'mac' });
+    await sleep(150);
+    adm.send('bye', { reason: 'lid' });
+    await adm.leave();
+    expect((await a.next('leave', (d) => d.id === admin.id)).id).toBe(admin.id);
+    await sleep(150);
+    let s1 = await stats();
+    const lidSession = s1.sessions[s1.sessions.length - 1];
+    expect(lidSession).toMatchObject({ endReason: 'lid', client: 'mac' });
+    expect(s1.sleepExits).toBeGreaterThanOrEqual(1);
+    // o tempo parou de contar
+    const online1 = s1.onlineMs;
+    await sleep(300);
+    expect((await stats()).onlineMs).toBe(online1);
+    // o computador acordou: entra de novo
+    adm = await Rt.join(srv.url, admin.http, slug, { reason: 'resume', client: 'mac' });
+    await sleep(150);
+    s1 = await stats();
+    expect(s1.sessions[s1.sessions.length - 1]).toMatchObject({ startReason: 'resume', end: null });
+    // inatividade (app desktop): vira "Inativo", fora de call
+    adm.send('idle', { idle: true, since: Date.now() - 60_000 });
+    await sleep(300);
+    adm.send('idle', { idle: false });
+    await sleep(100);
+    expect((await stats()).totals.IDLE).toBeGreaterThan(0);
+    // a conexão caiu sem aviso (o computador dormiu antes): na volta, o aviso guardado corrige a saída
+    const sleptAt = Date.now() - 50;
+    await sleep(100);
+    (adm.room as any).connection.close(4100);
+    await a.next('leave', (d) => d.id === admin.id);
+    await sleep(150);
+    adm = await Rt.join(srv.url, admin.http, slug, { reason: 'resume', slept: { at: sleptAt, reason: 'sleep_idle' } });
+    await sleep(150);
+    s1 = await stats();
+    const fixed = s1.sessions[s1.sessions.length - 2];
+    expect(fixed.endReason).toBe('sleep_idle');
+    expect(fixed.end).toBe(Math.max(fixed.start, sleptAt));
+    // motivo inventado pelo cliente é ignorado
+    adm.send('bye', { reason: 'kicked' });
+    await adm.leave();
+    await sleep(150);
+    s1 = await stats();
+    expect(s1.sessions[s1.sessions.length - 1].endReason).toBe('left');
+    const off = (await admin.http.get(`/api/offices/${officeId}/analytics`)).json.rows.find((r: any) => r.id === admin.id);
+    expect(off.sleepExits).toBeGreaterThanOrEqual(2);
+    expect(off.idleMs).toBeGreaterThan(0);
   });
 
   it('look da mesa: Dono e Admin mudam o de qualquer mesa ocupada; mesa livre não tem', async () => {

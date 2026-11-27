@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest';
 import {
+  activitySegments,
   aggregateAnalytics,
+  bucketActivity,
+  emptyActivity,
+  sumActivity,
+  workedMs,
   avEdges,
   can,
   canAssignRole,
@@ -253,5 +258,61 @@ describe('analytics', () => {
     expect(bia.callMs).toBe(2 * H);
     const caio = rows.find((r) => r.id === 'c')!;
     expect(caio.onlineMs).toBe(2 * H);
+  });
+  it('categorias exclusivas: call > ausente > inativo > status, só dentro da presença', () => {
+    const H = 3600000;
+    const segs = activitySegments(
+      {
+        presence: [
+          { start: 1 * H, end: 4 * H },
+          { start: 5 * H, end: 6 * H },
+        ],
+        statuses: [
+          { status: 'AVAILABLE', start: 1 * H, end: 2 * H },
+          { status: 'DND', start: 2 * H, end: 4 * H },
+          { status: 'AWAY', start: 5 * H, end: 6 * H },
+        ],
+        calls: [{ start: 1.5 * H, end: 2.5 * H }],
+        idles: [
+          { start: 2 * H, end: 3 * H },
+          { start: 4.5 * H, end: 5.5 * H },
+        ],
+      },
+      0,
+      24 * H,
+      10 * H,
+    );
+    expect(segs.map((s) => [s.act, s.start / H, s.end / H])).toEqual([
+      ['AVAILABLE', 1, 1.5],
+      ['CALL', 1.5, 2.5],
+      ['IDLE', 2.5, 3],
+      ['DND', 3, 4],
+      ['AWAY', 5, 6],
+    ]);
+    const tot = sumActivity(segs);
+    expect(workedMs(tot)).toBe(2.5 * H);
+    const hours = bucketActivity(segs, [0, 1, 2, 3, 4, 5, 6].map((h) => h * H));
+    expect(hours[1]).toMatchObject({ AVAILABLE: 0.5 * H, CALL: 0.5 * H });
+    expect(hours[2]).toMatchObject({ CALL: 0.5 * H, IDLE: 0.5 * H });
+    expect(hours[4]).toEqual(emptyActivity());
+  });
+  it('conta saídas por tampa/suspensão e o tempo inativo', () => {
+    const H = 3600000;
+    const [r] = aggregateAnalytics({
+      from: 0,
+      to: 24 * H,
+      now: 10 * H,
+      presence: [
+        { subjectId: 'a', subjectName: 'Ana', role: 'EMPLOYEE', start: 1 * H, end: 2 * H, endReason: 'lid' },
+        { subjectId: 'a', subjectName: 'Ana', role: 'EMPLOYEE', start: 3 * H, end: 4 * H, endReason: 'sleep_idle' },
+        { subjectId: 'a', subjectName: 'Ana', role: 'EMPLOYEE', start: 5 * H, end: 6 * H, endReason: 'left' },
+      ],
+      statuses: [],
+      calls: [],
+      idles: [{ subjectId: 'a', start: 3.5 * H, end: 4 * H }],
+    });
+    expect(r.sleepExits).toBe(2);
+    expect(r.idleMs).toBe(0.5 * H);
+    expect(r.activeMs).toBe(2.5 * H);
   });
 });

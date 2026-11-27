@@ -8,6 +8,8 @@ import {
   DESK_DECOR_TYPES,
   DESK_LOOK_KEYS,
   DIRS,
+  END_REASONS,
+  START_REASONS,
   EMOTES,
   MAX_DESK_DECOR,
   MAX_INTERACTION_DISTANCE,
@@ -47,6 +49,8 @@ import {
   type DeskInfo,
   type DeskLook,
   type Dir,
+  type EndReason,
+  type StartReason,
   type MapArea,
   type MapObject,
   type MusicChannel,
@@ -64,7 +68,7 @@ import { currentMap, getOffice, listDesks, patchCurrentMap, type OfficeRow } fro
 import { audit } from '../lib/audit';
 import { lkRoomName, muteInLkRoom, removeFromLkRoom, type RemoteMuteKind } from '../services/livekit';
 import { hub } from './hub';
-import { Tracker } from './tracker';
+import { Tracker, applySleepReport } from './tracker';
 
 interface Runtime {
   state: PlayerState;
@@ -78,7 +82,13 @@ interface Runtime {
   whiteboards: Set<string>;
   /** Baldes do limite de mensagens, por tipo: fichas disponíveis e a última recarga. */
   buckets: Map<string, { tokens: number; at: number }>;
+  /** Motivo da saída avisado pelo cliente antes de fechar a conexão (tampa, suspensão, botão Sair…). */
+  bye?: { reason: EndReason; at?: number };
 }
+
+/** Motivos que o cliente pode informar (os outros são definidos só pelo servidor). */
+const CLIENT_END_REASONS = new Set<EndReason>(['left', 'closed', 'lid', 'sleep_idle', 'sleep', 'sleep_detected', 'shutdown']);
+const CLIENTS = new Set(['mac', 'win', 'linux', 'web']);
 
 /**
  * Limite de mensagens por pessoa (balde de fichas): [rajada, fichas por segundo]. Protege o
@@ -91,6 +101,8 @@ const RATE_LIMITS: Record<string, [number, number]> = {
   step: [40, 20],
   face: [20, 10],
   ping: [5, 1],
+  bye: [3, 0.2],
+  idle: [10, 1],
   chat: [10, 1],
   emote: [10, 2],
   wave: [5, 0.5],
@@ -182,12 +194,19 @@ export class OfficeRoom extends Room {
     return subject;
   }
 
-  async onJoin(client: Client, _options: any, subject: Subject) {
+  async onJoin(client: Client, options: any, subject: Subject) {
     const existing = this.players.get(subject.id);
     if (existing) {
       existing.client.send('kick', { reason: 'other_session' });
-      this.removePlayer(subject.id, existing.client);
+      this.removePlayer(subject.id, existing.client, 'other_session');
       existing.client.leave(4001);
+    }
+    const joinReason: StartReason = START_REASONS.includes(options?.reason) ? options.reason : 'open';
+    const clientKind = CLIENTS.has(options?.client) ? String(options.client) : null;
+    // o computador suspendeu e a conexão só caiu depois: corrige a saída anterior para o instante certo
+    const slept = options?.slept;
+    if (slept && CLIENT_END_REASONS.has(slept.reason) && slept.reason !== 'left' && slept.reason !== 'closed') {
+      await applySleepReport(this.officeId, subject.id, Number(slept.at), slept.reason).catch((e) => console.error('[sala] relato de suspensão', e));
     }
     let pos: { x: number; y: number } | null = null;
     // o raio é do escritório (definido pela administração), igual para todos
@@ -240,7 +259,7 @@ export class OfficeRoom extends Room {
       whiteboards: new Set(),
       buckets: new Map(),
     });
-    this.tracker.join({ id: subject.id, name: subject.name, role: subject.role }, 'AVAILABLE');
+    this.tracker.join({ id: subject.id, name: subject.name, role: subject.role }, 'AVAILABLE', { reason: joinReason, client: clientKind });
 
     let myDeskItems: any[] = [];
     if (deskId) myDeskItems = await this.deskItemsFor(deskId);
@@ -260,10 +279,10 @@ export class OfficeRoom extends Room {
     this.avDirty = true;
   }
 
-  async onLeave(client: Client) {
+  async onLeave(client: Client, consented?: boolean) {
     for (const [id, p] of this.players) {
       if (p.client === client) {
-        this.removePlayer(id, client);
+        this.removePlayer(id, client, p.bye?.reason ?? (consented ? 'left' : 'connection_lost'), p.bye?.at);
         break;
       }
     }
@@ -275,12 +294,12 @@ export class OfficeRoom extends Room {
     hub.unregister(this);
   }
 
-  private removePlayer(id: string, client: Client) {
+  private removePlayer(id: string, client: Client, reason: EndReason = 'left', at?: number) {
     const p = this.players.get(id);
     if (!p || p.client !== client) return;
     this.players.delete(id);
     this.lastViews.delete(id);
-    this.tracker.leave(id);
+    this.tracker.leave(id, reason, at);
     if (p.kind === 'user') {
       db()
         .update(schema.officeMembers)
@@ -391,7 +410,7 @@ export class OfficeRoom extends Room {
     const p = this.players.get(subjectId);
     if (!p) return;
     p.client.send('kick', { reason });
-    this.removePlayer(subjectId, p.client);
+    this.removePlayer(subjectId, p.client, 'kicked');
     p.client.leave(4002);
   }
 
@@ -456,10 +475,10 @@ export class OfficeRoom extends Room {
     return [...this.players.values()].filter((p) => p.state.areaId === areaId).map((p) => p.state);
   }
 
-  liveState(): Map<string, { status: TrackedStatus; area: string | null; inCall: boolean }> {
-    const out = new Map<string, { status: TrackedStatus; area: string | null; inCall: boolean }>();
+  liveState(): Map<string, { status: TrackedStatus; area: string | null; inCall: boolean; idle: boolean }> {
+    const out = new Map<string, { status: TrackedStatus; area: string | null; inCall: boolean; idle: boolean }>();
     for (const p of this.players.values()) {
-      out.set(p.state.id, { status: this.tracked(p), area: this.areaById(p.state.areaId)?.name ?? null, inCall: this.tracker.inCall(p.state.id) });
+      out.set(p.state.id, { status: this.tracked(p), area: this.areaById(p.state.areaId)?.name ?? null, inCall: this.tracker.inCall(p.state.id), idle: this.tracker.isIdle(p.state.id) });
     }
     return out;
   }
@@ -546,6 +565,22 @@ export class OfficeRoom extends Room {
 
   private registerHandlers() {
     this.on('ping', (p, d) => p.client.send('pong', { t: d.t, now: Date.now() }));
+
+    // aviso de saída: o cliente diz por que vai sair (tampa fechada, suspensão, botão Sair…)
+    // logo antes de fechar a conexão. `at` (relógio do servidor) só pode ser do passado recente.
+    this.on('bye', (p, d) => {
+      const reason = String(d.reason ?? '') as EndReason;
+      if (!CLIENT_END_REASONS.has(reason) || !END_REASONS.includes(reason)) return;
+      const now = Date.now();
+      const at = Number(d.at);
+      p.bye = { reason, at: Number.isFinite(at) && at <= now && at > now - 24 * 3600_000 ? at : undefined };
+    });
+
+    // app desktop: a pessoa parou (ou voltou) de usar o computador
+    this.on('idle', (p, d) => {
+      const since = Number(d.since);
+      this.tracker.setIdle(p.state.id, Boolean(d.idle), Number.isFinite(since) ? since : undefined);
+    });
 
     this.on('step', (p, d) => {
       // passo enviado antes da última correção: o cliente já voltou para a posição certa, ignora

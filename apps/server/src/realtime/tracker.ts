@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { and, eq, isNull, sql } from 'drizzle-orm';
-import type { TrackedStatus } from '@office-imp/shared';
+import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import type { EndReason, StartReason, TrackedStatus } from '@office-imp/shared';
 import { db, schema } from '../db';
 import { newId } from '../lib/crypto';
 import { getSetting, setSetting } from '../lib/settings';
@@ -15,15 +15,44 @@ export class Tracker {
   private presence = new Map<string, string>();
   private status = new Map<string, { id: string; status: TrackedStatus }>();
   private calls = new Map<string, { id: string; a: string; b: string; start: number; areaName: string | null }>();
+  private idle = new Map<string, string>();
+  private joinedAt = new Map<string, number>();
 
   constructor(private officeId: string) {}
 
-  join(subject: { id: string; name: string; role: string }, status: TrackedStatus) {
+  join(subject: { id: string; name: string; role: string }, status: TrackedStatus, opts: { reason?: StartReason; client?: string | null } = {}) {
     const now = Date.now();
     const id = newId();
     this.presence.set(subject.id, id);
-    db().insert(schema.presenceSessions).values({ id, officeId: this.officeId, subjectId: subject.id, subjectName: subject.name, role: subject.role, start: now, end: null }).catch(log);
+    this.joinedAt.set(subject.id, now);
+    db()
+      .insert(schema.presenceSessions)
+      .values({ id, officeId: this.officeId, subjectId: subject.id, subjectName: subject.name, role: subject.role, start: now, end: null, startReason: opts.reason ?? 'open', client: opts.client ?? null })
+      .catch(log);
     this.openStatus(subject.id, status, now);
+  }
+
+  /**
+   * Sem usar o computador (`idle`) desde `since`, ou voltou a usar. O início nunca é antes da
+   * entrada no escritório nem depois de agora.
+   */
+  setIdle(subjectId: string, idle: boolean, since?: number) {
+    if (!this.presence.has(subjectId)) return;
+    const now = Date.now();
+    const cur = this.idle.get(subjectId);
+    if (idle && !cur) {
+      const start = Math.min(now, Math.max(this.joinedAt.get(subjectId) ?? now, Number.isFinite(since) ? Number(since) : now));
+      const id = newId();
+      this.idle.set(subjectId, id);
+      db().insert(schema.idleIntervals).values({ id, officeId: this.officeId, subjectId, start, end: null }).catch(log);
+    } else if (!idle && cur) {
+      this.idle.delete(subjectId);
+      db().update(schema.idleIntervals).set({ end: now }).where(eq(schema.idleIntervals.id, cur)).catch(log);
+    }
+  }
+
+  isIdle(subjectId: string): boolean {
+    return this.idle.has(subjectId);
   }
 
   private openStatus(subjectId: string, status: TrackedStatus, now: number) {
@@ -67,12 +96,24 @@ export class Tracker {
     return false;
   }
 
-  leave(subjectId: string) {
-    const now = Date.now();
+  /**
+   * Saída do escritório. `at` (relógio do servidor) permite fechar no instante em que o computador
+   * suspendeu, e não quando a conexão caiu de fato.
+   */
+  leave(subjectId: string, reason: EndReason = 'left', at?: number) {
+    const real = Date.now();
+    const joined = this.joinedAt.get(subjectId) ?? real;
+    const now = at && Number.isFinite(at) ? Math.max(joined, Math.min(real, at)) : real;
+    this.joinedAt.delete(subjectId);
     const p = this.presence.get(subjectId);
     if (p) {
       this.presence.delete(subjectId);
-      db().update(schema.presenceSessions).set({ end: now }).where(eq(schema.presenceSessions.id, p)).catch(log);
+      db().update(schema.presenceSessions).set({ end: now, endReason: reason }).where(eq(schema.presenceSessions.id, p)).catch(log);
+    }
+    const idle = this.idle.get(subjectId);
+    if (idle) {
+      this.idle.delete(subjectId);
+      db().update(schema.idleIntervals).set({ end: now }).where(eq(schema.idleIntervals.id, idle)).catch(log);
     }
     const s = this.status.get(subjectId);
     if (s) {
@@ -88,8 +129,35 @@ export class Tracker {
   }
 
   closeAll() {
-    for (const id of [...this.presence.keys()]) this.leave(id);
+    for (const id of [...this.presence.keys()]) this.leave(id, 'server_restart');
   }
+}
+
+/**
+ * O cliente avisou, ao voltar, que o computador suspendeu às `at` (relógio do servidor) e a
+ * conexão só caiu depois. Fecha a última presença (e o que estava aberto junto: status, calls,
+ * inatividade) no instante da suspensão, com o motivo certo. Não mexe numa saída já registrada
+ * com outro motivo, nem em nada fora das últimas 24 h.
+ */
+export async function applySleepReport(officeId: string, subjectId: string, at: number, reason: EndReason) {
+  const now = Date.now();
+  if (!Number.isFinite(at) || at > now || at < now - 24 * 3600_000) return;
+  const d = db();
+  const [last] = await d
+    .select()
+    .from(schema.presenceSessions)
+    .where(and(eq(schema.presenceSessions.officeId, officeId), eq(schema.presenceSessions.subjectId, subjectId), lt(schema.presenceSessions.start, at)))
+    .orderBy(desc(schema.presenceSessions.start))
+    .limit(1);
+  if (!last || last.end === null) return;
+  // já fechada no instante certo (o aviso de saída chegou antes da suspensão)
+  if (last.endReason && last.endReason !== 'connection_lost') return;
+  const end = Math.max(last.start, at);
+  await d.update(schema.presenceSessions).set({ end, endReason: reason }).where(eq(schema.presenceSessions.id, last.id));
+  const after = (t: { officeId: any; start: any; end: any }) => and(eq(t.officeId, officeId), lt(t.start, end), gt(t.end, end));
+  await d.update(schema.statusIntervals).set({ end }).where(and(after(schema.statusIntervals), eq(schema.statusIntervals.subjectId, subjectId)));
+  await d.update(schema.idleIntervals).set({ end }).where(and(after(schema.idleIntervals), eq(schema.idleIntervals.subjectId, subjectId)));
+  await d.update(schema.callSegments).set({ end }).where(and(after(schema.callSegments), or(eq(schema.callSegments.a, subjectId), eq(schema.callSegments.b, subjectId))));
 }
 
 /** Batimento: grava periodicamente "o servidor estava vivo às X" para fechar intervalos após uma queda. */
@@ -101,7 +169,8 @@ export async function heartbeat() {
 export async function closeDanglingIntervals() {
   const hb = (await getSetting<{ at: number }>('heartbeat'))?.at ?? Date.now();
   const d = db();
-  await d.update(schema.presenceSessions).set({ end: sql`GREATEST(${schema.presenceSessions.start}, ${hb})` }).where(isNull(schema.presenceSessions.end));
+  await d.update(schema.presenceSessions).set({ end: sql`GREATEST(${schema.presenceSessions.start}, ${hb})`, endReason: 'server_restart' }).where(isNull(schema.presenceSessions.end));
+  await d.update(schema.idleIntervals).set({ end: sql`GREATEST(${schema.idleIntervals.start}, ${hb})` }).where(isNull(schema.idleIntervals.end));
   await d.update(schema.statusIntervals).set({ end: sql`GREATEST(${schema.statusIntervals.start}, ${hb})` }).where(isNull(schema.statusIntervals.end));
   await d.update(schema.callSegments).set({ end: sql`GREATEST(${schema.callSegments.start}, ${hb})` }).where(isNull(schema.callSegments.end));
   await d

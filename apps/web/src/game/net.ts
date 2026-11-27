@@ -40,6 +40,17 @@ class OfficeNet {
   private posTimer: number | null = null;
   /** Looks das mesas com que o mapa visto foi montado (`deskLooksKey`). */
   private looks = '';
+  /** Fora do escritório porque o computador foi dormir; entra de novo ao acordar. */
+  private paused = false;
+  /** Como a próxima entrada vai aparecer no painel do ADM. */
+  private joinReason: 'open' | 'resume' | 'reconnect' = 'open';
+  /** Já avisou o motivo da saída (não sobrescreve com "fechou o app"). */
+  private byeSent = false;
+  /** Último estado de inatividade informado pelo app desktop. */
+  private idle: { idle: boolean; since: number } | null = null;
+  private idleSentKey = '';
+  private lastTick = 0;
+  private tickTimer: number | null = null;
 
   /**
    * Guarda o mapa publicado e monta o mapa visto (com a cor e o setup que cada ocupante escolheu).
@@ -69,28 +80,118 @@ class OfficeNet {
 
   async connect(slug: string) {
     this.wanted = true;
+    this.paused = false;
+    this.joinReason = 'open';
     this.slug = slug;
     resetGame();
     useGame.setState({ phase: 'connecting' });
+    this.startTick();
     await this.open();
   }
 
+  /** Hora no relógio do servidor. */
+  private serverNow() {
+    return Date.now() + (useGame.getState().timeOffset || 0);
+  }
+
+  /**
+   * O computador vai dormir (tampa fechada, suspensão, desligar): avisa o motivo e sai do
+   * escritório na hora, para o avatar sumir e o painel parar de contar o tempo. Guarda o aviso
+   * também neste computador: se a conexão cair antes de o aviso chegar, ele vai na próxima entrada.
+   */
+  suspend(reason: string, at?: number) {
+    if (!this.wanted || this.paused) return;
+    this.paused = true;
+    const when = at ?? this.serverNow();
+    saveSlept({ at: when, reason, slug: this.slug });
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    useGame.setState({ phase: 'paused' });
+    const room = this.room;
+    if (room) {
+      this.send('bye', { reason, at: when });
+      this.byeSent = true;
+      this.stopPing();
+      this.room = null;
+      bus.emit('net:down');
+      void room.leave(true);
+    }
+  }
+
+  /** O computador acordou: entra de novo no escritório (na própria mesa). */
+  resume() {
+    if (!this.wanted || !this.paused) return;
+    this.paused = false;
+    this.lastTick = Date.now();
+    this.joinReason = 'resume';
+    this.retry = 0;
+    useGame.setState({ phase: 'reconnecting' });
+    void this.open();
+  }
+
+  /** App desktop: sem usar o computador há `idleSec` (inativo a partir de 5 min). */
+  setIdle(idle: boolean, idleSec: number) {
+    if (idle && this.idle?.idle) return;
+    if (!idle && !this.idle?.idle) {
+      this.idle = { idle: false, since: 0 };
+      return;
+    }
+    this.idle = { idle, since: idle ? this.serverNow() - idleSec * 1000 : 0 };
+    this.sendIdle();
+  }
+
+  private sendIdle() {
+    if (!this.room || !this.idle) return;
+    const key = `${this.room.sessionId}:${this.idle.idle}`;
+    if (key === this.idleSentKey) return;
+    this.idleSentKey = key;
+    this.send('idle', this.idle.idle ? { idle: true, since: this.idle.since } : { idle: false });
+  }
+
+  /**
+   * Navegador (e reserva do app): o relógio pulou muito entre duas batidas = o computador dormiu.
+   * Sai e entra de novo, registrando a suspensão no instante da última batida.
+   */
+  private startTick() {
+    if (this.tickTimer) return;
+    this.lastTick = Date.now();
+    this.tickTimer = window.setInterval(() => {
+      const now = Date.now();
+      const gap = now - this.lastTick;
+      const lastServer = this.lastTick + (useGame.getState().timeOffset || 0);
+      this.lastTick = now;
+      if (gap < SLEEP_GAP_MS || !this.wanted || this.paused) return;
+      this.suspend('sleep_detected', lastServer);
+      window.setTimeout(() => this.resume(), 500);
+    }, 5000);
+  }
+
+  private stopTick() {
+    if (this.tickTimer) clearInterval(this.tickTimer);
+    this.tickTimer = null;
+  }
+
   private async open() {
-    if (!this.wanted) return;
+    if (!this.wanted || this.paused) return;
     const g = useGame.getState();
     try {
       const enter = await api.post(`/api/offices/${this.slug}/enter`);
       useGame.setState({ office: enter.office, canAdmin: enter.canAdmin, livekitUrl: enter.livekitUrl });
       this.setMaps(enter.map, enter.desks ?? g.desks);
       const client = new Client(`${location.protocol}//${location.host}/rt`);
-      const room = await client.joinOrCreate('office', { officeId: enter.office.id, ticket: enter.ticket });
-      if (!this.wanted) {
+      const slept = loadSlept(this.slug);
+      const room = await client.joinOrCreate('office', { officeId: enter.office.id, ticket: enter.ticket, reason: this.joinReason, client: clientKind(), ...(slept ? { slept: { at: slept.at, reason: slept.reason } } : {}) });
+      if (!this.wanted || this.paused) {
         void room.leave(true);
         return;
       }
+      if (slept) saveSlept(null);
       this.room = room;
       this.retry = 0;
+      this.byeSent = false;
+      this.idleSentKey = '';
       this.bind(room);
+      this.sendIdle();
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.status === 404)) {
         this.wanted = false;
@@ -102,7 +203,8 @@ class OfficeNet {
   }
 
   private scheduleRetry(_reason: string) {
-    if (!this.wanted) return;
+    if (!this.wanted || this.paused) return;
+    if (this.joinReason === 'open') this.joinReason = 'reconnect';
     this.retry++;
     useGame.setState({ phase: 'reconnecting' });
     this.retryTimer = window.setTimeout(() => void this.open(), Math.min(15000, 1000 * 2 ** Math.min(this.retry, 4)));
@@ -288,10 +390,15 @@ class OfficeNet {
     this.pingTimer = null;
   }
 
-  disconnect() {
+  /** Saiu do escritório (botão Sair, outra página, fechou a aba ou o app). */
+  disconnect(reason: 'left' | 'closed' = 'left') {
     this.wanted = false;
+    this.paused = false;
     this.stopPing();
+    this.stopTick();
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    if (this.room && !this.byeSent) this.send('bye', { reason });
+    this.byeSent = true;
     void this.room?.leave(true);
     this.room = null;
     resetGame();
@@ -320,6 +427,32 @@ class OfficeNet {
   }
 }
 
+/** Relógio parado por mais que isto entre duas batidas de 5 s = o computador dormiu. */
+const SLEEP_GAP_MS = 90_000;
+const SLEPT_KEY = 'oi.slept';
+
+function clientKind(): string {
+  if (!desktop) return 'web';
+  return desktop.platform === 'darwin' ? 'mac' : desktop.platform === 'win32' ? 'win' : 'linux';
+}
+
+function saveSlept(v: { at: number; reason: string; slug: string } | null) {
+  try {
+    if (v) localStorage.setItem(SLEPT_KEY, JSON.stringify(v));
+    else localStorage.removeItem(SLEPT_KEY);
+  } catch {}
+}
+
+function loadSlept(slug: string): { at: number; reason: string } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(SLEPT_KEY) ?? 'null');
+    if (!v || v.slug !== slug || !Number.isFinite(v.at) || Date.now() - v.at > 24 * 3600_000) return null;
+    return { at: v.at, reason: String(v.reason) };
+  } catch {
+    return null;
+  }
+}
+
 function notify(title: string, body: string) {
   try {
     if (desktop) desktop.notify(title, body);
@@ -328,6 +461,11 @@ function notify(title: string, body: string) {
 }
 
 export const net = new OfficeNet();
+
+// fechou a aba ou o app: avisa o motivo antes de a conexão cair
+window.addEventListener('pagehide', () => {
+  if (net.online) net.disconnect('closed');
+});
 
 bus.on('notice', (code: string) => {
   const f = NOTICES[code];

@@ -154,7 +154,7 @@ export interface OfficeSettings {
 }
 
 export const DEFAULT_MONITORING_NOTICE =
-  'Para a gestão da equipe, este escritório virtual registra o seu tempo online, os seus status (Disponível, Ocupado, Não incomodar e Ausente) e o tempo em chamadas, incluindo com quem. Esses dados são vistos pela administração. O conteúdo das conversas não é gravado, exceto quando alguém inicia as "Notas de reunião" em uma sala de reunião — nesse caso, um aviso vermelho fica visível para todos na sala.';
+  'Para a gestão da equipe, este escritório virtual registra o seu tempo online, os horários em que você entra e sai (e o motivo da saída, como tampa do notebook fechada ou computador em suspensão), os seus status (Disponível, Ocupado, Não incomodar e Ausente), o tempo sem mexer no mouse e no teclado (inativo, no app do Mac e do Windows) e o tempo em chamadas, incluindo com quem. Esses dados são vistos pela administração. O conteúdo das conversas não é gravado, exceto quando alguém inicia as "Notas de reunião" em uma sala de reunião — nesse caso, um aviso vermelho fica visível para todos na sala.';
 
 export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   awayMinutes: 10,

@@ -3,6 +3,50 @@
 As versões seguem `MAJOR.MINOR.PATCH`. Cada versão publicada tem os instaladores e as notas em
 [Releases](https://github.com/marcelolucas11/office-imp/releases).
 
+## 1.10.0 — 27/11/2026 — Tampa fechada e suspensão tiram o avatar do escritório; estatísticas novas por pessoa
+
+- **Fechou a tampa ou o computador dormiu: o avatar sai do escritório na hora.** No app do Mac e do
+  Windows, quando o notebook fecha a tampa, o computador entra em suspensão (por inatividade ou pelo
+  menu) ou é desligado, o app avisa o motivo ao servidor e sai do escritório: o avatar some do mapa
+  para todos, a call é encerrada e o painel **para de contar o tempo** naquele minuto. Ao abrir a
+  tampa (o computador acordar), a pessoa entra de novo sozinha, na própria mesa.
+- **O motivo de cada saída fica registrado.** No Painel do ADM, cada entrada e saída aparece com o
+  horário e o motivo: "Fechou a tampa do notebook", "Computador entrou em suspensão por inatividade",
+  "Computador foi suspenso (menu ou botão de energia)", "Computador desligado ou reiniciado", "Saiu do
+  escritório (botão Sair)", "Fechou o app ou a aba", "Perdeu a conexão com a internet", e a volta
+  ("Voltou: o computador acordou"). No Mac a tampa é lida pelo sensor do próprio Mac; no Windows, num
+  notebook, dormir logo depois de usado conta como tampa fechada (o Windows não informa a tampa aos
+  apps). Se a internet cair antes de o aviso chegar, ele vai na volta e a saída é corrigida para o
+  minuto certo. No navegador, a suspensão é percebida quando o computador acorda.
+- **Novo tempo "Inativo".** No app do Mac e do Windows, 5 minutos sem mexer no mouse nem no teclado
+  (fora de call) passam a contar como inativo. O status não muda (o "Ausente" continua só manual).
+- **Estatísticas da pessoa refeitas.** Clique em uma pessoa no Painel em tempo real:
+  - **Dia (hora a hora):** gráfico de barras com os minutos de cada hora divididos em Disponível, Em
+    call, Ocupado, Inativo, Não incomodar e Ausente; linha do tempo do dia com as entradas (▶) e as
+    saídas (💻 tampa, 💤 suspensão…); lista de entradas e saídas com o motivo e quanto tempo ficou
+    fora; calls do dia.
+  - **Semana (segunda a domingo):** horas por dia empilhadas por categoria, média trabalhada e
+    quantas saídas por tampa/suspensão houve em cada dia; tabela com entrada, saída, logado,
+    trabalhado e cada categoria; clicar num dia abre ele hora a hora.
+  - **Filtro:** ligue e desligue cada categoria (ou use **Só trabalho** e **Só parado**); os gráficos e
+    a tabela mostram só o que está selecionado, com o total no canto. Setas ‹ › andam um dia ou uma
+    semana.
+  - Números no topo: logado, trabalhado, em call, inativo, não incomodar, ausente e saídas por
+    tampa/suspensão.
+- **Tabela do painel:** "Trabalhado" (online menos inativo e ausente), barra de como o tempo foi
+  usado, colunas **Inativo** e **Tampa/susp.**, e "inativo" ao vivo na coluna Agora. O CSV ganhou as
+  mesmas colunas.
+- **Aviso de transparência atualizado** para citar os horários de entrada e saída com o motivo e o
+  tempo inativo. Escritórios que já tinham editado o texto mantêm o deles (dá para ajustar em
+  *Escritórios → Configurações*).
+
+### Antes de atualizar
+
+- **Servidor e apps.** Atualize o servidor (ele cria as colunas novas sozinho) e os apps do Mac e do
+  Windows pelo botão de atualização. A saída ao fechar a tampa e o tempo inativo precisam do app na
+  1.10.0; no navegador, só a suspensão percebida ao voltar. As saídas registradas antes desta versão
+  aparecem como "Perdeu a conexão" ou "O servidor reiniciou", porque não tinham motivo.
+
 ## 1.9.0 — 17/11/2026 — Vídeos flutuando sobre o mapa e tela compartilhada sempre nítida
 
 - **Sem fundo preto atrás dos vídeos.** No Destaque, no Lado a lado e no Mosaico, as câmeras e as

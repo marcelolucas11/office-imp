@@ -55,9 +55,19 @@ cliente recebe só a própria visão (`av`): em qual sala de mídia deve estar e
 
 ## Painel (analytics)
 
-O servidor grava três tipos de intervalo, sempre com o próprio relógio: presença
-(`presence_sessions`), status (`status_intervals`) e chamadas (`call_segments`, um por **par** de
-pessoas, abertos e fechados conforme o grafo de conexões muda). O painel soma os intervalos
+O servidor grava quatro tipos de intervalo, sempre com o próprio relógio: presença
+(`presence_sessions`, com o motivo da entrada e da saída e de onde a pessoa entrou), status
+(`status_intervals`), inatividade (`idle_intervals`, informada pelo app desktop) e chamadas
+(`call_segments`, um por **par** de pessoas, abertos e fechados conforme o grafo de conexões muda).
+Cada instante online cai em uma só categoria (`activitySegments` em `packages/shared`): em call →
+ausente → inativo → status.
+
+**Tampa fechada e suspensão.** O app desktop ouve o `powerMonitor` (suspend/resume/shutdown e, no
+Windows, `session-end`); no Mac lê o sensor da tampa (`ioreg AppleClamshellState`). A página manda
+`bye` com o motivo e sai da sala; o servidor fecha a presença com esse motivo. O aviso fica também
+no `localStorage`: se a conexão caiu antes de ele chegar, vai na próxima entrada (`slept`) e o
+servidor corrige a saída anterior para o instante da suspensão (`applySleepReport`). No navegador,
+um salto de mais de 90 s no relógio entre duas batidas de 5 s indica que o computador dormiu. O painel soma os intervalos
 recortados pelo período, no fuso do escritório; o tempo "em call" de uma pessoa é a **união** dos
 segmentos (três pessoas na mesma conversa não contam em dobro). Se o servidor cair, os intervalos
 abertos são fechados na próxima subida.

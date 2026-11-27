@@ -13,7 +13,7 @@ import { sendMail, verifySmtp } from '../lib/mailer';
 import { getGlobalSettings, getGoogle, getSmtp, setGlobalSettings, setGoogle, setSmtp } from '../lib/settings';
 import { parse, z } from '../lib/validate';
 import { hub } from '../realtime/hub';
-import { analyticsCsv, officeAnalytics, personTimeline } from '../services/analytics';
+import { analyticsCsv, officeAnalytics, personStats } from '../services/analytics';
 import { deleteMeeting } from '../services/meetings';
 import { compareVersions, latestRelease, triggerServerUpdate, updaterAvailable, updaterStatus } from '../services/updates';
 
@@ -38,7 +38,8 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/offices/:id/analytics/person/:subjectId', async (req) => {
     const { id, subjectId } = req.params as { id: string; subjectId: string };
     requireOfficeAdmin(req, id, 'analytics.view');
-    return personTimeline(id, subjectId, (req.query as { date?: string }).date);
+    const q = req.query as { date?: string; span?: string };
+    return personStats(id, subjectId, q.date, q.span === 'week' ? 'week' : 'day');
   });
 
   /** Ao vivo: Server-Sent Events com o painel de hoje a cada 3 s. */

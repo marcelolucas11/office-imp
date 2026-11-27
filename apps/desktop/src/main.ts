@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // App desktop do office-imp: uma janela Chromium que abre o escritório hospedado no servidor
 // (a VPS), com atalhos de status, Modo Mini sempre no topo, bandeja, notificações e atualização.
-import { BrowserWindow, Menu, Notification, Tray, app, desktopCapturer, dialog, ipcMain, screen, session, shell, systemPreferences, type IpcMainEvent, type MenuItemConstructorOptions } from 'electron';
+import { BrowserWindow, Menu, Notification, Tray, app, desktopCapturer, dialog, ipcMain, powerMonitor, screen, session, shell, systemPreferences, type IpcMainEvent, type MenuItemConstructorOptions } from 'electron';
+import { execFile, execFileSync } from 'node:child_process';
 import { autoUpdater } from 'electron-updater';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -110,6 +111,8 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
   });
   win.once('ready-to-show', () => win?.show());
+  // Windows: a sessão vai terminar (desligar, reiniciar, sair da conta)
+  win.on('session-end', () => sendPower({ type: 'suspend', reason: 'shutdown', idleSec: powerMonitor.getSystemIdleTime() }));
   win.webContents.setWindowOpenHandler(({ url, frameName }) => {
     // Modo Mini: a página abre uma janela em branco (mesma origem) e desenha as câmeras nela
     if (frameName === MINI_FRAME && (url === 'about:blank' || url === '') && isOurs(win?.webContents.getURL() ?? '')) {
@@ -827,6 +830,68 @@ function installUpdateNow() {
   });
 }
 
+// ---------- energia: tampa fechada, suspensão, desligar e inatividade ----------
+// Quando o computador vai dormir, a página tira o avatar do escritório na hora (e o painel do ADM
+// registra o motivo). Ao acordar, ela entra de novo sozinha.
+type PowerEvent = { type: 'suspend'; reason: 'lid' | 'sleep_idle' | 'sleep' | 'shutdown'; idleSec: number } | { type: 'resume' };
+/** Sem mexer no mouse nem no teclado por este tempo = inativo (o mesmo IDLE_AFTER_MS do painel). */
+const IDLE_SEC = 300;
+/** Já estava parado há tanto tempo quando o computador dormiu: suspensão por inatividade. */
+const SLEEP_IDLE_SEC = 60;
+let hasBattery: boolean | null = null;
+
+function sendPower(ev: PowerEvent) {
+  if (win && !win.isDestroyed()) win.webContents.send('power', ev);
+}
+
+/** Mac: a tampa está fechada? (sensor "clamshell" do sistema). null se não deu para saber. */
+function macLidClosed(): boolean | null {
+  if (!isMac) return null;
+  try {
+    const out = execFileSync('/usr/sbin/ioreg', ['-r', '-k', 'AppleClamshellState', '-d', '1'], { encoding: 'utf8', timeout: 1000 });
+    const m = /"AppleClamshellState"\s*=\s*(Yes|No)/.exec(out);
+    return m ? m[1] === 'Yes' : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Por que o computador está indo dormir. Mac: lê o sensor da tampa. Windows e Linux não informam a
+ * tampa ao app: num notebook (tem bateria), dormir logo depois de usado é, quase sempre, a tampa.
+ */
+function sleepReason(idleSec: number): 'lid' | 'sleep_idle' | 'sleep' {
+  const lid = macLidClosed();
+  if (lid === true) return 'lid';
+  if (idleSec >= SLEEP_IDLE_SEC) return 'sleep_idle';
+  if (lid === false) return 'sleep';
+  return hasBattery ? 'lid' : 'sleep';
+}
+
+function setupPower() {
+  if (process.platform === 'win32') {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_Battery | Measure-Object).Count'], { timeout: 15000, windowsHide: true }, (err, out) => {
+      if (!err) hasBattery = Number(String(out).trim()) > 0;
+    });
+  } else if (process.platform === 'linux') {
+    try {
+      hasBattery = fs.readdirSync('/sys/class/power_supply').some((n) => n.startsWith('BAT'));
+    } catch {}
+  }
+  powerMonitor.on('suspend', () => {
+    const idleSec = powerMonitor.getSystemIdleTime();
+    sendPower({ type: 'suspend', reason: sleepReason(idleSec), idleSec });
+  });
+  powerMonitor.on('resume', () => sendPower({ type: 'resume' }));
+  powerMonitor.on('shutdown', () => sendPower({ type: 'suspend', reason: 'shutdown', idleSec: powerMonitor.getSystemIdleTime() }));
+  // inatividade: confere a cada 15 s há quanto tempo ninguém mexe no mouse/teclado
+  setInterval(() => {
+    if (!win || win.isDestroyed()) return;
+    const idleSec = powerMonitor.getSystemIdleTime();
+    win.webContents.send('idle-state', { idle: idleSec >= IDLE_SEC, idleSec });
+  }, 15000);
+}
+
 // ---------- mensagens da página ----------
 function setupIpc() {
   ipcMain.on('get-info', (e) => {
@@ -891,6 +956,7 @@ if (!app.requestSingleInstanceLock()) {
     loadConfig();
     setupPermissions();
     setupIpc();
+    setupPower();
     setupUpdater();
     setupTray();
     buildMenu();

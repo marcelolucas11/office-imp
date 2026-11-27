@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useMemo, useState } from 'react';
-import { ROLE_LABEL, STATUS_COLOR, STATUS_LABEL, addDays, formatDuration, localDate, type PersonRow, type Role } from '@office-imp/shared';
+import { ACTIVITIES, ACTIVITY_COLOR, ACTIVITY_LABEL, ROLE_LABEL, STATUS_COLOR, STATUS_LABEL, addDays, formatDuration, localDate, type PersonRow, type Role } from '@office-imp/shared';
 import { Badge, Button, Card, Empty, Input, Modal, Select, Spinner } from '@office-imp/ui';
+import { PersonStats } from './PersonStats';
 import { api, errMsg } from '../lib/api';
 import { t } from '../lib/i18n';
 import { Loadable, OfficeSelect, Page, act, fmtDate, useLoad, useOfficeChoice } from './util';
 
-type Tracked = 'AVAILABLE' | 'BUSY' | 'DND' | 'AWAY';
-const TRACKED: Tracked[] = ['AVAILABLE', 'BUSY', 'DND', 'AWAY'];
 interface AnalyticsData {
   from: string;
   to: string;
@@ -16,83 +15,15 @@ interface AnalyticsData {
   rows: PersonRow[];
 }
 
-function StatusBar({ row }: { row: PersonRow }) {
-  const total = TRACKED.reduce((n, s) => n + (row.status[s] ?? 0), 0);
+/** Distribuição do tempo online por categoria (soma = online). */
+function ActivityBar({ row }: { row: PersonRow }) {
+  const act = row.activity;
+  const total = ACTIVITIES.reduce((n, c) => n + (act?.[c] ?? 0), 0);
   if (!total) return <div className="h-3 w-full rounded-full bg-panel-3" />;
   return (
-    <div className="flex h-3 w-full overflow-hidden rounded-full bg-panel-3" title={TRACKED.map((s) => `${STATUS_LABEL[s]}: ${formatDuration(row.status[s] ?? 0)}`).join(' · ')}>
-      {TRACKED.map((s) => (row.status[s] ? <div key={s} style={{ width: `${(row.status[s] / total) * 100}%`, background: STATUS_COLOR[s] }} /> : null))}
+    <div className="flex h-3 w-full gap-[2px] overflow-hidden rounded-full bg-panel-3" title={ACTIVITIES.map((c) => `${ACTIVITY_LABEL[c]}: ${formatDuration(act[c] ?? 0)}`).join(' · ')}>
+      {ACTIVITIES.map((c) => (act[c] ? <div key={c} style={{ width: `${(act[c] / total) * 100}%`, background: ACTIVITY_COLOR[c] }} /> : null))}
     </div>
-  );
-}
-
-interface Timeline {
-  from: number;
-  to: number;
-  name: string;
-  presence: { start: number; end: number | null }[];
-  statuses: { status: Tracked; start: number; end: number | null }[];
-  calls: { with: string; area: string; start: number; end: number | null }[];
-}
-
-function PersonModal({ officeId, row, date, onClose }: { officeId: string; row: PersonRow; date: string; onClose: () => void }) {
-  const s = useLoad(() => api.get<Timeline>(`/api/offices/${officeId}/analytics/person/${encodeURIComponent(row.id)}?date=${date}`), [officeId, row.id, date]);
-  const tl = s.data;
-  const now = Date.now();
-  const pos = (ts: number) => (tl ? Math.max(0, Math.min(100, ((ts - tl.from) / (tl.to - tl.from)) * 100)) : 0);
-  const bar = (start: number, end: number | null, color: string, title: string, key: string) => {
-    const e = Math.min(end ?? now, tl!.to);
-    return <div key={key} title={title} className="absolute top-0 h-full rounded-sm" style={{ left: `${pos(start)}%`, width: `${Math.max(0.3, pos(e) - pos(start))}%`, background: color }} />;
-  };
-  const hm = (ts: number | null) => (ts ? new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : t('an.now', 'agora'));
-  return (
-    <Modal title={t('an.personTitle', '{{name}} — {{date}}', { name: row.name, date: date.split('-').reverse().join('/') })} wide onClose={onClose}>
-      <Loadable state={s}>
-        {tl ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-4 gap-3 text-center text-sm">
-              <Stat label={t('an.online', 'Online')} value={formatDuration(row.onlineMs)} />
-              <Stat label={t('an.active', 'Ativo')} value={formatDuration(row.activeMs)} />
-              <Stat label={t('an.inCall', 'Em call')} value={formatDuration(row.callMs)} />
-              <Stat label={t('an.away', 'Ausente')} value={formatDuration(row.status.AWAY ?? 0)} />
-            </div>
-            <div className="space-y-2">
-              {[
-                { label: t('an.rowPresence', 'Presença'), items: tl.presence.map((p, i) => bar(p.start, p.end, '#d7b870', `${hm(p.start)} – ${hm(p.end)}`, `p${i}`)) },
-                { label: t('an.rowStatus', 'Status'), items: tl.statuses.map((p, i) => bar(p.start, p.end, STATUS_COLOR[p.status], `${STATUS_LABEL[p.status]}: ${hm(p.start)} – ${hm(p.end)}`, `s${i}`)) },
-                { label: t('an.rowCalls', 'Calls'), items: tl.calls.map((p, i) => bar(p.start, p.end, '#38bdf8', `${p.with} (${p.area}): ${hm(p.start)} – ${hm(p.end)}`, `c${i}`)) },
-              ].map((r) => (
-                <div key={r.label} className="flex items-center gap-3">
-                  <span className="w-20 shrink-0 text-xs text-muted">{r.label}</span>
-                  <div className="relative h-5 flex-1 overflow-hidden rounded bg-panel-3">{r.items}</div>
-                </div>
-              ))}
-              <div className="flex justify-between pl-[92px] text-[10px] text-muted">
-                {[0, 6, 12, 18, 24].map((h) => (
-                  <span key={h}>{String(h).padStart(2, '0')}h</span>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h4 className="mb-1 text-sm font-semibold">{t('an.callList', 'Calls do dia')}</h4>
-              {tl.calls.length === 0 ? <p className="text-xs text-muted">{t('an.noCalls', 'Nenhuma call neste dia.')}</p> : null}
-              <div className="max-h-56 space-y-1 overflow-auto text-sm">
-                {tl.calls.map((c, i) => (
-                  <div key={i} className="flex justify-between gap-3 rounded bg-panel-2 px-3 py-1">
-                    <span>
-                      {c.with} <span className="text-xs text-muted">· {c.area}</span>
-                    </span>
-                    <span className="text-xs text-muted">
-                      {hm(c.start)} – {hm(c.end)} ({formatDuration(Math.min(c.end ?? now, tl.to) - c.start)})
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </Loadable>
-    </Modal>
   );
 }
 
@@ -197,18 +128,13 @@ export function Analytics() {
                     <th className="px-4 py-2">{t('an.colPerson', 'Pessoa')}</th>
                     {live ? <th className="px-4 py-2">{t('an.colNow', 'Agora')}</th> : null}
                     <th className="px-4 py-2">{t('an.colOnline', 'Online')}</th>
-                    <th className="px-4 py-2">{t('an.colActive', 'Ativo')}</th>
-                    <th className="w-56 px-4 py-2">
-                      {t('an.colStatus', 'Status')}
-                      <span className="ml-2 font-normal">
-                        {TRACKED.map((s) => (
-                          <span key={s} className="mr-1.5 inline-flex items-center gap-1">
-                            <span className="inline-block h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[s] }} />
-                          </span>
-                        ))}
-                      </span>
-                    </th>
+                    <th className="px-4 py-2">{t('an.colActive', 'Trabalhado')}</th>
+                    <th className="w-56 px-4 py-2">{t('an.colSplit', 'Como o tempo foi usado')}</th>
                     <th className="px-4 py-2">{t('an.colCall', 'Em call')}</th>
+                    <th className="px-4 py-2">{t('an.colIdle', 'Inativo')}</th>
+                    <th className="px-4 py-2" title={t('an.colSleepHint', 'Saídas por tampa fechada, suspensão ou computador desligado')}>
+                      {t('an.colSleep', 'Tampa/susp.')}
+                    </th>
                     <th className="px-4 py-2">{t('an.colWith', 'Com quem')}</th>
                   </tr>
                 </thead>
@@ -226,6 +152,7 @@ export function Analytics() {
                               {STATUS_LABEL[r.current.status]}
                               <span className="text-muted">· {r.current.area ?? t('people.openArea', 'área aberta')}</span>
                               {r.current.inCall ? <Badge color="gold">{t('an.inCallNow', 'em call')}</Badge> : null}
+                              {r.current.idle && !r.current.inCall ? <Badge color="gray">{t('an.idleNow', 'inativo')}</Badge> : null}
                             </span>
                           ) : (
                             <span className="text-muted">{t('an.offline', 'offline')}</span>
@@ -235,12 +162,11 @@ export function Analytics() {
                       <td className="px-4 py-2 tabular-nums">{formatDuration(r.onlineMs)}</td>
                       <td className="px-4 py-2 tabular-nums">{formatDuration(r.activeMs)}</td>
                       <td className="px-4 py-2">
-                        <StatusBar row={r} />
-                        <p className="mt-1 text-[10px] text-muted">
-                          {formatDuration(r.status.AVAILABLE ?? 0)} · {formatDuration(r.status.BUSY ?? 0)} · {formatDuration(r.status.DND ?? 0)}
-                        </p>
+                        <ActivityBar row={r} />
                       </td>
                       <td className="px-4 py-2 tabular-nums">{formatDuration(r.callMs)}</td>
+                      <td className="px-4 py-2 tabular-nums">{formatDuration(r.idleMs ?? 0)}</td>
+                      <td className="px-4 py-2 tabular-nums">{r.sleepExits ? `💤 ${r.sleepExits}` : '—'}</td>
                       <td className="px-4 py-2 text-xs">
                         {r.callWith.slice(0, 5).map((c) => (
                           <span key={c.id} className="mr-2 whitespace-nowrap">
@@ -255,15 +181,25 @@ export function Analytics() {
               </table>
             </Card>
           )}
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted">
+            {ACTIVITIES.map((c) => (
+              <span key={c} className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ACTIVITY_COLOR[c] }} />
+                {ACTIVITY_LABEL[c]}
+              </span>
+            ))}
+          </div>
           <p className="text-[11px] text-muted">
             {t(
-              'an.legend',
-              'Verde: disponível · amarelo: ocupado · vermelho: não incomodar · cinza: ausente. “Ativo” = online menos ausente. “Em call” = conectado em áudio e vídeo com pelo menos uma pessoa (por proximidade ou na mesma sala privada). Clique em uma pessoa para ver a linha do tempo do dia.',
+              'an.legend2',
+              '“Trabalhado” = online menos inativo e ausente. “Inativo” = sem mexer no mouse nem no teclado por 5 min ou mais, fora de call (só no app do Mac e do Windows). “Em call” = conectado em áudio e vídeo com pelo menos uma pessoa. Ao fechar a tampa ou o computador entrar em suspensão, o avatar sai do escritório e o tempo para de contar. Clique em uma pessoa para ver o dia hora a hora, a semana e cada entrada e saída.',
             )}
           </p>
         </>
       )}
-      {person && data ? <PersonModal officeId={officeId} row={person} date={live || period === 'day' ? (date || data.to) : data.to} onClose={() => setPerson(null)} /> : null}
+      {person && data ? (
+        <PersonStats officeId={officeId} personId={person.id} personName={person.name} date={live || period === 'day' ? date || data.to : data.to} span={live || period === 'day' ? 'day' : 'week'} onClose={() => setPerson(null)} />
+      ) : null}
     </Page>
   );
 }
